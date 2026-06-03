@@ -1,0 +1,350 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// Models & Entity Definitions
+// ==========================================
+
+model Drink {
+  DrinkID          Int         @id @default(autoincrement())
+  DrinkName        String
+  DrinkDescription String?     @db.NVarChar(Max)
+  DrinkImageURL    String?     @db.VarChar(2048)
+  DrinkStatus      String      @db.VarChar(50)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  // Relationships
+  DrinkSizes       DrinkSize[]
+  Recipes          Recipe[]
+
+  @@map("Drink")
+}
+
+model Size {
+  SizeID      Int         @id @default(autoincrement())
+  SizeName    String      @db.VarChar(50)
+  Description String?     @db.NVarChar(255)
+  VolumeML    Int
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relationships
+  DrinkSizes  DrinkSize[]
+
+  @@map("Size")
+}
+
+model DrinkSize {
+  DrinkSizeID     Int      @id @default(autoincrement())
+  DrinkID         Int
+  SizeID          Int
+  UnitPrice       Decimal  @db.Decimal(10, 2)
+  DrinkSizeStatus String   @default("AVAILABLE") @db.VarChar(50) // Handled as String for SQL Server
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relationships
+  Drink           Drink    @relation(fields: [DrinkID], references: [DrinkID], onUpdate: Cascade, onDelete: Cascade, map: "FK_DrinkSize_Drink")
+  Size            Size     @relation(fields: [SizeID], references: [SizeID], onUpdate: Cascade, onDelete: Cascade, map: "FK_DrinkSize_Size")
+  OrderDetails    OrderDetail[]
+
+  @@map("DrinkSize")
+}
+
+model Recipe {
+  RecipeID      Int            @id @default(autoincrement())
+  DrinkID       Int
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relationships
+  Drink         Drink          @relation(fields: [DrinkID], references: [DrinkID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Recipe_Drink")
+  RecipeDetails RecipeDetail[]
+
+  @@map("Recipe")
+}
+
+model Ingredient {
+  IngredientID             Int                       @id @default(autoincrement())
+  IngredientName           String                    @db.NVarChar(255)
+  QuantityStock            Decimal                   @db.Decimal(10, 2)
+  UnitID                   Int
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+
+  // Relationships
+  Unit                     Unit                      @relation(fields: [UnitID], references: [UnitID], onUpdate: Cascade, onDelete: NoAction, map: "FK_Ingredient_Unit") // SQL Server uses NoAction instead of Restrict
+  RecipeDetails            RecipeDetail[]
+  IngredientReceiptDetails IngredientReceiptDetail[]
+
+  @@map("Ingredient")
+}
+
+model Unit {
+  UnitID      Int          @id @default(autoincrement())
+  UnitName    String       @db.NVarChar(50)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relationships
+  Ingredients Ingredient[]
+
+  @@map("Unit")
+}
+
+model RecipeDetail {
+  RecipeID     Int
+  IngredientID Int
+  Quantity     Decimal    @db.Decimal(10, 2)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relationships
+  Recipe       Recipe     @relation(fields: [RecipeID], references: [RecipeID], onUpdate: Cascade, onDelete: Cascade, map: "FK_RecipeDetail_Recipe")
+  Ingredient   Ingredient @relation(fields: [IngredientID], references: [IngredientID], onUpdate: Cascade, onDelete: NoAction, map: "FK_RecipeDetail_Ingredient") // SQL Server uses NoAction
+
+  @@id([RecipeID, IngredientID])
+  @@map("RecipeDetail")
+}
+
+model Supplier {
+  SupplierID         Int                 @id @default(autoincrement())
+  SupplierName       String              @db.NVarChar(255)
+  SupplierEmail      String              @db.VarChar(255)
+  Street             String?             @db.NVarChar(255)
+  AddressNumber      String?             @db.NVarChar(50)
+  City               String?             @db.NVarChar(100)
+  District           String?             @db.NVarChar(100)
+  Ward               String?             @db.NVarChar(100)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  // Relationships
+  SupplierPhones     SupplierPhone[]
+  IngredientReceipts IngredientReceipt[]
+
+  @@map("Supplier")
+}
+
+model SupplierPhone {
+  SupplierPhoneID Int      @id @default(autoincrement())
+  SupplierID      Int
+  PhoneNumber     String   @db.VarChar(20)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relationships
+  Supplier        Supplier @relation(fields: [SupplierID], references: [SupplierID], onUpdate: Cascade, onDelete: Cascade, map: "FK_SupplierPhone_Supplier")
+
+  @@map("SupplierPhone")
+}
+
+model IngredientReceipt {
+  IngredientReceiptID     Int                       @id @default(autoincrement())
+  SupplierID              Int
+  ReceivedDate            DateTime
+  IngredientReceiptStatus String                    @db.VarChar(50)
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+
+  // Relationships
+  Supplier                Supplier                  @relation(fields: [SupplierID], references: [SupplierID], onUpdate: Cascade, onDelete: NoAction, map: "FK_IngredientReceipt_Supplier") // SQL Server uses NoAction
+  IngredientReceiptDetails IngredientReceiptDetail[]
+
+  @@map("IngredientReceipt")
+}
+
+model IngredientReceiptDetail {
+  IngredientReceiptID Int
+  IngredientID        Int
+  Quantity            Decimal           @db.Decimal(10, 2)
+  CostPrice           Decimal           @db.Decimal(10, 2)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  // Relationships
+  IngredientReceipt   IngredientReceipt @relation(fields: [IngredientReceiptID], references: [IngredientReceiptID], onUpdate: Cascade, onDelete: Cascade, map: "FK_IngredientReceiptDetail_IngredientReceipt")
+  Ingredient          Ingredient        @relation(fields: [IngredientID], references: [IngredientID], onUpdate: Cascade, onDelete: NoAction, map: "FK_IngredientReceiptDetail_Ingredient") // SQL Server uses NoAction
+
+  @@id([IngredientReceiptID, IngredientID])
+  @@map("IngredientReceiptDetail")
+}
+
+model MemberShipLevel {
+  LevelID       Int        @id @default(autoincrement())
+  LevelName     String     @db.NVarChar(50)
+  DiscountRate  Decimal    @db.Decimal(5, 2)
+  RequiredMoney Decimal    @db.Decimal(15, 2)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // Relationships
+  Customers     Customer[]
+
+  @@map("MemberShipLevel")
+}
+
+model Customer {
+  CustomerID         Int             @id @default(autoincrement())
+  CustomerName       String          @db.NVarChar(255)
+  Email              String?         @db.VarChar(255)
+  PhoneNumber        String          @db.VarChar(20)
+  TotalMoneySpending Decimal         @db.Decimal(15, 2)
+  LevelID            Int
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  // Relationships
+  MemberShipLevel    MemberShipLevel @relation(fields: [LevelID], references: [LevelID], onUpdate: Cascade, onDelete: NoAction, map: "FK_Customer_MemberShipLevel") // SQL Server uses NoAction
+  Orders             Orders[]
+
+  @@map("Customer")
+}
+
+model ShopTable {
+  ShopTableID      Int      @id @default(autoincrement())
+  ShopTableNumber  Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relationships
+  Orders           Orders[]
+
+  @@map("ShopTable")
+}
+
+model Orders {
+  OrderID      Int           @id @default(autoincrement())
+  CustomerID   Int?
+  ShopTableID  Int?
+  EmployeeID   Int
+  CreatedTime  DateTime      @default(now())
+  OrderStatus  String        @default("PENDING") @db.VarChar(50) // Handled as String for SQL Server
+  TotalPrice   Decimal       @db.Decimal(10, 2)
+  OrderNote    String?       @db.NVarChar(500)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Relationships
+  Customer     Customer?     @relation(fields: [CustomerID], references: [CustomerID], onUpdate: Cascade, onDelete: SetNull, map: "FK_Orders_Customer")
+  ShopTable    ShopTable?    @relation(fields: [ShopTableID], references: [ShopTableID], onUpdate: Cascade, onDelete: SetNull, map: "FK_Orders_ShopTable")
+  Employee     Employee      @relation(fields: [EmployeeID], references: [EmployeeID], onUpdate: Cascade, onDelete: NoAction, map: "FK_Orders_Employee") // SQL Server uses NoAction
+  OrderDetails OrderDetail[]
+
+  @@map("Orders")
+}
+
+model OrderDetail {
+  OrderID     Int
+  DrinkSizeID Int
+  Quantity    Int
+  UnitPrice   Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @db.DateTime2 @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relationships
+  Orders      Orders    @relation(fields: [OrderID], references: [OrderID], onUpdate: Cascade, onDelete: Cascade, map: "FK_OrderDetail_Orders")
+  DrinkSize   DrinkSize @relation(fields: [DrinkSizeID], references: [DrinkSizeID], onUpdate: Cascade, onDelete: NoAction, map: "FK_OrderDetail_DrinkSize") // SQL Server uses NoAction
+
+  @@id([OrderID, DrinkSizeID])
+  @@map("OrderDetail")
+}
+
+model Employee {
+  EmployeeID  Int          @id @default(autoincrement())
+  FullName    String       @db.NVarChar(255)
+  PhoneNumber String       @db.VarChar(20)
+  Email       String       @db.VarChar(255)
+  Birth       DateTime
+  Sex         String       @db.VarChar(20) // Handled as String for SQL Server
+  PINCode     String       @db.VarChar(10)
+  password    String       @db.VarChar(255)
+  RoleID      Int
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relationships
+  Role        EmployeeRole @relation(fields: [RoleID], references: [RoleID], onUpdate: Cascade, onDelete: NoAction, map: "FK_Employee_EmployeeRole") // SQL Server uses NoAction
+  Orders      Orders[]
+  Salaries    Salary[]
+  ShiftLogs   ShiftLog[]
+
+  @@map("Employee")
+}
+
+model EmployeeRole {
+  RoleID            Int        @id @default(autoincrement())
+  RoleName          String     @db.NVarChar(100)
+  Description       String?    @db.NVarChar(255)
+  DefaultBaseSalary Decimal    @db.Decimal(15, 2)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  // Relationships
+  Employees         Employee[]
+
+  @@map("EmployeeRole")
+}
+
+model Salary {
+  SalaryID     Int       @id @default(autoincrement())
+  EmployeeID   Int
+  Month        Int
+  Year         Int
+  BaseSalary   Decimal   @db.Decimal(15, 2)
+  TotalHours   Decimal   @db.Decimal(6, 2)
+  Bonus        Decimal   @db.Decimal(15, 2)
+  Deduction    Decimal   @db.Decimal(15, 2)
+  RealSalary   Decimal   @db.Decimal(15, 2)
+  PaidDate     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relationships
+  Employee     Employee  @relation(fields: [EmployeeID], references: [EmployeeID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Salary_Employee")
+
+  @@map("Salary")
+}
+
+model Shift {
+  ShiftID   Int        @id @default(autoincrement())
+  ShiftName String     @db.NVarChar(100)
+  StartTime String     @db.VarChar(10)
+  EndTime   String     @db.VarChar(10)
+  Note      String?    @db.NVarChar(255)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relationships
+  ShiftLogs ShiftLog[]
+
+  @@map("Shift")
+}
+
+model ShiftLog {
+  ShiftLogID   Int      @id @default(autoincrement())
+  EmployeeID   Int
+  ShiftID      Int
+  WorkDate     DateTime
+  CheckInTime  DateTime?
+  CheckOutTime DateTime?
+  ShiftStatus  String   @db.VarChar(50) // Handled as String for SQL Server
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  Employee     Employee @relation(fields: [EmployeeID], references: [EmployeeID], onUpdate: Cascade, onDelete: Cascade, map: "FK_ShiftLog_Employee")
+  Shift        Shift    @relation(fields: [ShiftID], references: [ShiftID], onUpdate: Cascade, onDelete: NoAction, map: "FK_ShiftLog_Shift") // SQL Server uses NoAction
+
+  @@map("ShiftLog")
+}
