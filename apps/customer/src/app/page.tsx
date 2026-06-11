@@ -377,12 +377,33 @@ export default function CustomerHome() {
                 
                 return (
                   <Card key={drink.DrinkID} className="p-5 flex flex-col justify-between hover:border-primary/50 transition-all duration-300 group">
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-start">
-                        <h3 className="font-serif font-black text-lg text-foreground group-hover:text-primary transition-colors">{drink.DrinkName}</h3>
-                        <Badge variant="neutral" className="text-[9px] font-bold">ACTIVE</Badge>
+                    <div className="space-y-3">
+                      {/* Drink Image */}
+                      {drink.DrinkImageURL ? (
+                        <div className="relative w-full h-40 rounded-xl overflow-hidden bg-muted mb-2">
+                          <img
+                            src={drink.DrinkImageURL}
+                            alt={drink.DrinkName}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => {
+                              // Fallback if image fails to load
+                              (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="%23C8763A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-coffee"><path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h12Z"/><path d="M17 12h2a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-2"/><path d="M6 2v2"/></svg>';
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-full h-40 bg-muted rounded-xl mb-2 flex items-center justify-center">
+                          <Coffee className="w-10 h-10 text-primary/45" />
+                        </div>
+                      )}
+                      
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-start gap-2">
+                          <h3 className="font-serif font-black text-base text-foreground group-hover:text-primary transition-colors line-clamp-1">{drink.DrinkName}</h3>
+                          <Badge variant="neutral" className="text-[9px] font-bold shrink-0">ACTIVE</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{drink.DrinkDescription || 'Món uống đặc sản chè thô Phêla.'}</p>
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{drink.DrinkDescription || 'Món uống đặc sản chè thô Phêla.'}</p>
                     </div>
 
                     <div className="flex items-center justify-between mt-5 pt-3 border-t border-border/30">
@@ -538,6 +559,19 @@ export default function CustomerHome() {
           title={`Tùy chỉnh đồ uống: ${selectedDrink.DrinkName}`}
         >
           <div className="space-y-5">
+            {/* Drink Image in Dialog */}
+            {selectedDrink.DrinkImageURL && (
+              <div className="w-full h-48 rounded-xl overflow-hidden bg-muted mb-2">
+                <img 
+                  src={selectedDrink.DrinkImageURL} 
+                  alt={selectedDrink.DrinkName} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
             {/* 1. Size selection options */}
             <div className="space-y-2">
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Kích cỡ cốc (Sizes):</span>
