@@ -18,6 +18,7 @@ import {
   Card,
   Button,
   Badge,
+  Dialog,
 } from '@/components/ui/core';
 import { api, Order, Customer } from '@/lib/api';
 import { toast } from 'sonner';
@@ -27,6 +28,14 @@ export default function HistoryPage() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Review state
+  const [reviewOrder, setReviewOrder] = useState<Order | null>(null);
+  const [reviewDrinkId, setReviewDrinkId] = useState<number | null>(null);
+  const [reviewDrinkName, setReviewDrinkName] = useState<string>('');
+  const [rating, setRating] = useState<number>(5);
+  const [comment, setComment] = useState<string>('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   useEffect(() => {
     // Authenticate check
@@ -102,6 +111,38 @@ export default function HistoryPage() {
       router.push('/'); // Navigate to shop menu
     } catch (err) {
       toast.error('Lỗi khi mua lại đơn hàng.');
+    }
+  };
+
+  const handleOpenReview = (order: Order, drinkId: number, drinkName: string) => {
+    setReviewOrder(order);
+    setReviewDrinkId(drinkId);
+    setReviewDrinkName(drinkName);
+    setRating(5);
+    setComment('');
+  };
+
+  const submitReview = async () => {
+    if (!reviewDrinkId || !customer) return;
+    setIsSubmittingReview(true);
+    try {
+      // POST to backend API (simulated via localDB fallback if offline)
+      await fetch(`http://localhost:3001/api/v1/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          DrinkID: reviewDrinkId,
+          CustomerID: customer.CustomerID,
+          Rating: rating,
+          Comment: comment,
+        }),
+      });
+      toast.success('Cảm ơn bạn đã đánh giá món uống!');
+      setReviewOrder(null);
+    } catch (err) {
+      toast.error('Lỗi khi gửi đánh giá.');
+    } finally {
+      setIsSubmittingReview(false);
     }
   };
 
@@ -231,9 +272,19 @@ export default function HistoryPage() {
                             Cỡ: {detail.DrinkSize?.Size?.SizeName || 'M'} x {detail.Quantity}
                           </span>
                         </div>
-                        <span className="font-mono font-semibold text-foreground">
-                          {(detail.UnitPrice * detail.Quantity).toLocaleString('vi-VN')} đ
-                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="font-mono font-semibold text-foreground">
+                            {(detail.UnitPrice * detail.Quantity).toLocaleString('vi-VN')} đ
+                          </span>
+                          {order.OrderStatus === 'COMPLETED' && detail.DrinkSize?.DrinkID && (
+                            <button
+                              onClick={() => handleOpenReview(order, detail.DrinkSize!.DrinkID, detail.DrinkSize!.Drink!.DrinkName)}
+                              className="text-[10px] text-amber-600 font-bold hover:underline"
+                            >
+                              Đánh giá món này
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                     
@@ -333,6 +384,51 @@ export default function HistoryPage() {
           </div>
         )}
       </main>
+
+      {/* Review Modal */}
+      {reviewOrder && (
+        <Dialog
+          isOpen={!!reviewOrder}
+          onClose={() => setReviewOrder(null)}
+          title="Đánh giá món uống"
+        >
+          <div className="space-y-4">
+            <p className="text-sm font-semibold">Món: <span className="text-primary">{reviewDrinkName}</span></p>
+            
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-muted-foreground">Số sao đánh giá (1-5)</label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button 
+                    key={star}
+                    onClick={() => setRating(star)}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-all ${rating >= star ? 'bg-amber-100 text-amber-500' : 'bg-muted text-muted-foreground'}`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-muted-foreground">Nhận xét của bạn</label>
+              <textarea 
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Món này rất ngon, trà đậm vị..."
+                className="w-full p-3 text-sm bg-muted/50 rounded-xl border border-border resize-none h-24"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-border">
+              <Button variant="outline" onClick={() => setReviewOrder(null)}>Hủy</Button>
+              <Button onClick={submitReview} disabled={isSubmittingReview}>
+                {isSubmittingReview ? 'Đang gửi...' : 'Gửi Đánh Giá'}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 }

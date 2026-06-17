@@ -13,6 +13,9 @@ export interface Drink {
   DrinkDescription?: string;
   DrinkImageURL?: string;
   DrinkStatus: string;
+  IsFeatured?: boolean;
+  SalesCount?: number;
+  AverageRating?: number;
   createdAt: string;
 }
 
@@ -103,66 +106,90 @@ class LocalDatabase {
       DrinkID: 1,
       DrinkName: 'Trà Ô Long sữa Phêla',
       DrinkDescription: 'Chữ Phê trà đặc trưng kết hợp sữa ngậy',
-      DrinkImageURL: '',
+      DrinkImageURL: 'https://images.unsplash.com/photo-1558160074-4d7d8bdf4256?auto=format&fit=crop&q=80&w=400',
       DrinkStatus: 'ACTIVE',
+      IsFeatured: true,
+      SalesCount: 1540,
+      AverageRating: 4.8,
       createdAt: new Date().toISOString(),
     },
     {
       DrinkID: 2,
       DrinkName: 'Trà sữa Oolong Nhài',
       DrinkDescription: 'Hương nhài thoang thoảng với trà oolong',
-      DrinkImageURL: '',
+      DrinkImageURL: 'https://images.unsplash.com/photo-1517701550927-30cfcb64d39f?auto=format&fit=crop&q=80&w=400',
       DrinkStatus: 'ACTIVE',
+      IsFeatured: false,
+      SalesCount: 890,
+      AverageRating: 4.5,
       createdAt: new Date().toISOString(),
     },
     {
       DrinkID: 3,
       DrinkName: 'Cà phê Cốt dừa Phêla',
       DrinkDescription: 'Cà phê Espresso cùng cốt dừa sánh mịn',
-      DrinkImageURL: '',
+      DrinkImageURL: 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&q=80&w=400',
       DrinkStatus: 'ACTIVE',
+      IsFeatured: true,
+      SalesCount: 1200,
+      AverageRating: 4.9,
       createdAt: new Date().toISOString(),
     },
     {
       DrinkID: 4,
       DrinkName: 'Trà Ô Long trân châu',
       DrinkDescription: 'Oolong truyền thống kèm trân châu hoàng kim',
-      DrinkImageURL: '',
+      DrinkImageURL: 'https://images.unsplash.com/photo-1622485540417-6f6ebef644e5?auto=format&fit=crop&q=80&w=400',
       DrinkStatus: 'ACTIVE',
+      IsFeatured: false,
+      SalesCount: 500,
+      AverageRating: 4.2,
       createdAt: new Date().toISOString(),
     },
     {
       DrinkID: 5,
       DrinkName: 'Trà Ô Long Nhiệt Đới',
       DrinkDescription: 'Sự kết hợp hoàn hảo giữa trà ô long thượng hạng và trái cây nhiệt đới tươi mát',
-      DrinkImageURL: '',
+      DrinkImageURL: 'https://images.unsplash.com/photo-1497935586351-b67a49e012bf?auto=format&fit=crop&q=80&w=400',
       DrinkStatus: 'ACTIVE',
+      IsFeatured: true,
+      SalesCount: 650,
+      AverageRating: 4.6,
       createdAt: new Date().toISOString(),
     },
     {
       DrinkID: 6,
       DrinkName: 'Cà Phê Trứng Phêla',
       DrinkDescription: 'Sự hòa quyện giữa vị đắng của espresso béo ngậy cùng kem trứng đánh bông',
-      DrinkImageURL: '',
+      DrinkImageURL: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=400',
       DrinkStatus: 'ACTIVE',
+      IsFeatured: true,
+      SalesCount: 950,
+      AverageRating: 4.7,
       createdAt: new Date().toISOString(),
     },
     {
       DrinkID: 7,
       DrinkName: 'Trà Sữa Matcha Ô Long',
       DrinkDescription: 'Bột matcha Nhật Bản nguyên chất hòa quyện cùng cốt trà sữa ô long đậm vị',
-      DrinkImageURL: '',
+      DrinkImageURL: 'https://images.unsplash.com/photo-1515823064-d6e0c04616a7?auto=format&fit=crop&q=80&w=400',
       DrinkStatus: 'ACTIVE',
+      IsFeatured: false,
+      SalesCount: 420,
+      AverageRating: 4.3,
       createdAt: new Date().toISOString(),
     },
     {
       DrinkID: 8,
       DrinkName: 'Cà Phê Espresso Sữa Đặc',
       DrinkDescription: 'Espresso chiết xuất đậm đặc hòa cùng sữa đặc truyền thống béo ngọt',
-      DrinkImageURL: '',
+      DrinkImageURL: 'https://images.unsplash.com/photo-1529892485635-a4b08dc0cb1f?auto=format&fit=crop&q=80&w=400',
       DrinkStatus: 'ACTIVE',
+      IsFeatured: false,
+      SalesCount: 780,
+      AverageRating: 4.4,
       createdAt: new Date().toISOString(),
-    },
+    }
   ];
 
   sizes: Size[] = [
@@ -289,9 +316,22 @@ export const api = {
   getCurrentCustomer: () => getSessionCustomer(),
 
   // DRINKS CATALOG
+  syncCart: async (Items: any[], customerId?: number, sessionId?: string): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/carts/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Items, CustomerID: customerId, SessionID: sessionId })
+      });
+      return res.json();
+    } catch (error) {
+      return { success: true };
+    }
+  },
+
   getDrinks: async (): Promise<Drink[]> => {
     try {
-      const res = await fetch(`${API_BASE}/drinks`);
+      const res = await fetch(`${API_BASE}/drinks`, { cache: 'no-store' });
       const payload = await res.json();
       if (res.ok) return payload.data;
       throw new Error();
@@ -302,7 +342,7 @@ export const api = {
 
   getSizes: async (): Promise<Size[]> => {
     try {
-      const res = await fetch(`${API_BASE}/sizes`);
+      const res = await fetch(`${API_BASE}/sizes`, { cache: 'no-store' });
       const payload = await res.json();
       if (res.ok) return payload.data;
       throw new Error();
@@ -313,7 +353,7 @@ export const api = {
 
   getDrinkSizes: async (): Promise<DrinkSize[]> => {
     try {
-      const res = await fetch(`${API_BASE}/drink-sizes`);
+      const res = await fetch(`${API_BASE}/drink-sizes`, { cache: 'no-store' });
       const payload = await res.json();
       if (res.ok) return payload.data;
       throw new Error();
@@ -328,7 +368,7 @@ export const api = {
 
   getTables: async (): Promise<ShopTable[]> => {
     try {
-      const res = await fetch(`${API_BASE}/shop-tables`);
+      const res = await fetch(`${API_BASE}/shop-tables`, { cache: 'no-store' });
       const payload = await res.json();
       if (res.ok) return payload.data;
       throw new Error();

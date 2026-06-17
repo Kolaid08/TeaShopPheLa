@@ -15,10 +15,7 @@ const drinkSchema = z.object({
   DrinkStatus: z.string().max(50),
 });
 
-// Protect routes
-router.use(verifyJWT);
-
-// GET / - List drinks
+// GET / - List drinks (Public)
 router.get('/', async (req, res, next) => {
   try {
     const { page, limit, search, sortBy, sortDir, skip } = parsePagination(req.query);
@@ -57,7 +54,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /:id - Single drink details
+// GET /:id - Single drink details (Public)
 router.get('/:id', async (req, res, next) => {
   try {
     const drinkId = parseInt(req.params.id || '');
@@ -81,7 +78,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a drink (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = drinkSchema.parse(req.body);
 
@@ -96,7 +93,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PUT /:id - Update a drink (Manager/Admin only)
-router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const drinkId = parseInt(req.params.id || '');
     if (isNaN(drinkId)) throw new AppError(400, 'Invalid ID format.');
@@ -117,6 +114,7 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
 // POST /:id/upload - Upload drink image (Manager/Admin only)
 router.post(
   '/:id/upload',
+  verifyJWT,
   requireRole(['ADMIN', 'MANAGER']),
   upload.single('image'),
   async (req, res, next) => {
