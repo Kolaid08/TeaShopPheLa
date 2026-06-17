@@ -20,12 +20,14 @@ model Drink {
   DrinkDescription String?     @db.NVarChar(Max)
   DrinkImageURL    String?     @db.VarChar(2048)
   DrinkStatus      String      @db.VarChar(50)
+  IsFeatured       Boolean     @default(false)
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
   // Relationships
   DrinkSizes       DrinkSize[]
   Recipes          Recipe[]
+  Reviews          Review[]
 
   @@map("Drink")
 }
@@ -207,6 +209,8 @@ model Customer {
   // Relationships
   MemberShipLevel    MemberShipLevel @relation(fields: [LevelID], references: [LevelID], onUpdate: Cascade, onDelete: NoAction, map: "FK_Customer_MemberShipLevel") // SQL Server uses NoAction
   Orders             Orders[]
+  Reviews            Review[]
+  Carts              Cart[]
 
   @@map("Customer")
 }
@@ -232,6 +236,9 @@ model Orders {
   OrderStatus  String        @default("PENDING") @db.VarChar(50) // Handled as String for SQL Server
   TotalPrice   Decimal       @db.Decimal(10, 2)
   OrderNote    String?       @db.NVarChar(500)
+  PaymentMethod String?      @db.VarChar(50)
+  PaymentStatus String?      @db.VarChar(50)
+  AppTransId   String?       @db.VarChar(100)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -347,4 +354,50 @@ model ShiftLog {
   Shift        Shift    @relation(fields: [ShiftID], references: [ShiftID], onUpdate: Cascade, onDelete: NoAction, map: "FK_ShiftLog_Shift") // SQL Server uses NoAction
 
   @@map("ShiftLog")
+}
+
+model Cart {
+  CartID      Int        @id @default(autoincrement())
+  SessionID   String?    @db.VarChar(100)
+  CustomerID  Int?
+  Status      String     @default("ACTIVE") @db.VarChar(50)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  Customer    Customer?  @relation(fields: [CustomerID], references: [CustomerID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Cart_Customer")
+  CartItems   CartItem[]
+
+  @@map("Cart")
+}
+
+model CartItem {
+  CartItemID  Int        @id @default(autoincrement())
+  CartID      Int
+  DrinkSizeID Int
+  Quantity    Int
+  Sugar       String     @default("100%") @db.VarChar(20)
+  Ice         String     @default("100%") @db.VarChar(20)
+  Toppings    String?    @db.NVarChar(500)
+  UnitPrice   Decimal    @db.Decimal(10, 2)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  Cart        Cart       @relation(fields: [CartID], references: [CartID], onUpdate: Cascade, onDelete: Cascade, map: "FK_CartItem_Cart")
+
+  @@map("CartItem")
+}
+
+model Review {
+  ReviewID    Int        @id @default(autoincrement())
+  CustomerID  Int
+  DrinkID     Int
+  Rating      Int        @db.TinyInt
+  Comment     String?    @db.NVarChar(500)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  Customer    Customer   @relation(fields: [CustomerID], references: [CustomerID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Review_Customer")
+  Drink       Drink      @relation(fields: [DrinkID], references: [DrinkID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Review_Drink")
+
+  @@map("Review")
 }

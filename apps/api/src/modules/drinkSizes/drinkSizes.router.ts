@@ -14,10 +14,7 @@ const drinkSizeSchema = z.object({
   DrinkSizeStatus: z.enum(['AVAILABLE', 'UNAVAILABLE']).optional(),
 });
 
-// Protect routes
-router.use(verifyJWT);
-
-// GET / - List all drink-size pricing configurations
+// GET / - List all drink-size pricing configurations (Public)
 router.get('/', async (req, res, next) => {
   try {
     const { page, limit, search, sortBy, sortDir, skip } = parsePagination(req.query);
@@ -57,7 +54,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /:id - Single mapping detail
+// GET /:id - Single mapping detail (Public)
 router.get('/:id', async (req, res, next) => {
   try {
     const drinkSizeId = parseInt(req.params.id || '');
@@ -80,7 +77,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a pricing configuration (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = drinkSizeSchema.parse(req.body);
 
@@ -121,7 +118,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PUT /:id - Update mapping (Manager/Admin only)
-router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const drinkSizeId = parseInt(req.params.id || '');
     if (isNaN(drinkSizeId)) throw new AppError(400, 'Invalid ID format.');
@@ -145,7 +142,7 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
 });
 
 // DELETE /:id - Delete pricing (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const drinkSizeId = parseInt(req.params.id || '');
     if (isNaN(drinkSizeId)) throw new AppError(400, 'Invalid ID format.');

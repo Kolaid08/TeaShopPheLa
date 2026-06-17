@@ -13,10 +13,7 @@ const sizeSchema = z.object({
   VolumeML: z.number().int().positive(),
 });
 
-// Protect routes
-router.use(verifyJWT);
-
-// GET / - List all sizes
+// GET / - List all sizes (Public)
 router.get('/', async (req, res, next) => {
   try {
     const { page, limit, search, sortBy, sortDir, skip } = parsePagination(req.query);
@@ -50,7 +47,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /:id - Single size details
+// GET /:id - Single size details (Public)
 router.get('/:id', async (req, res, next) => {
   try {
     const sizeId = parseInt(req.params.id || '');
@@ -69,7 +66,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a size (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = sizeSchema.parse(req.body);
 
@@ -84,7 +81,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PUT /:id - Update a size (Manager/Admin only)
-router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const sizeId = parseInt(req.params.id || '');
     if (isNaN(sizeId)) throw new AppError(400, 'Invalid ID format.');
@@ -103,7 +100,7 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
 });
 
 // DELETE /:id - Delete a size (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const sizeId = parseInt(req.params.id || '');
     if (isNaN(sizeId)) throw new AppError(400, 'Invalid ID format.');

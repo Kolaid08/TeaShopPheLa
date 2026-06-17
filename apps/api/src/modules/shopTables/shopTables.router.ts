@@ -11,10 +11,7 @@ const shopTableSchema = z.object({
   ShopTableNumber: z.number().int().positive(),
 });
 
-// Protect routes
-router.use(verifyJWT);
-
-// GET / - List all tables
+// GET / - List all tables (Public)
 router.get('/', async (req, res, next) => {
   try {
     const { page, limit, search, sortBy, sortDir, skip } = parsePagination(req.query);
@@ -48,7 +45,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /:id - Single table details
+// GET /:id - Single table details (Public)
 router.get('/:id', async (req, res, next) => {
   try {
     const tableId = parseInt(req.params.id || '');
@@ -67,7 +64,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a table (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = shopTableSchema.parse(req.body);
 
@@ -89,7 +86,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PUT /:id - Update table (Manager/Admin only)
-router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const tableId = parseInt(req.params.id || '');
     if (isNaN(tableId)) throw new AppError(400, 'Invalid ID format.');
@@ -118,7 +115,7 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
 });
 
 // DELETE /:id - Delete table (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const tableId = parseInt(req.params.id || '');
     if (isNaN(tableId)) throw new AppError(400, 'Invalid ID format.');

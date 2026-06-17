@@ -17,6 +17,9 @@ import salaryRouter from '../modules/salary/salary.router';
 import shiftsRouter from '../modules/shifts/shifts.router';
 import shiftLogsRouter from '../modules/shiftLogs/shiftLogs.router';
 import dashboardRouter from '../modules/dashboard/dashboard.router';
+import cartsRouter from '../modules/carts/carts.router';
+import reviewsRouter from '../modules/reviews/reviews.router';
+import paymentRouter from '../modules/payment/payment.router';
 
 const router = Router();
 
@@ -44,5 +47,8 @@ router.use('/salary', salaryRouter);
 router.use('/shifts', shiftsRouter);
 router.use('/shift-logs', shiftLogsRouter);
 router.use('/dashboard', dashboardRouter);
+router.use('/carts', cartsRouter);
+router.use('/reviews', reviewsRouter);
+router.use('/payment', paymentRouter);
 
 export default router;

@@ -59,10 +59,36 @@ router.post('/customer-place', async (req, res, next) => {
     try {
       // Find default admin or first employee to assign to customer online orders
       let employeeId = 1;
-      const defaultEmp = await prisma.employee.findFirst({
+      let defaultEmp = await prisma.employee.findFirst({
         where: { RoleID: 1 },
       });
+      
+      if (!defaultEmp) {
+        defaultEmp = await prisma.employee.findFirst();
+      }
+      
       if (defaultEmp) {
+        employeeId = defaultEmp.EmployeeID;
+      } else {
+        // Create a default role and employee to satisfy FK constraint
+        let role = await prisma.employeeRole.findFirst();
+        if (!role) {
+          role = await prisma.employeeRole.create({
+            data: { RoleName: 'System Admin', DefaultBaseSalary: 0 }
+          });
+        }
+        defaultEmp = await prisma.employee.create({
+          data: {
+            FullName: 'Hệ thống Phêla',
+            PhoneNumber: '000000000',
+            Email: 'system@phela.vn',
+            Birth: new Date(),
+            Sex: 'Other',
+            PINCode: '0000',
+            password: 'none',
+            RoleID: role.RoleID
+          }
+        });
         employeeId = defaultEmp.EmployeeID;
       }
 
@@ -141,12 +167,23 @@ router.post('/customer-place', async (req, res, next) => {
       const discountAmount = baseTotal * (discountRate / 100);
       const finalPrice = baseTotal - discountAmount;
 
+      // Validate ShopTableID
+      let validShopTableId = validatedData.ShopTableID || null;
+      if (validShopTableId) {
+        const tableExists = await prisma.shopTable.findUnique({
+          where: { ShopTableID: validShopTableId }
+        });
+        if (!tableExists) {
+          validShopTableId = null; // Fallback to null if table doesn't exist
+        }
+      }
+
       // Create Order & Details in a Transaction
       const newOrder = await prisma.$transaction(async (tx) => {
         const order = await tx.orders.create({
           data: {
             CustomerID: customerId,
-            ShopTableID: validatedData.ShopTableID || null,
+            ShopTableID: validShopTableId,
             EmployeeID: employeeId,
             OrderStatus: 'PENDING',
             TotalPrice: finalPrice,
@@ -464,12 +501,23 @@ router.post('/', async (req, res, next) => {
       const discountAmount = baseTotal * (discountRate / 100);
       const finalPrice = baseTotal - discountAmount;
 
+      // Validate ShopTableID
+      let validShopTableId = validatedData.ShopTableID || null;
+      if (validShopTableId) {
+        const tableExists = await prisma.shopTable.findUnique({
+          where: { ShopTableID: validShopTableId }
+        });
+        if (!tableExists) {
+          validShopTableId = null; // Fallback to null if table doesn't exist
+        }
+      }
+
       // 5. Create Order & Details in a Transaction
       const newOrder = await prisma.$transaction(async (tx) => {
         const order = await tx.orders.create({
           data: {
             CustomerID: validatedData.CustomerID || null,
-            ShopTableID: validatedData.ShopTableID || null,
+            ShopTableID: validShopTableId,
             EmployeeID: employeeId,
             OrderStatus: 'PENDING',
             TotalPrice: finalPrice,

@@ -27,6 +27,10 @@ import {
 import { api, Drink, DrinkSize, Customer, ShopTable } from '@/lib/api';
 import { toast } from 'sonner';
 
+const removeAccents = (str: string) => {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+};
+
 interface CartItem {
   id: string; // unique item key
   DrinkSizeID: number;
@@ -53,6 +57,9 @@ export default function CustomerHome() {
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<'ALL' | 'MILK_TEA' | 'COFFEE'>('ALL');
+  const [sortOption, setSortOption] = useState<'NEWEST' | 'BEST_SELLING' | 'PRICE_ASC' | 'PRICE_DESC' | 'REVIEWS'>('NEWEST');
+  const [minPrice, setMinPrice] = useState<string>('');
+  const [maxPrice, setMaxPrice] = useState<string>('');
 
   // Customization Modal states
   const [selectedDrink, setSelectedDrink] = useState<Drink | null>(null);
@@ -79,13 +86,6 @@ export default function CustomerHome() {
   useEffect(() => {
     // Authenticate check
     const active = api.getCurrentCustomer();
-    if (!active && typeof window !== 'undefined') {
-      const token = localStorage.getItem('phela_customer_token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-    }
     setCustomer(active);
     setIsLoadingUser(false);
 
@@ -113,6 +113,14 @@ export default function CustomerHome() {
   const saveCartState = (updatedCart: CartItem[]) => {
     setCart(updatedCart);
     localStorage.setItem('phela_customer_cart', JSON.stringify(updatedCart));
+
+    let sessionId = localStorage.getItem('phela_session_id');
+    if (!sessionId) {
+      sessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      localStorage.setItem('phela_session_id', sessionId);
+    }
+    
+    api.syncCart(updatedCart, customer?.CustomerID, sessionId).catch(console.error);
   };
 
   const handleLogout = () => {
@@ -233,7 +241,7 @@ export default function CustomerHome() {
         OrderNote: `Đường: ${cart.map(i=>i.Sugar).join(', ')} | Đá: ${cart.map(i=>i.Ice).join(', ')}${deliveryAddress ? ` | Giao hàng: ${deliveryAddress}` : ''}${orderNote ? ` | Ghi chú: ${orderNote}` : ''}`,
       };
 
-      await api.createCustomerOrder(orderPayload);
+      const res = await api.createCustomerOrder(orderPayload);
       
       // Reset Giỏ hàng
       saveCartState([]);
@@ -252,18 +260,44 @@ export default function CustomerHome() {
 
   // Filter drinks lists
   const filteredDrinks = drinks.filter((d) => {
-    const matchesSearch = d.DrinkName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      (d.DrinkDescription && d.DrinkDescription.toLowerCase().includes(searchQuery.toLowerCase()));
+    const q = removeAccents(searchQuery.toLowerCase());
+    const matchesSearch = removeAccents(d.DrinkName.toLowerCase()).includes(q) || 
+      (d.DrinkDescription && removeAccents(d.DrinkDescription.toLowerCase()).includes(q));
 
     const isCoffee = d.DrinkName.toLowerCase().includes('cà phê') || d.DrinkName.toLowerCase().includes('espresso');
     const isMilkTea = !isCoffee;
 
-    if (activeCategory === 'COFFEE') return matchesSearch && isCoffee;
-    if (activeCategory === 'MILK_TEA') return matchesSearch && isMilkTea;
-    return matchesSearch;
+    let matchesCategory = false;
+    if (activeCategory === 'ALL') matchesCategory = true;
+    else if (activeCategory === 'COFFEE') matchesCategory = isCoffee;
+    else if (activeCategory === 'MILK_TEA') matchesCategory = isMilkTea;
+
+    // Price filter
+    const prices = drinkSizes.filter(ds => ds.DrinkID === d.DrinkID).map(ds => ds.UnitPrice);
+    const minP = prices.length > 0 ? Math.min(...prices) : 0;
+    const maxP = prices.length > 0 ? Math.max(...prices) : 0;
+    
+    let matchesPrice = true;
+    if (minPrice && minP < parseInt(minPrice)) matchesPrice = false;
+    if (maxPrice && maxP > parseInt(maxPrice)) matchesPrice = false;
+
+    return matchesSearch && matchesCategory && matchesPrice;
+  }).sort((a, b) => {
+    if (sortOption === 'BEST_SELLING') return (b.SalesCount || 0) - (a.SalesCount || 0);
+    if (sortOption === 'REVIEWS') return (b.AverageRating || 0) - (a.AverageRating || 0);
+    
+    const aPrices = drinkSizes.filter(ds => ds.DrinkID === a.DrinkID).map(ds => ds.UnitPrice);
+    const bPrices = drinkSizes.filter(ds => ds.DrinkID === b.DrinkID).map(ds => ds.UnitPrice);
+    const aPrice = aPrices.length > 0 ? Math.min(...aPrices) : 0;
+    const bPrice = bPrices.length > 0 ? Math.min(...bPrices) : 0;
+    
+    if (sortOption === 'PRICE_ASC') return aPrice - bPrice;
+    if (sortOption === 'PRICE_DESC') return bPrice - aPrice;
+    
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // NEWEST
   });
 
-  if (isLoadingUser || !customer) {
+  if (isLoadingUser) {
     return <div className="min-h-screen bg-background" />;
   }
 
@@ -290,19 +324,27 @@ export default function CustomerHome() {
               <span className="text-sm font-bold text-foreground truncate max-w-40">{customer.CustomerName}</span>
             </div>
 
-            <Badge variant="warning" className="font-bold text-[10px]">
-              {customer.MemberShipLevel?.LevelName || 'Đồng (Bronze)'}
-            </Badge>
-
-            <Link href="/history">
-              <Button variant="ghost" size="sm" className="rounded-xl flex items-center gap-1.5 text-xs text-primary font-bold">
-                <History className="w-4 h-4" /> Lịch sử đơn
-              </Button>
-            </Link>
-
-            <Button onClick={handleLogout} variant="ghost" size="sm" className="rounded-xl p-2 text-red-500 hover:bg-red-500/10">
-              <LogOut className="w-4.5 h-4.5" />
-            </Button>
+            {customer ? (
+              <>
+                <Badge variant="warning" className="font-bold text-[10px]">
+                  {customer.MemberShipLevel?.LevelName || 'Đồng (Bronze)'}
+                </Badge>
+                <Link href="/history">
+                  <Button variant="ghost" size="sm" className="rounded-xl flex items-center gap-1.5 text-xs text-primary font-bold">
+                    <History className="w-4 h-4" /> Lịch sử đơn
+                  </Button>
+                </Link>
+                <Button onClick={handleLogout} variant="ghost" size="sm" className="rounded-xl p-2 text-red-500 hover:bg-red-500/10">
+                  <LogOut className="w-4.5 h-4.5" />
+                </Button>
+              </>
+            ) : (
+              <Link href="/login">
+                <Button size="sm" className="rounded-xl font-bold font-serif uppercase tracking-wider text-xs">
+                  Đăng nhập / Đăng ký
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -355,6 +397,50 @@ export default function CustomerHome() {
             />
           </div>
 
+          {/* Advanced Filters */}
+          <div className="flex flex-wrap gap-3 bg-muted/30 p-3 rounded-xl border border-border/40">
+            <select 
+              value={sortOption} 
+              onChange={(e) => setSortOption(e.target.value as any)}
+              className="text-xs p-2 rounded-lg border border-border bg-background"
+            >
+              <option value="NEWEST">Mới nhất</option>
+              <option value="BEST_SELLING">Bán chạy nhất</option>
+              <option value="REVIEWS">Đánh giá cao</option>
+              <option value="PRICE_ASC">Giá: Thấp đến Cao</option>
+              <option value="PRICE_DESC">Giá: Cao đến Thấp</option>
+            </select>
+            <div className="flex items-center gap-2">
+              <Input 
+                type="number" 
+                min="0"
+                placeholder="Giá từ..." 
+                value={minPrice} 
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  if (val < 0) setMinPrice('0');
+                  else setMinPrice(e.target.value);
+                }} 
+                onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+                className="w-24 h-8 text-xs" 
+              />
+              <span className="text-muted-foreground">-</span>
+              <Input 
+                type="number" 
+                min="0"
+                placeholder="Đến..." 
+                value={maxPrice} 
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  if (val < 0) setMaxPrice('0');
+                  else setMaxPrice(e.target.value);
+                }} 
+                onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+                className="w-24 h-8 text-xs" 
+              />
+            </div>
+          </div>
+
           {/* Menu Catalog item cards grid */}
           {isLoadingMenu ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 animate-pulse">
@@ -376,14 +462,21 @@ export default function CustomerHome() {
                 const minPrice = prices.length > 0 ? Math.min(...prices) : 45000;
                 
                 return (
-                  <Card key={drink.DrinkID} className="p-5 flex flex-col justify-between hover:border-primary/50 transition-all duration-300 group">
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-start">
-                        <h3 className="font-serif font-black text-lg text-foreground group-hover:text-primary transition-colors">{drink.DrinkName}</h3>
-                        <Badge variant="neutral" className="text-[9px] font-bold">ACTIVE</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{drink.DrinkDescription || 'Món uống đặc sản chè thô Phêla.'}</p>
+                  <Card key={drink.DrinkID} className="p-0 flex flex-col justify-between hover:border-primary/50 transition-all duration-300 group overflow-hidden bg-card/50">
+                    <div className="h-44 w-full bg-muted relative overflow-hidden">
+                      {drink.DrinkImageURL ? (
+                        <img src={drink.DrinkImageURL} alt={drink.DrinkName} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center"><Coffee className="w-8 h-8 text-muted-foreground/30" /></div>
+                      )}
+                      {drink.IsFeatured && <Badge variant="warning" className="absolute top-2 right-2 text-[9px] font-bold shadow-md uppercase">Nổi Bật</Badge>}
                     </div>
+                    <div className="p-4 flex flex-col justify-between flex-1">
+                      <div className="space-y-1.5">
+                        <h3 className="font-serif font-black text-lg text-foreground group-hover:text-primary transition-colors">{drink.DrinkName}</h3>
+                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{drink.DrinkDescription || 'Món uống đặc sản chè thô Phêla.'}</p>
+                        {drink.AverageRating && <p className="text-[10px] text-amber-500 font-bold flex items-center gap-1">⭐ {drink.AverageRating} <span className="text-muted-foreground">({drink.SalesCount} đã bán)</span></p>}
+                      </div>
 
                     <div className="flex items-center justify-between mt-5 pt-3 border-t border-border/30">
                       <span className="text-sm font-bold text-primary font-mono">Từ {minPrice.toLocaleString('vi-VN')} đ</span>
@@ -394,6 +487,7 @@ export default function CustomerHome() {
                       >
                         <PlusCircle className="w-3.5 h-3.5" /> Thêm món
                       </Button>
+                    </div>
                     </div>
                   </Card>
                 );
@@ -456,7 +550,7 @@ export default function CustomerHome() {
                     <span>Tạm tính</span>
                     <span className="font-mono">{getSubtotal().toLocaleString('vi-VN')} đ</span>
                   </div>
-                  {customer.MemberShipLevel?.DiscountRate ? (
+                  {customer?.MemberShipLevel?.DiscountRate ? (
                     <div className="flex justify-between text-xs text-emerald-500 font-semibold">
                       <span>Giảm giá Hội viên ({customer.MemberShipLevel.DiscountRate}%)</span>
                       <span className="font-mono">-{getDiscountAmount().toLocaleString('vi-VN')} đ</span>
@@ -485,7 +579,7 @@ export default function CustomerHome() {
                     </div>
                     <div>
                       <label className="text-[10px] font-bold text-muted-foreground block mb-1 uppercase tracking-wide">Số điện thoại</label>
-                      <Input value={customer.PhoneNumber} disabled className="p-2 h-8 text-xs font-mono" />
+                      <Input value={customer?.PhoneNumber || ''} disabled className="p-2 h-8 text-xs font-mono" />
                     </div>
                   </div>
 
@@ -514,6 +608,11 @@ export default function CustomerHome() {
 
                 <Button 
                   onClick={() => {
+                    if (!customer) {
+                      toast.error('Vui lòng đăng nhập hoặc đăng ký để thanh toán!');
+                      router.push('/login');
+                      return;
+                    }
                     if (tableId === 0 && !deliveryAddress) {
                       toast.error('Vui lòng cung cấp địa chỉ giao hàng.');
                       return;
@@ -634,6 +733,34 @@ export default function CustomerHome() {
               </div>
             </div>
 
+            {/* Similar Products */}
+            <div className="space-y-2 mt-4">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Sản phẩm tương tự:</span>
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {drinks.filter(d => d.DrinkID !== selectedDrink.DrinkID && (
+                    (selectedDrink.DrinkName.toLowerCase().includes('cà phê') && d.DrinkName.toLowerCase().includes('cà phê')) ||
+                    (!selectedDrink.DrinkName.toLowerCase().includes('cà phê') && !d.DrinkName.toLowerCase().includes('cà phê'))
+                  )).slice(0, 3).map(d => (
+                  <button 
+                    key={d.DrinkID} 
+                    onClick={() => {
+                      setSelectedDrink(d);
+                      const sizes = drinkSizes.filter(s => s.DrinkID === d.DrinkID && s.DrinkSizeStatus === 'AVAILABLE');
+                      if (sizes.length > 0) setSelectedSizeId(sizes[0].DrinkSizeID);
+                    }}
+                    className="shrink-0 w-32 rounded-xl overflow-hidden border border-border hover:border-primary transition-all text-left"
+                  >
+                    <div className="h-20 bg-muted relative">
+                      {d.DrinkImageURL && <img src={d.DrinkImageURL} className="w-full h-full object-cover" />}
+                    </div>
+                    <div className="p-2 bg-background">
+                      <p className="text-[10px] font-bold truncate text-foreground">{d.DrinkName}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="pt-4 border-t border-border flex items-center justify-between gap-4">
               <div className="flex flex-col">
                 <span className="text-[10px] uppercase font-bold text-muted-foreground">Giá tùy chọn nước:</span>
@@ -667,7 +794,7 @@ export default function CustomerHome() {
                 disabled={isSubmittingOrder}
                 className="border border-border hover:border-primary/40 rounded-2xl p-5 flex flex-col items-center justify-between gap-3 bg-background/50 hover:bg-muted/30 transition-all"
               >
-                <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-orange-500/10 text-orange-600 flex items-center justify-center">
                   <ShoppingBag className="w-6 h-6" />
                 </div>
                 <div>
@@ -676,36 +803,33 @@ export default function CustomerHome() {
                 </div>
               </button>
 
-              {/* Payment Option 2: QR Code */}
-              <button
+              {/* Payment Option 2: Bank Transfer (QR) */}
+              <button 
                 onClick={() => handlePlaceOrder('QR_CODE')}
                 disabled={isSubmittingOrder}
-                className="border border-border hover:border-primary/40 rounded-2xl p-5 flex flex-col items-center justify-between gap-3 bg-background/50 hover:bg-muted/30 transition-all"
+                className="border border-primary/20 hover:border-primary/60 rounded-2xl p-5 flex flex-col items-center justify-between gap-3 bg-primary/5 hover:bg-primary/10 transition-all"
               >
-                <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6" />
+                <div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center">
+                  <span className="font-black text-xl">QR</span>
                 </div>
                 <div>
-                  <span className="font-bold text-sm text-foreground block">Giả Lập QR Pay</span>
+                  <span className="font-bold text-sm text-foreground block">Chuyển khoản VietQR</span>
                   <span className="text-[10px] text-muted-foreground block mt-1">Quét mã chuyển khoản tức thì</span>
                 </div>
               </button>
             </div>
 
-            {/* QR code visual simulator mockup */}
-            <div className="p-5 border border-border/80 rounded-2xl bg-muted/20 space-y-3">
-              <span className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wider">Thông Tin Chuyển Khoản Giả Lập:</span>
-              <div className="flex flex-col items-center bg-white p-4 rounded-xl border border-border w-48 h-48 mx-auto justify-center gap-1.5 relative shadow-inner">
-                {/* Mock QR graphic */}
-                <div className="w-40 h-40 border border-zinc-200 bg-zinc-50 flex items-center justify-center text-[10px] text-zinc-400 font-mono text-center leading-relaxed">
-                  [ Giả Lập Mã QR Code VietQR ]
-                </div>
+            {/* VietQR Dynamic QR code visual mockup */}
+            <div className="mt-4 p-4 border border-border/50 rounded-2xl bg-muted/20 flex items-center gap-4 text-left">
+              <div className="w-24 h-24 bg-white rounded-xl p-2 border border-border flex items-center justify-center shrink-0">
+                <img src={`https://img.vietqr.io/image/MB-190088889999-compact2.png?amount=${getTotalPrice()}&addInfo=PHELA${customer?.PhoneNumber?.slice(-4) || '9999'}&accountName=PHELA COFFEE`} alt="VietQR" className="w-full h-full object-contain" />
               </div>
-              <div className="text-xs space-y-1 font-semibold text-foreground">
-                <p>Ngân hàng giả định: <span className="font-mono text-primary">MB BANK</span></p>
-                <p>Số tài khoản: <span className="font-mono text-primary">1900 8888 9999</span></p>
-                <p>Số tiền: <span className="font-mono text-primary">{getTotalPrice().toLocaleString('vi-VN')} đ</span></p>
-                <p>Nội dung CK: <span className="font-mono text-primary">PHELA {customer.PhoneNumber.slice(-4)}</span></p>
+              <div className="text-xs space-y-1.5 flex-1">
+                <p className="font-bold text-foreground">Thông tin chuyển khoản nhanh:</p>
+                <p>Ngân hàng: <span className="font-mono text-primary font-bold">MB BANK</span></p>
+                <p>Số tài khoản: <span className="font-mono text-primary font-bold">1900 8888 9999</span></p>
+                <p>Số tiền: <span className="font-mono text-primary font-bold">{getTotalPrice().toLocaleString('vi-VN')} đ</span></p>
+                <p>Nội dung CK: <span className="font-mono text-primary font-bold">PHELA{customer?.PhoneNumber?.slice(-4) || '9999'}</span></p>
               </div>
             </div>
 
