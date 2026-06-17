@@ -637,6 +637,19 @@ export default function CustomerHome() {
           title={`Tùy chỉnh đồ uống: ${selectedDrink.DrinkName}`}
         >
           <div className="space-y-5">
+            {/* Drink Image in Dialog */}
+            {selectedDrink.DrinkImageURL && (
+              <div className="w-full h-48 rounded-xl overflow-hidden bg-muted mb-2">
+                <img 
+                  src={selectedDrink.DrinkImageURL} 
+                  alt={selectedDrink.DrinkName} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
             {/* 1. Size selection options */}
             <div className="space-y-2">
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Kích cỡ cốc (Sizes):</span>
