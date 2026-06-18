@@ -127,6 +127,45 @@ router.get('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
       });
     }
 
+    // 6. Abandoned Carts (Giỏ hàng bị bỏ quên)
+    const abandonedCartsRaw = await prisma.cart.findMany({
+      where: {
+        Status: 'ACTIVE',
+        CartItems: { some: {} },
+      },
+      include: {
+        Customer: { select: { CustomerName: true, PhoneNumber: true } },
+        CartItems: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20, // Limit to recent 20 for dashboard
+    });
+
+    // Manually join DrinkSize details
+    const drinkSizeIds = Array.from(new Set(abandonedCartsRaw.flatMap(c => c.CartItems.map(item => item.DrinkSizeID))));
+    const drinkSizes = await prisma.drinkSize.findMany({
+      where: { DrinkSizeID: { in: drinkSizeIds } },
+      include: { Drink: true, Size: true }
+    });
+    const drinkSizeMap = new Map(drinkSizes.map(ds => [ds.DrinkSizeID, ds]));
+
+    const abandonedCarts = abandonedCartsRaw.map((cart) => ({
+      CartID: cart.CartID,
+      SessionID: cart.SessionID,
+      Customer: cart.Customer,
+      updatedAt: cart.updatedAt,
+      TotalItems: cart.CartItems.reduce((acc, item) => acc + item.Quantity, 0),
+      TotalPrice: cart.CartItems.reduce((acc, item) => acc + item.UnitPrice.toNumber() * item.Quantity, 0),
+      ItemsPreview: cart.CartItems.map((item) => {
+        const ds = drinkSizeMap.get(item.DrinkSizeID);
+        return {
+          DrinkName: ds?.Drink?.DrinkName || 'Sản phẩm xoá',
+          SizeName: ds?.Size?.SizeName || '',
+          Quantity: item.Quantity,
+        };
+      }),
+    }));
+
     return sendResponse(res, 200, true, 'Dashboard statistics compiled successfully', {
       todayRevenue,
       todayOrdersCount,
@@ -134,6 +173,7 @@ router.get('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
       lowStockAlerts,
       bestSellers,
       monthlyRevenueChart: monthlyData,
+      abandonedCarts,
     });
   } catch (err) {
     next(err);

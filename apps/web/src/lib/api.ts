@@ -14,6 +14,9 @@ export interface Drink {
   DrinkImageURL?: string;
   DrinkStatus: string;
   createdAt: string;
+  DrinkSizes?: DrinkSize[];
+  AverageRating?: number;
+  SalesCount?: number;
 }
 
 export interface Size {
@@ -893,7 +896,7 @@ export const api = {
   // ORDERS
   getOrders: async (): Promise<Order[]> => {
     try {
-      return await api.request('/orders');
+      return await api.request('/orders?limit=1000&sortDir=desc');
     } catch {
       return db.orders.map((o) => ({
         ...o,
@@ -1209,6 +1212,7 @@ export const api = {
           { month: 'May', revenue: 68000000 },
           { month: 'Jun', revenue: 75000000 },
         ],
+        abandonedCarts: [],
       };
     }
   },

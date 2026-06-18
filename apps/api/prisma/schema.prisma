@@ -247,23 +247,27 @@ model Orders {
   ShopTable    ShopTable?    @relation(fields: [ShopTableID], references: [ShopTableID], onUpdate: Cascade, onDelete: SetNull, map: "FK_Orders_ShopTable")
   Employee     Employee      @relation(fields: [EmployeeID], references: [EmployeeID], onUpdate: Cascade, onDelete: NoAction, map: "FK_Orders_Employee") // SQL Server uses NoAction
   OrderDetails OrderDetail[]
+  Reviews      Review[]
 
   @@map("Orders")
 }
 
 model OrderDetail {
-  OrderID     Int
-  DrinkSizeID Int
-  Quantity    Int
-  UnitPrice   Decimal   @db.Decimal(10, 2)
-  createdAt   DateTime  @db.DateTime2 @default(now())
-  updatedAt   DateTime  @updatedAt
+  OrderDetailID Int       @id @default(autoincrement())
+  OrderID       Int
+  DrinkSizeID   Int
+  Quantity      Int
+  Sugar         String    @default("100%") @db.VarChar(20)
+  Ice           String    @default("100%") @db.VarChar(20)
+  Toppings      String?   @db.NVarChar(500)
+  UnitPrice     Decimal   @db.Decimal(10, 2)
+  createdAt     DateTime  @db.DateTime2 @default(now())
+  updatedAt     DateTime  @updatedAt
 
   // Relationships
-  Orders      Orders    @relation(fields: [OrderID], references: [OrderID], onUpdate: Cascade, onDelete: Cascade, map: "FK_OrderDetail_Orders")
-  DrinkSize   DrinkSize @relation(fields: [DrinkSizeID], references: [DrinkSizeID], onUpdate: Cascade, onDelete: NoAction, map: "FK_OrderDetail_DrinkSize") // SQL Server uses NoAction
+  Orders        Orders    @relation(fields: [OrderID], references: [OrderID], onUpdate: Cascade, onDelete: Cascade, map: "FK_OrderDetail_Orders")
+  DrinkSize     DrinkSize @relation(fields: [DrinkSizeID], references: [DrinkSizeID], onUpdate: Cascade, onDelete: NoAction, map: "FK_OrderDetail_DrinkSize") // SQL Server uses NoAction
 
-  @@id([OrderID, DrinkSizeID])
   @@map("OrderDetail")
 }
 
@@ -391,6 +395,7 @@ model Review {
   ReviewID    Int        @id @default(autoincrement())
   CustomerID  Int
   DrinkID     Int
+  OrderID     Int?
   Rating      Int        @db.TinyInt
   Comment     String?    @db.NVarChar(500)
   createdAt   DateTime   @default(now())
@@ -398,6 +403,7 @@ model Review {
 
   Customer    Customer   @relation(fields: [CustomerID], references: [CustomerID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Review_Customer")
   Drink       Drink      @relation(fields: [DrinkID], references: [DrinkID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Review_Drink")
+  Order       Orders?    @relation(fields: [OrderID], references: [OrderID], onUpdate: NoAction, onDelete: NoAction, map: "FK_Review_Order")
 
   @@map("Review")
 }

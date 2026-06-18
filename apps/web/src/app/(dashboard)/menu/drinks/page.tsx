@@ -15,11 +15,12 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/core';
-import { api, Drink } from '@/lib/api';
+import { api, Drink, Size } from '@/lib/api';
 import { toast } from 'sonner';
 
 export default function DrinksMenu() {
   const [drinks, setDrinks] = useState<Drink[]>([]);
+  const [allSizes, setAllSizes] = useState<Size[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -32,17 +33,19 @@ export default function DrinksMenu() {
   const [drinkDescription, setDrinkDescription] = useState('');
   const [drinkStatus, setDrinkStatus] = useState('ACTIVE');
   const [drinkImage, setDrinkImage] = useState('');
+  const [selectedSizes, setSelectedSizes] = useState<{ SizeID: number; UnitPrice: string }[]>([]);
 
-  const loadDrinks = async () => {
+  const loadData = async () => {
     try {
-      const data = await api.getDrinks();
-      setDrinks(data);
+      const [drinksData, sizesData] = await Promise.all([api.getDrinks(), api.getSizes()]);
+      setDrinks(drinksData);
+      setAllSizes(sizesData);
     } catch {}
     setIsLoading(false);
   };
 
   useEffect(() => {
-    loadDrinks();
+    loadData();
   }, []);
 
   const openCreateForm = () => {
@@ -51,6 +54,7 @@ export default function DrinksMenu() {
     setDrinkDescription('');
     setDrinkStatus('ACTIVE');
     setDrinkImage('');
+    setSelectedSizes([]);
     setIsFormOpen(true);
   };
 
@@ -60,6 +64,12 @@ export default function DrinksMenu() {
     setDrinkDescription(drink.DrinkDescription || '');
     setDrinkStatus(drink.DrinkStatus);
     setDrinkImage(drink.DrinkImageURL || '');
+    setSelectedSizes(
+      drink.DrinkSizes?.filter((ds) => ds.DrinkSizeStatus === 'AVAILABLE').map((ds) => ({
+        SizeID: ds.SizeID,
+        UnitPrice: ds.UnitPrice.toString(),
+      })) || []
+    );
     setIsFormOpen(true);
   };
 
@@ -70,12 +80,30 @@ export default function DrinksMenu() {
       return;
     }
 
+    if (selectedSizes.length === 0) {
+      toast.error('Vui lòng chọn ít nhất 1 size và nhập giá.');
+      return;
+    }
+
+    const sizesPayload = selectedSizes
+      .map((s) => ({
+        SizeID: s.SizeID,
+        UnitPrice: parseFloat(s.UnitPrice || '0'),
+      }))
+      .filter((s) => s.UnitPrice > 0);
+
+    if (sizesPayload.length === 0) {
+      toast.error('Vui lòng nhập giá hợp lệ cho các size đã chọn.');
+      return;
+    }
+
     try {
       const payload = {
         DrinkName: drinkName,
         DrinkDescription: drinkDescription || null,
         DrinkImageURL: drinkImage || null,
         DrinkStatus: drinkStatus,
+        sizes: sizesPayload,
       };
 
       if (selectedDrink) {
@@ -86,7 +114,7 @@ export default function DrinksMenu() {
         toast.success('Thêm mới đồ uống Phêla thành công!');
       }
       setIsFormOpen(false);
-      loadDrinks();
+      loadData();
     } catch (err: any) {
       toast.error(err.message || 'Lỗi lưu thông tin đồ uống.');
     }
@@ -97,7 +125,7 @@ export default function DrinksMenu() {
     try {
       await api.deleteDrink(id);
       toast.success('Đã xóa món ăn/đồ uống khỏi thực đơn.');
-      loadDrinks();
+      loadData();
     } catch (err: any) {
       toast.error(err.message || 'Lỗi xóa đồ uống.');
     }
@@ -254,6 +282,46 @@ export default function DrinksMenu() {
               <option value="ACTIVE">Đang phục vụ (Active)</option>
               <option value="INACTIVE">Ngừng bán (Inactive)</option>
             </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">
+              Các size và giá tiền *
+            </label>
+            <div className="space-y-2">
+              {allSizes.map((size) => {
+                const isSelected = selectedSizes.some((s) => s.SizeID === size.SizeID);
+                const currentVal = selectedSizes.find((s) => s.SizeID === size.SizeID)?.UnitPrice || '';
+                return (
+                  <div key={size.SizeID} className="flex items-center gap-3 bg-background/40 p-2 rounded-lg border border-border">
+                    <label className="flex items-center gap-2 cursor-pointer w-20">
+                      <input 
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedSizes([...selectedSizes, { SizeID: size.SizeID, UnitPrice: '' }]);
+                          } else {
+                            setSelectedSizes(selectedSizes.filter(s => s.SizeID !== size.SizeID));
+                          }
+                        }}
+                        className="rounded border-border text-primary focus:ring-primary"
+                      />
+                      <span className="font-bold">{size.SizeName}</span>
+                    </label>
+                    <Input 
+                      placeholder="Giá tiền (VNĐ)"
+                      type="number"
+                      disabled={!isSelected}
+                      value={currentVal}
+                      onChange={(e) => {
+                        setSelectedSizes(selectedSizes.map(s => s.SizeID === size.SizeID ? { ...s, UnitPrice: e.target.value } : s));
+                      }}
+                      className="flex-1 bg-background/50 h-8 text-sm"
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex gap-4 pt-4 border-t border-border">

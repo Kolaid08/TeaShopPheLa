@@ -86,6 +86,7 @@ export interface Order {
   Customer?: Customer;
   ShopTable?: ShopTable;
   OrderDetails?: OrderDetail[];
+  Reviews?: { DrinkID: number; Rating: number }[];
 }
 
 export interface OrderDetail {
@@ -410,7 +411,7 @@ export const api = {
   },
 
   createCustomerOrder: async (data: {
-    Items: { DrinkSizeID: number; Quantity: number; UnitPrice: number }[];
+    Items: { DrinkSizeID: number; Quantity: number; UnitPrice: number; Sugar?: string; Ice?: string; Toppings?: string }[];
     TotalPrice: number;
     ShopTableID?: number;
     OrderNote?: string;
@@ -431,6 +432,10 @@ export const api = {
           Items: data.Items.map((item) => ({
             DrinkSizeID: item.DrinkSizeID,
             Quantity: item.Quantity,
+            UnitPrice: item.UnitPrice,
+            Sugar: item.Sugar,
+            Ice: item.Ice,
+            Toppings: item.Toppings,
           })),
         }),
       });
@@ -451,12 +456,30 @@ export const api = {
           DrinkSizeID: item.DrinkSizeID,
           Quantity: item.Quantity,
           UnitPrice: item.UnitPrice,
+          Sugar: item.Sugar || '100%',
+          Ice: item.Ice || '100%',
+          Toppings: item.Toppings || '',
         })),
       };
 
       db.orders.push(newO);
       saveLocalState();
       return newO;
+    }
+  },
+
+  submitReview: async (data: { CustomerID: number; DrinkID: number; OrderID: number; Rating: number; Comment: string }): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const payload = await res.json();
+      if (res.ok && payload.success) return payload.data;
+      throw new Error(payload.message || 'Lỗi gửi đánh giá');
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi kết nối tới máy chủ');
     }
   },
 };

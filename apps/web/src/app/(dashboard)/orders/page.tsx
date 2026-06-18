@@ -250,12 +250,23 @@ export default function OrdersPage() {
                 {selectedOrder.OrderDetails?.map((item, idx) => (
                   <div key={idx} className="flex justify-between py-2.5">
                     <div>
-                      <div className="font-bold text-foreground">
+                      <div className="font-bold text-foreground flex items-center gap-2">
                         {item.DrinkSize?.Drink?.DrinkName || 'Sản phẩm trà Phêla'}
+                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-md uppercase font-bold">
+                          Size: {item.DrinkSize?.Size?.SizeName || 'N/A'} x {item.Quantity}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-primary uppercase font-bold">
-                        Size: {item.DrinkSize?.Size?.SizeName || 'N/A'} x {item.Quantity}
-                      </span>
+                      <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-muted-foreground font-mono">
+                        {(item.Sugar || item.Ice || item.Toppings) ? (
+                          <>
+                            {item.Sugar && <span className="border border-border rounded px-1">Đường {item.Sugar}</span>}
+                            {item.Ice && <span className="border border-border rounded px-1">Đá {item.Ice}</span>}
+                            {item.Toppings && <span className="border border-border rounded px-1">+ {item.Toppings}</span>}
+                          </>
+                        ) : (
+                          <span className="italic">Không có tùy chỉnh</span>
+                        )}
+                      </div>
                     </div>
                     <span className="font-bold font-mono text-foreground">
                       {(item.UnitPrice * item.Quantity).toLocaleString('vi-VN')} đ
