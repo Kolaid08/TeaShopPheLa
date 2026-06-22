@@ -10,9 +10,13 @@ const router = Router();
 
 const drinkSchema = z.object({
   DrinkName: z.string().min(1).max(255),
-  DrinkDescription: z.string().optional(),
-  DrinkImageURL: z.string().url().or(z.string().max(2048)).optional(),
+  DrinkDescription: z.string().nullable().optional(),
+  DrinkImageURL: z.string().url().or(z.string().max(2048)).nullable().optional(),
   DrinkStatus: z.string().max(50),
+  sizes: z.array(z.object({
+    SizeID: z.number(),
+    UnitPrice: z.number().positive(),
+  })).min(1, 'Phải có ít nhất 1 size'),
 });
 
 // GET / - List drinks (Public)
@@ -35,15 +39,40 @@ router.get('/', async (req, res, next) => {
         orderBy: { [sortBy]: sortDir },
         include: {
           DrinkSizes: {
-            include: { Size: true },
+            include: { 
+              Size: true,
+              _count: { select: { OrderDetails: true } }
+            },
           },
+          Reviews: {
+            select: { Rating: true }
+          }
         },
       }),
     ]);
 
     const totalPages = Math.ceil(totalItems / limit);
 
-    return sendResponse(res, 200, true, 'Drinks list retrieved', drinks, {
+    const formattedDrinks = drinks.map((drink) => {
+      let totalRating = 0;
+      drink.Reviews.forEach((r) => (totalRating += r.Rating));
+      const AverageRating = drink.Reviews.length > 0 ? Number((totalRating / drink.Reviews.length).toFixed(1)) : 0;
+      
+      let SalesCount = 0;
+      drink.DrinkSizes.forEach((ds) => {
+        SalesCount += ds._count.OrderDetails;
+      });
+
+      const { Reviews, ...rest } = drink;
+
+      return {
+        ...rest,
+        AverageRating,
+        SalesCount
+      };
+    });
+
+    return sendResponse(res, 200, true, 'Drinks list retrieved', formattedDrinks, {
       page,
       limit,
       totalItems,
@@ -64,14 +93,36 @@ router.get('/:id', async (req, res, next) => {
       where: { DrinkID: drinkId },
       include: {
         DrinkSizes: {
-          include: { Size: true },
+          include: { 
+            Size: true,
+            _count: { select: { OrderDetails: true } }
+          },
         },
+        Reviews: {
+          select: { Rating: true }
+        }
       },
     });
 
     if (!drink) throw new AppError(404, 'Drink not found.');
 
-    return sendResponse(res, 200, true, 'Drink retrieved', drink);
+    let totalRating = 0;
+    drink.Reviews.forEach((r) => (totalRating += r.Rating));
+    const AverageRating = drink.Reviews.length > 0 ? Number((totalRating / drink.Reviews.length).toFixed(1)) : 0;
+    
+    let SalesCount = 0;
+    drink.DrinkSizes.forEach((ds) => {
+      SalesCount += ds._count.OrderDetails;
+    });
+
+    const { Reviews, ...rest } = drink;
+    const formattedDrink = {
+      ...rest,
+      AverageRating,
+      SalesCount
+    };
+
+    return sendResponse(res, 200, true, 'Drink retrieved', formattedDrink);
   } catch (err) {
     next(err);
   }
@@ -83,7 +134,22 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, 
     const validatedData = drinkSchema.parse(req.body);
 
     const drink = await prisma.drink.create({
-      data: validatedData,
+      data: {
+        DrinkName: validatedData.DrinkName,
+        DrinkDescription: validatedData.DrinkDescription,
+        DrinkImageURL: validatedData.DrinkImageURL,
+        DrinkStatus: validatedData.DrinkStatus,
+        DrinkSizes: {
+          create: validatedData.sizes.map((s) => ({
+            SizeID: s.SizeID,
+            UnitPrice: s.UnitPrice,
+            DrinkSizeStatus: 'AVAILABLE',
+          })),
+        },
+      },
+      include: {
+        DrinkSizes: true,
+      },
     });
 
     return sendResponse(res, 201, true, 'Drink created successfully', drink);
@@ -100,12 +166,57 @@ router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res
 
     const validatedData = drinkSchema.parse(req.body);
 
-    const drink = await prisma.drink.update({
-      where: { DrinkID: drinkId },
-      data: validatedData,
+    const updatedDrink = await prisma.$transaction(async (tx) => {
+      const drink = await tx.drink.update({
+        where: { DrinkID: drinkId },
+        data: {
+          DrinkName: validatedData.DrinkName,
+          DrinkDescription: validatedData.DrinkDescription,
+          DrinkImageURL: validatedData.DrinkImageURL,
+          DrinkStatus: validatedData.DrinkStatus,
+        },
+      });
+
+      const currentSizes = await tx.drinkSize.findMany({
+        where: { DrinkID: drinkId },
+      });
+
+      const newSizeIds = validatedData.sizes.map((s) => s.SizeID);
+
+      // Mark missing ones as UNAVAILABLE
+      for (const cs of currentSizes) {
+        if (!newSizeIds.includes(cs.SizeID)) {
+          await tx.drinkSize.update({
+            where: { DrinkSizeID: cs.DrinkSizeID },
+            data: { DrinkSizeStatus: 'UNAVAILABLE' },
+          });
+        }
+      }
+
+      // Update or Create new ones
+      for (const s of validatedData.sizes) {
+        const existing = currentSizes.find((cs) => cs.SizeID === s.SizeID);
+        if (existing) {
+          await tx.drinkSize.update({
+            where: { DrinkSizeID: existing.DrinkSizeID },
+            data: { UnitPrice: s.UnitPrice, DrinkSizeStatus: 'AVAILABLE' },
+          });
+        } else {
+          await tx.drinkSize.create({
+            data: {
+              DrinkID: drinkId,
+              SizeID: s.SizeID,
+              UnitPrice: s.UnitPrice,
+              DrinkSizeStatus: 'AVAILABLE',
+            },
+          });
+        }
+      }
+
+      return drink;
     });
 
-    return sendResponse(res, 200, true, 'Drink updated successfully', drink);
+    return sendResponse(res, 200, true, 'Drink updated successfully', updatedDrink);
   } catch (err) {
     next(err);
   }

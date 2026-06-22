@@ -98,14 +98,14 @@ export async function seedDatabaseIfEmpty() {
     if (drinkCount === 0) {
       console.log('Seeding drinks...');
       const drinksData = [
-        { DrinkName: 'Trà Ô Long sữa Phêla', DrinkDescription: 'Chữ Phê trà đặc trưng kết hợp sữa ngậy', DrinkStatus: 'ACTIVE' },
-        { DrinkName: 'Trà sữa Oolong Nhài', DrinkDescription: 'Hương nhài thoang thoảng với trà oolong', DrinkStatus: 'ACTIVE' },
-        { DrinkName: 'Cà phê Cốt dừa Phêla', DrinkDescription: 'Cà phê Espresso cùng cốt dừa sánh mịn', DrinkStatus: 'ACTIVE' },
-        { DrinkName: 'Trà Ô Long trân châu', DrinkDescription: 'Oolong truyền thống kèm trân châu hoàng kim', DrinkStatus: 'ACTIVE' },
-        { DrinkName: 'Trà Ô Long Nhiệt Đới', DrinkDescription: 'Sự kết hợp hoàn hảo giữa trà ô long và trái cây', DrinkStatus: 'ACTIVE' },
-        { DrinkName: 'Cà Phê Trứng Phêla', DrinkDescription: 'Espresso béo ngậy cùng kem trứng đánh bông', DrinkStatus: 'ACTIVE' },
-        { DrinkName: 'Trà Sữa Matcha Ô Long', DrinkDescription: 'Bột matcha Nhật Bản hòa quyện cùng cốt trà oolong', DrinkStatus: 'ACTIVE' },
-        { DrinkName: 'Cà Phê Espresso Sữa Đặc', DrinkDescription: 'Espresso đậm đặc hòa cùng sữa đặc truyền thống', DrinkStatus: 'ACTIVE' },
+        { DrinkName: 'Trà Ô Long sữa Phêla', DrinkDescription: 'Chữ Phê trà đặc trưng kết hợp sữa ngậy', DrinkStatus: 'ACTIVE', DrinkImageURL: 'https://images.unsplash.com/photo-1558160074-4d7d8bdf4256?auto=format&fit=crop&w=800&q=80' },
+        { DrinkName: 'Trà sữa Oolong Nhài', DrinkDescription: 'Hương nhài thoang thoảng với trà oolong', DrinkStatus: 'ACTIVE', DrinkImageURL: 'https://images.unsplash.com/photo-1517701550927-30cfcb64db10?auto=format&fit=crop&w=800&q=80' },
+        { DrinkName: 'Cà phê Cốt dừa Phêla', DrinkDescription: 'Cà phê Espresso cùng cốt dừa sánh mịn', DrinkStatus: 'ACTIVE', DrinkImageURL: 'https://images.unsplash.com/photo-1550246140-5119ae4790b8?auto=format&fit=crop&w=800&q=80' },
+        { DrinkName: 'Trà Ô Long trân châu', DrinkDescription: 'Oolong truyền thống kèm trân châu hoàng kim', DrinkStatus: 'ACTIVE', DrinkImageURL: 'https://images.unsplash.com/photo-1620087754854-3e915474b5c7?auto=format&fit=crop&w=800&q=80' },
+        { DrinkName: 'Trà Ô Long Nhiệt Đới', DrinkDescription: 'Sự kết hợp hoàn hảo giữa trà ô long và trái cây', DrinkStatus: 'ACTIVE', DrinkImageURL: 'https://images.unsplash.com/photo-1595981267035-7b04d84b4f1c?auto=format&fit=crop&w=800&q=80' },
+        { DrinkName: 'Cà Phê Trứng Phêla', DrinkDescription: 'Espresso béo ngậy cùng kem trứng đánh bông', DrinkStatus: 'ACTIVE', DrinkImageURL: 'https://images.unsplash.com/photo-1629853965902-1279cebbf0bc?auto=format&fit=crop&w=800&q=80' },
+        { DrinkName: 'Trà Sữa Matcha Ô Long', DrinkDescription: 'Bột matcha Nhật Bản hòa quyện cùng cốt trà oolong', DrinkStatus: 'ACTIVE', DrinkImageURL: 'https://images.unsplash.com/photo-1582782413158-7c85885f0962?auto=format&fit=crop&w=800&q=80' },
+        { DrinkName: 'Cà Phê Espresso Sữa Đặc', DrinkDescription: 'Espresso đậm đặc hòa cùng sữa đặc truyền thống', DrinkStatus: 'ACTIVE', DrinkImageURL: 'https://images.unsplash.com/photo-1497935586351-b67a49e012bf?auto=format&fit=crop&w=800&q=80' },
       ];
 
       for (const d of drinksData) {
@@ -177,11 +177,11 @@ export async function seedDatabaseIfEmpty() {
           { IngredientName: 'Trà Ô Long Bảo Lộc', QuantityStock: 50.00, UnitID: 2 },
           { IngredientName: 'Sữa bột béo chuyên dụng', QuantityStock: 120.00, UnitID: 2 },
           { IngredientName: 'Đường nước tinh luyện', QuantityStock: 80.00, UnitID: 3 },
-          { IngredientName: 'Trân châu hoàng kim', QuantityStock: 35.00, UnitID: 2 },
+          { IngredientName: 'Trân châu hoàng kim', QuantityStock: 3.50, UnitID: 2 }, // Cảnh báo tồn kho thấp
           { IngredientName: 'Kem béo Phêla', QuantityStock: 60.00, UnitID: 1 },
-          { IngredientName: 'Bột Matcha Uji', QuantityStock: 15.00, UnitID: 2 },
+          { IngredientName: 'Bột Matcha Uji', QuantityStock: 5.00, UnitID: 2 }, // Cảnh báo tồn kho thấp
           { IngredientName: 'Hạt cà phê Robusta Bảo Lộc', QuantityStock: 40.00, UnitID: 2 },
-          { IngredientName: 'Sữa đặc ông thọ', QuantityStock: 100.00, UnitID: 1 },
+          { IngredientName: 'Sữa đặc ông thọ', QuantityStock: 8.50, UnitID: 1 }, // Cảnh báo tồn kho thấp
           { IngredientName: 'Thạch ô long giòn', QuantityStock: 25.00, UnitID: 2 },
         ],
       });
@@ -299,6 +299,69 @@ export async function seedDatabaseIfEmpty() {
           { RecipeID: r5.RecipeID, IngredientID: 3, Quantity: 0.05 },
         ]
       });
+    }
+
+    // 13. Customers
+    const customerCount = await prisma.customer.count();
+    if (customerCount === 0) {
+      console.log('Seeding customers...');
+      await prisma.customer.createMany({
+        data: [
+          { CustomerName: 'Nguyễn Khách A', PhoneNumber: '0901234567', TotalMoneySpending: 1250000, LevelID: 2, Email: 'khacha@gmail.com' },
+          { CustomerName: 'Trần Khách B', PhoneNumber: '0909876543', TotalMoneySpending: 3200000, LevelID: 3, Email: 'khachb@gmail.com' },
+          { CustomerName: 'Lê Khách C', PhoneNumber: '0912345678', TotalMoneySpending: 150000, LevelID: 1, Email: 'khachc@gmail.com' },
+          { CustomerName: 'Phạm Khách D VIP', PhoneNumber: '0988888888', TotalMoneySpending: 15000000, LevelID: 4, Email: 'khachd@gmail.com' },
+        ]
+      });
+    }
+
+    // 14. Orders (Mocking 6 months of data for Analytics Chart)
+    const orderCount = await prisma.orders.count();
+    if (orderCount === 0) {
+      console.log('Seeding mock orders for analytics chart...');
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      const currentMonth = today.getMonth(); // 0-indexed
+
+      // Generate random orders for the past 6 months
+      for (let offset = 5; offset >= 0; offset--) {
+        const targetMonth = currentMonth - offset;
+        const year = targetMonth < 0 ? currentYear - 1 : currentYear;
+        const normalizedMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
+
+        // Create 5-15 orders per month
+        const numOrders = Math.floor(Math.random() * 10) + 5;
+        
+        for (let i = 0; i < numOrders; i++) {
+          const randomDay = Math.floor(Math.random() * 28) + 1;
+          const orderDate = new Date(year, normalizedMonth, randomDay, 14, 30, 0);
+
+          const order = await prisma.orders.create({
+            data: {
+              CustomerID: (Math.floor(Math.random() * 4) + 1), // random customer 1-4
+              EmployeeID: 2,
+              ShopTableID: Math.random() > 0.5 ? (Math.floor(Math.random() * 4) + 1) : null,
+              OrderStatus: 'COMPLETED',
+              TotalPrice: (Math.floor(Math.random() * 3) + 1) * 55000,
+              CreatedTime: orderDate,
+              createdAt: orderDate,
+              updatedAt: orderDate,
+            }
+          });
+
+          // Add a detail record
+          await prisma.orderDetail.create({
+            data: {
+              OrderID: order.OrderID,
+              DrinkSizeID: Math.floor(Math.random() * 15) + 1,
+              Quantity: Math.floor(Math.random() * 3) + 1,
+              UnitPrice: 55000,
+              createdAt: orderDate,
+              updatedAt: orderDate,
+            }
+          });
+        }
+      }
     }
 
     console.log('Database seed check complete successfully.');

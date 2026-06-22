@@ -182,7 +182,7 @@ export default function Home() {
 
           {/* Card 5 - Settings */}
           <Link
-            href="/menu/drink-sizes"
+            href="/settings"
             className="group relative rounded-2xl border border-border bg-card/50 p-6 shadow-xl transition-all duration-300 hover:border-primary-phela-gold/50 hover:bg-card/80 hover:-translate-y-1 block cursor-pointer"
           >
             <div className="w-12 h-12 rounded-xl bg-primary-phela-clay/30 border border-primary-phela-clay/50 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">

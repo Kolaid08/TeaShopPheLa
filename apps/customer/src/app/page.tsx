@@ -60,6 +60,7 @@ export default function CustomerHome() {
   const [sortOption, setSortOption] = useState<'NEWEST' | 'BEST_SELLING' | 'PRICE_ASC' | 'PRICE_DESC' | 'REVIEWS'>('NEWEST');
   const [minPrice, setMinPrice] = useState<string>('');
   const [maxPrice, setMaxPrice] = useState<string>('');
+  const [minRating, setMinRating] = useState<number>(0);
 
   // Customization Modal states
   const [selectedDrink, setSelectedDrink] = useState<Drink | null>(null);
@@ -75,6 +76,7 @@ export default function CustomerHome() {
   const [orderNote, setOrderNote] = useState('');
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'COD' | 'QR_CODE'>('COD');
 
   // Available options
   const toppingsList = [
@@ -154,7 +156,7 @@ export default function CustomerHome() {
   // Get pricing of currently customized size
   const getCurrentCustomPrice = () => {
     const sizeObj = drinkSizes.find((ds) => ds.DrinkSizeID === selectedSizeId);
-    const base = sizeObj?.UnitPrice || 0;
+    const base = Number(sizeObj?.UnitPrice || 0);
     const toppingsTotal = selectedToppings.reduce((acc, curr) => acc + curr.price, 0);
     return base + toppingsTotal;
   };
@@ -167,7 +169,7 @@ export default function CustomerHome() {
     if (!sizeObj) return;
 
     const toppingsTotal = selectedToppings.reduce((acc, curr) => acc + curr.price, 0);
-    const unitPrice = sizeObj.UnitPrice + toppingsTotal;
+    const unitPrice = Number(sizeObj.UnitPrice) + toppingsTotal;
 
     // Create unique key for same item customizations
     const itemKey = `${selectedSizeId}-${sugarLevel}-${iceLevel}-${selectedToppings.map(t=>t.name).sort().join(',')}`;
@@ -234,11 +236,14 @@ export default function CustomerHome() {
         Items: cart.map((item) => ({
           DrinkSizeID: item.DrinkSizeID,
           Quantity: item.Quantity,
+          Sugar: item.Sugar,
+          Ice: item.Ice,
+          Toppings: item.Toppings && item.Toppings.length > 0 ? item.Toppings.map(t => t.name).join(', ') : undefined,
           UnitPrice: item.UnitPrice,
         })),
         TotalPrice: getTotalPrice(),
         ShopTableID: tableId > 0 ? tableId : undefined,
-        OrderNote: `Đường: ${cart.map(i=>i.Sugar).join(', ')} | Đá: ${cart.map(i=>i.Ice).join(', ')}${deliveryAddress ? ` | Giao hàng: ${deliveryAddress}` : ''}${orderNote ? ` | Ghi chú: ${orderNote}` : ''}`,
+        OrderNote: `${deliveryAddress ? `Giao hàng: ${deliveryAddress}` : ''}${orderNote ? ` | Ghi chú: ${orderNote}` : ''}`,
       };
 
       const res = await api.createCustomerOrder(orderPayload);
@@ -281,7 +286,12 @@ export default function CustomerHome() {
     if (minPrice && minP < parseInt(minPrice)) matchesPrice = false;
     if (maxPrice && maxP > parseInt(maxPrice)) matchesPrice = false;
 
-    return matchesSearch && matchesCategory && matchesPrice;
+    let matchesRating = true;
+    if (minRating > 0) {
+      if (!d.AverageRating || d.AverageRating < minRating) matchesRating = false;
+    }
+
+    return matchesSearch && matchesCategory && matchesPrice && matchesRating;
   }).sort((a, b) => {
     if (sortOption === 'BEST_SELLING') return (b.SalesCount || 0) - (a.SalesCount || 0);
     if (sortOption === 'REVIEWS') return (b.AverageRating || 0) - (a.AverageRating || 0);
@@ -321,7 +331,9 @@ export default function CustomerHome() {
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex flex-col text-right">
               <span className="text-xs font-semibold text-muted-foreground">Xin chào,</span>
-              <span className="text-sm font-bold text-foreground truncate max-w-40">{customer.CustomerName}</span>
+              <span className="text-sm font-bold text-foreground truncate max-w-40">
+                {customer ? customer.CustomerName : 'Khách vãn lai'}
+              </span>
             </div>
 
             {customer ? (
@@ -410,6 +422,15 @@ export default function CustomerHome() {
               <option value="PRICE_ASC">Giá: Thấp đến Cao</option>
               <option value="PRICE_DESC">Giá: Cao đến Thấp</option>
             </select>
+            <select 
+              value={minRating} 
+              onChange={(e) => setMinRating(Number(e.target.value))}
+              className="text-xs p-2 rounded-lg border border-border bg-background"
+            >
+              <option value={0}>Tất cả đánh giá</option>
+              <option value={4}>Từ 4 sao trở lên</option>
+              <option value={5}>Chỉ 5 sao</option>
+            </select>
             <div className="flex items-center gap-2">
               <Input 
                 type="number" 
@@ -475,7 +496,15 @@ export default function CustomerHome() {
                       <div className="space-y-1.5">
                         <h3 className="font-serif font-black text-lg text-foreground group-hover:text-primary transition-colors">{drink.DrinkName}</h3>
                         <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{drink.DrinkDescription || 'Món uống đặc sản chè thô Phêla.'}</p>
-                        {drink.AverageRating && <p className="text-[10px] text-amber-500 font-bold flex items-center gap-1">⭐ {drink.AverageRating} <span className="text-muted-foreground">({drink.SalesCount} đã bán)</span></p>}
+                        {drink.AverageRating && drink.AverageRating > 0 ? (
+                          <p className="text-xs text-amber-500 font-bold flex items-center gap-1">
+                            ⭐ {drink.AverageRating} <span className="text-muted-foreground font-medium">({drink.SalesCount || 0} đã bán)</span>
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                            ⭐ Chưa có đánh giá <span className="text-muted-foreground/70">({drink.SalesCount || 0} đã bán)</span>
+                          </p>
+                        )}
                       </div>
 
                     <div className="flex items-center justify-between mt-5 pt-3 border-t border-border/30">
@@ -798,53 +827,62 @@ export default function CustomerHome() {
           title="Xác nhận thanh toán đơn hàng"
         >
           <div className="space-y-6 text-center">
-            <p className="text-xs text-muted-foreground">Chọn phương thức thanh toán giả lập để kết toán hóa đơn order:</p>
+            <p className="text-xs text-muted-foreground">Chọn phương thức thanh toán để kết toán hóa đơn order:</p>
             
             <div className="grid grid-cols-2 gap-4">
               {/* Payment Option 1: Cash/COD */}
               <button
-                onClick={() => handlePlaceOrder('COD')}
-                disabled={isSubmittingOrder}
-                className="border border-border hover:border-primary/40 rounded-2xl p-5 flex flex-col items-center justify-between gap-3 bg-background/50 hover:bg-muted/30 transition-all"
+                onClick={() => setPaymentMethod('COD')}
+                className={`border rounded-2xl p-5 flex flex-col items-center justify-between gap-3 transition-all ${
+                  paymentMethod === 'COD' 
+                    ? 'border-orange-500 bg-orange-500/10 shadow-sm' 
+                    : 'border-border bg-background/50 hover:bg-muted/30'
+                }`}
               >
-                <div className="w-12 h-12 rounded-full bg-orange-500/10 text-orange-600 flex items-center justify-center">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${paymentMethod === 'COD' ? 'bg-orange-500 text-white' : 'bg-orange-500/10 text-orange-600'}`}>
                   <ShoppingBag className="w-6 h-6" />
                 </div>
                 <div>
-                  <span className="font-bold text-sm text-foreground block">Thanh Toán COD</span>
-                  <span className="text-[10px] text-muted-foreground block mt-1">Trả tiền mặt khi nhận hàng/tại quầy</span>
+                  <span className={`font-bold text-sm block ${paymentMethod === 'COD' ? 'text-orange-600' : 'text-foreground'}`}>Thanh Toán Tiền Mặt</span>
+                  <span className="text-[10px] text-muted-foreground block mt-1">Trả tiền tại quầy</span>
                 </div>
               </button>
 
               {/* Payment Option 2: Bank Transfer (QR) */}
               <button 
-                onClick={() => handlePlaceOrder('QR_CODE')}
-                disabled={isSubmittingOrder}
-                className="border border-primary/20 hover:border-primary/60 rounded-2xl p-5 flex flex-col items-center justify-between gap-3 bg-primary/5 hover:bg-primary/10 transition-all"
+                onClick={() => setPaymentMethod('QR_CODE')}
+                className={`border rounded-2xl p-5 flex flex-col items-center justify-between gap-3 transition-all ${
+                  paymentMethod === 'QR_CODE' 
+                    ? 'border-primary bg-primary/10 shadow-sm' 
+                    : 'border-border bg-background/50 hover:bg-muted/30'
+                }`}
               >
-                <div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${paymentMethod === 'QR_CODE' ? 'bg-primary text-white' : 'bg-primary/20 text-primary'}`}>
                   <span className="font-black text-xl">QR</span>
                 </div>
                 <div>
-                  <span className="font-bold text-sm text-foreground block">Chuyển khoản VietQR</span>
-                  <span className="text-[10px] text-muted-foreground block mt-1">Quét mã chuyển khoản tức thì</span>
+                  <span className={`font-bold text-sm block ${paymentMethod === 'QR_CODE' ? 'text-primary' : 'text-foreground'}`}>Chuyển khoản VietQR</span>
+                  <span className="text-[10px] text-muted-foreground block mt-1">Quét mã nhận đơn ngay</span>
                 </div>
               </button>
             </div>
 
             {/* VietQR Dynamic QR code visual mockup */}
-            <div className="mt-4 p-4 border border-border/50 rounded-2xl bg-muted/20 flex items-center gap-4 text-left">
-              <div className="w-24 h-24 bg-white rounded-xl p-2 border border-border flex items-center justify-center shrink-0">
-                <img src={`https://img.vietqr.io/image/MB-190088889999-compact2.png?amount=${getTotalPrice()}&addInfo=PHELA${customer?.PhoneNumber?.slice(-4) || '9999'}&accountName=PHELA COFFEE`} alt="VietQR" className="w-full h-full object-contain" />
+            {paymentMethod === 'QR_CODE' && (
+              <div className="mt-4 p-4 border border-border/50 rounded-2xl bg-muted/20 flex items-center gap-4 text-left animate-in fade-in zoom-in-95">
+                <div className="w-24 h-24 bg-white rounded-xl p-2 border border-border flex items-center justify-center shrink-0">
+                  <img src={`https://img.vietqr.io/image/vietinbank-101880510928-compact2.png?amount=${getTotalPrice()}&addInfo=PHELA${customer?.PhoneNumber?.slice(-4) || '9999'}&accountName=NGUYEN%20VAN%20KHOA`} alt="VietQR" className="w-full h-full object-contain" />
+                </div>
+                <div className="text-xs space-y-1.5 flex-1">
+                  <p className="font-bold text-foreground">Thông tin chuyển khoản nhanh:</p>
+                  <p>Ngân hàng: <span className="font-mono text-primary font-bold">VietinBank</span></p>
+                  <p>Số tài khoản: <span className="font-mono text-primary font-bold">101880510928</span></p>
+                  <p>Chủ tài khoản: <span className="font-mono text-primary font-bold">NGUYEN VAN KHOA</span></p>
+                  <p>Số tiền: <span className="font-mono text-primary font-bold">{getTotalPrice().toLocaleString('vi-VN')} đ</span></p>
+                  <p>Nội dung CK: <span className="font-mono text-primary font-bold">PHELA{customer?.PhoneNumber?.slice(-4) || '9999'}</span></p>
+                </div>
               </div>
-              <div className="text-xs space-y-1.5 flex-1">
-                <p className="font-bold text-foreground">Thông tin chuyển khoản nhanh:</p>
-                <p>Ngân hàng: <span className="font-mono text-primary font-bold">MB BANK</span></p>
-                <p>Số tài khoản: <span className="font-mono text-primary font-bold">1900 8888 9999</span></p>
-                <p>Số tiền: <span className="font-mono text-primary font-bold">{getTotalPrice().toLocaleString('vi-VN')} đ</span></p>
-                <p>Nội dung CK: <span className="font-mono text-primary font-bold">PHELA{customer?.PhoneNumber?.slice(-4) || '9999'}</span></p>
-              </div>
-            </div>
+            )}
 
             <div className="flex gap-4">
               <Button 
@@ -852,11 +890,11 @@ export default function CustomerHome() {
                 className="flex-1 py-3.5 rounded-xl text-xs font-bold"
                 onClick={() => setIsCheckoutOpen(false)}
               >
-                Hủy thanh toán
+                Hủy
               </Button>
               <Button 
-                className="flex-1 py-3.5 rounded-xl text-xs font-bold text-white font-serif uppercase tracking-wider"
-                onClick={() => handlePlaceOrder('QR_CODE')}
+                className="flex-[2] py-3.5 rounded-xl text-xs font-bold text-white font-serif uppercase tracking-wider"
+                onClick={() => handlePlaceOrder(paymentMethod)}
                 disabled={isSubmittingOrder}
               >
                 {isSubmittingOrder ? 'Đang tạo đơn...' : 'Xác nhận Đơn hàng'}

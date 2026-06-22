@@ -11,6 +11,10 @@ const router = Router();
 const orderItemSchema = z.object({
   DrinkSizeID: z.number().int(),
   Quantity: z.number().int().positive(),
+  Sugar: z.string().optional(),
+  Ice: z.string().optional(),
+  Toppings: z.string().optional(),
+  UnitPrice: z.number().positive(),
 });
 
 const createOrderSchema = z.object({
@@ -20,6 +24,7 @@ const createOrderSchema = z.object({
   ShopTableID: z.number().int().optional().nullable(),
   OrderNote: z.string().max(500).optional().nullable(),
   Items: z.array(orderItemSchema).min(1),
+  TotalPrice: z.number().positive().optional(),
 });
 
 const updateStatusSchema = z.object({
@@ -142,14 +147,8 @@ router.post('/customer-place', async (req, res, next) => {
 
       // Compute base total pricing
       let baseTotal = 0;
-      const itemPricingMap = new Map<number, number>();
-      catalogItems.forEach((c) => {
-        itemPricingMap.set(c.DrinkSizeID, c.UnitPrice.toNumber());
-      });
-
       validatedData.Items.forEach((item) => {
-        const price = itemPricingMap.get(item.DrinkSizeID) || 0;
-        baseTotal += price * item.Quantity;
+        baseTotal += item.UnitPrice * item.Quantity;
       });
 
       // Calculate Customer Discount
@@ -193,12 +192,14 @@ router.post('/customer-place', async (req, res, next) => {
 
         await tx.orderDetail.createMany({
           data: validatedData.Items.map((item) => {
-            const unitPrice = itemPricingMap.get(item.DrinkSizeID) || 0;
             return {
               OrderID: order.OrderID,
               DrinkSizeID: item.DrinkSizeID,
               Quantity: item.Quantity,
-              UnitPrice: unitPrice,
+              Sugar: item.Sugar || '100%',
+              Ice: item.Ice || '100%',
+              Toppings: item.Toppings || null,
+              UnitPrice: item.UnitPrice,
             };
           }),
         });
@@ -222,6 +223,14 @@ router.post('/customer-place', async (req, res, next) => {
           },
         });
       });
+
+      // Mark the active cart as completed
+      if (customerId) {
+        await prisma.cart.updateMany({
+          where: { CustomerID: customerId, Status: 'ACTIVE' },
+          data: { Status: 'COMPLETED' }
+        });
+      }
 
       return sendResponse(res, 201, true, 'Đơn hàng đã được tạo thành công.', newOrder);
     } catch (dbErr: any) {
@@ -280,6 +289,7 @@ router.get('/customer-history/:phoneNumber', async (req, res, next) => {
           Customer: { select: { CustomerName: true, PhoneNumber: true } },
           ShopTable: { select: { ShopTableNumber: true } },
           Employee: { select: { FullName: true } },
+          Reviews: { select: { DrinkID: true, Rating: true } },
           OrderDetails: {
             include: {
               DrinkSize: {
@@ -475,14 +485,8 @@ router.post('/', async (req, res, next) => {
 
       // 3. Compute base total pricing
       let baseTotal = 0;
-      const itemPricingMap = new Map<number, number>();
-      catalogItems.forEach((c) => {
-        itemPricingMap.set(c.DrinkSizeID, c.UnitPrice.toNumber());
-      });
-
       validatedData.Items.forEach((item) => {
-        const price = itemPricingMap.get(item.DrinkSizeID) || 0;
-        baseTotal += price * item.Quantity;
+        baseTotal += item.UnitPrice * item.Quantity;
       });
 
       // 4. Calculate Customer Discount
@@ -527,12 +531,14 @@ router.post('/', async (req, res, next) => {
 
         await tx.orderDetail.createMany({
           data: validatedData.Items.map((item) => {
-            const unitPrice = itemPricingMap.get(item.DrinkSizeID) || 0;
             return {
               OrderID: order.OrderID,
               DrinkSizeID: item.DrinkSizeID,
               Quantity: item.Quantity,
-              UnitPrice: unitPrice,
+              Sugar: item.Sugar || '100%',
+              Ice: item.Ice || '100%',
+              Toppings: item.Toppings || null,
+              UnitPrice: item.UnitPrice,
             };
           }),
         });
