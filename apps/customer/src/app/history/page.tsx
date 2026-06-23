@@ -289,7 +289,7 @@ export default function HistoryPage() {
                   {/* Order items listing */}
                   <div className="py-4 space-y-2.5">
                     {order.OrderDetails?.map((detail, idx) => {
-                      const hasReviewed = order.Reviews?.some(r => r.DrinkID === detail.DrinkSize?.DrinkID);
+                      const hasReviewed = order.Reviews?.some(r => r.DrinkID === (detail.DrinkSize as any)?.DrinkID);
 
                       return (
                         <div key={idx} className="flex justify-between items-center text-sm">
@@ -305,7 +305,7 @@ export default function HistoryPage() {
                             <span className="font-mono font-semibold text-foreground">
                               {(detail.UnitPrice * detail.Quantity).toLocaleString('vi-VN')} đ
                             </span>
-                            {order.OrderStatus === 'COMPLETED' && detail.DrinkSize?.DrinkID && (
+                            {order.OrderStatus === 'COMPLETED' && (detail.DrinkSize as any)?.DrinkID && (
                               hasReviewed ? (
                                 <span className="text-[10px] text-muted-foreground font-semibold flex items-center gap-0.5">
                                   <CheckCircle2 className="w-3 h-3" /> Đã đánh giá
@@ -315,7 +315,7 @@ export default function HistoryPage() {
                                   onClick={() =>
                                     handleOpenReview(
                                       order,
-                                      detail.DrinkSize!.DrinkID,
+                                      (detail.DrinkSize as any)!.DrinkID,
                                       detail.DrinkSize!.Drink!.DrinkName,
                                     )
                                   }

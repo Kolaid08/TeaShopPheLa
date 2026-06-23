@@ -18,9 +18,11 @@ import {
   UserX,
   Menu,
   X,
+  MessageCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+import { io, Socket } from 'socket.io-client';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -61,6 +63,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       } catch {}
     };
     if (activeUser) checkLogs();
+
+    // Setup global socket for admin notifications
+    if (activeUser && (activeUser.Role === 'ADMIN' || activeUser.Role === 'MANAGER')) {
+      const socket = io('http://localhost:3001', { withCredentials: true });
+      socket.on('connect', () => {
+        socket.emit('admin_join');
+      });
+
+      socket.on('admin_needed_notification', ({ sessionId, message }) => {
+        toast(message, {
+          description: 'Click để đi đến trang quản lý Live Chat.',
+          action: {
+            label: 'Đi tới Chat',
+            onClick: () => router.push('/chat'),
+          },
+          duration: 10000,
+        });
+        
+        // Play notification sound
+        try {
+          const audio = new Audio('/notification.mp3');
+          audio.play().catch(e => console.log('Audio play failed:', e));
+        } catch (e) {}
+      });
+
+      return () => {
+        socket.disconnect();
+      };
+    }
   }, [pathname, router]);
 
   const handleLogout = async () => {
@@ -102,6 +133,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Tài khoản Barista', path: '/employees', icon: Users, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Tính lương (Salary)', path: '/salary', icon: DollarSign, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Quản lý Rota & Công', path: '/shift-logs', icon: Calendar, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
+    { name: 'Live Chat (CSKH)', path: '/chat', icon: MessageCircle, roles: ['ADMIN', 'MANAGER'] },
   ];
 
   return (
