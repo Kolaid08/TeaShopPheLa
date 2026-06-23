@@ -5,6 +5,7 @@ import { sendResponse, parsePagination } from '../../utils/response';
 import { verifyJWT, requireRole } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import { upgradeCustomerLevel } from '../customers/customers.router';
+import { payos } from '../payment/payment.controller';
 
 const router = Router();
 
@@ -315,6 +316,41 @@ router.get('/customer-history/:phoneNumber', async (req, res, next) => {
   }
 });
 
+// GET /customer-status/:id - Public status polling for customer UI
+router.get('/customer-status/:id', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id || '');
+    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
+
+    try {
+      const order = await prisma.orders.findUnique({ where: { OrderID: orderId } });
+      if (!order) throw new AppError(404, 'Order not found.');
+
+      if (order.OrderStatus === 'PENDING') {
+        try {
+          const payosRes = await payos.paymentRequests.get(order.OrderID);
+          if (payosRes.status === 'PAID') {
+            order.PaymentStatus = 'PAID';
+            order.PaymentMethod = 'QR_CODE';
+            await prisma.orders.update({
+              where: { OrderID: order.OrderID },
+              data: { PaymentStatus: 'PAID', PaymentMethod: 'QR_CODE' }
+            });
+            console.log(`[PayOS Polling] Auto-updated order ${order.OrderID} to PAID`);
+          }
+        } catch {}
+      }
+      return sendResponse(res, 200, true, 'Status', order);
+    } catch {
+      const order = serverMockOrders.find(o => o.OrderID === orderId);
+      if (!order) throw new AppError(404, 'Order not found offline');
+      return sendResponse(res, 200, true, 'Status Offline', order);
+    }
+  } catch(err) {
+    next(err);
+  }
+});
+
 // Protect routes for staff admin dashboard operations
 router.use(verifyJWT);
 
@@ -434,6 +470,24 @@ router.get('/:id', async (req, res, next) => {
       });
 
       if (!order) throw new AppError(404, 'Order not found.');
+
+      // Automatically check PayOS status if the order is PENDING
+      if (order.OrderStatus === 'PENDING') {
+        try {
+          const payosRes = await payos.paymentRequests.get(order.OrderID);
+          if (payosRes.status === 'PAID') {
+            order.PaymentStatus = 'PAID';
+            order.PaymentMethod = 'QR_CODE'; // Assume it was paid via QR
+            await prisma.orders.update({
+              where: { OrderID: order.OrderID },
+              data: { PaymentStatus: 'PAID', PaymentMethod: 'QR_CODE' },
+            });
+            console.log(`[PayOS Polling] Auto-updated order ${order.OrderID} to PAID`);
+          }
+        } catch (payosErr: any) {
+          // Ignore errors if the payment link doesn't exist on PayOS yet or expired
+        }
+      }
 
       return sendResponse(res, 200, true, 'Order retrieved', order);
     } catch {

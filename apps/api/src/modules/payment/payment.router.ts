@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { createZaloPayOrder, callbackZaloPay } from './payment.controller';
+import { createPayOSOrder, payOSWebhook } from './payment.controller';
 
 const router = Router();
 
-router.post('/zalopay', createZaloPayOrder);
-router.post('/zalopay/callback', callbackZaloPay);
+router.post('/payos/create', createPayOSOrder);
+router.post('/payos/webhook', payOSWebhook);
 
 export default router;

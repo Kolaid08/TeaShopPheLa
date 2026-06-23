@@ -61,6 +61,8 @@ export default function CustomerHome() {
   const [minPrice, setMinPrice] = useState<string>('');
   const [maxPrice, setMaxPrice] = useState<string>('');
   const [minRating, setMinRating] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   // Customization Modal states
   const [selectedDrink, setSelectedDrink] = useState<Drink | null>(null);
@@ -77,6 +79,12 @@ export default function CustomerHome() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'COD' | 'QR_CODE'>('COD');
+  
+  // PayOS states
+  const [payOsQrCode, setPayOsQrCode] = useState<string>('');
+  const [payOsDetails, setPayOsDetails] = useState<{ accountNumber?: string; description?: string; bin?: string; amount?: number } | null>(null);
+  const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
 
   // Available options
   const toppingsList = [
@@ -248,20 +256,66 @@ export default function CustomerHome() {
 
       const res = await api.createCustomerOrder(orderPayload);
       
-      // Reset Giỏ hàng
-      saveCartState([]);
-      setOrderNote('');
-      setDeliveryAddress('');
-      setIsCheckoutOpen(false);
-      
-      toast.success('Đặt trà sữa thành công! Quầy lễ tân Phêla đã nhận được đơn.');
-      router.push('/history');
+      if (method === 'QR_CODE') {
+        const payOsRes = await api.createPayOSLink(res.OrderID, res.TotalPrice);
+        setPayOsQrCode(payOsRes.qrCode);
+        setPayOsDetails({
+          accountNumber: payOsRes.accountNumber,
+          description: payOsRes.description,
+          bin: payOsRes.bin,
+          amount: payOsRes.amount,
+        });
+        setActiveOrderId(res.OrderID);
+        setIsPolling(true);
+        toast.info('Vui lòng quét mã QR để thanh toán.');
+      } else {
+        // Reset Giỏ hàng
+        saveCartState([]);
+        setOrderNote('');
+        setDeliveryAddress('');
+        setIsCheckoutOpen(false);
+        
+        toast.success('Đặt trà sữa thành công! Quầy lễ tân Phêla đã nhận được đơn.');
+        router.push('/history');
+      }
     } catch (err: any) {
       toast.error('Lỗi gửi đơn đặt hàng.');
     } finally {
       setIsSubmittingOrder(false);
     }
   };
+
+  // Polling for PayOS payment status
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isPolling && activeOrderId) {
+      interval = setInterval(async () => {
+        try {
+          const statusRes = await api.getOrderStatus(activeOrderId);
+          if (statusRes && statusRes.PaymentStatus === 'PAID') {
+             setIsPolling(false);
+             clearInterval(interval);
+             
+             saveCartState([]);
+             setOrderNote('');
+             setDeliveryAddress('');
+             setIsCheckoutOpen(false);
+             setPayOsQrCode('');
+             setPayOsDetails(null);
+             setActiveOrderId(null);
+             
+             toast.success('Thanh toán thành công! Phêla đã nhận được thanh toán và đơn hàng của bạn.');
+             router.push('/history');
+          }
+        } catch (e) {
+          // ignore polling errors
+        }
+      }, 3000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isPolling, activeOrderId]);
 
   // Filter drinks lists
   const filteredDrinks = drinks.filter((d) => {
@@ -306,6 +360,18 @@ export default function CustomerHome() {
     
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // NEWEST
   });
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredDrinks.length / itemsPerPage);
+  const paginatedDrinks = filteredDrinks.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, activeCategory, sortOption, minPrice, maxPrice, minRating]);
 
   if (isLoadingUser) {
     return <div className="min-h-screen bg-background" />;
@@ -476,8 +542,9 @@ export default function CustomerHome() {
               <p className="text-xs">Hãy thử đổi bộ lọc tìm kiếm sản phẩm khác bạn nhé!</p>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {filteredDrinks.map((drink) => {
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {paginatedDrinks.map((drink) => {
                 // Find all pricing options for display range
                 const prices = drinkSizes.filter(ds => ds.DrinkID === drink.DrinkID).map(ds => ds.UnitPrice);
                 const minPrice = prices.length > 0 ? Math.min(...prices) : 45000;
@@ -521,6 +588,46 @@ export default function CustomerHome() {
                   </Card>
                 );
               })}
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 pt-4 border-t border-border/40">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="rounded-xl"
+                  >
+                    Trước
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }).map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setCurrentPage(i + 1)}
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all ${
+                          currentPage === i + 1 
+                            ? 'bg-primary text-white shadow-md' 
+                            : 'bg-muted/50 hover:bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {i + 1}
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="rounded-xl"
+                  >
+                    Sau
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -775,7 +882,7 @@ export default function CustomerHome() {
                     onClick={() => {
                       setSelectedDrink(d);
                       const sizes = drinkSizes.filter(s => s.DrinkID === d.DrinkID && s.DrinkSizeStatus === 'AVAILABLE');
-                      if (sizes.length > 0) setSelectedSizeId(sizes[0].DrinkSizeID);
+                      if (sizes.length > 0) setSelectedSizeId(sizes[0]?.DrinkSizeID!);
                     }}
                     className="shrink-0 w-32 rounded-xl overflow-hidden border border-border hover:border-primary transition-all text-left"
                   >
@@ -858,15 +965,24 @@ export default function CustomerHome() {
             {paymentMethod === 'QR_CODE' && (
               <div className="mt-4 p-4 border border-border/50 rounded-2xl bg-muted/20 flex items-center gap-4 text-left animate-in fade-in zoom-in-95">
                 <div className="w-24 h-24 bg-white rounded-xl p-2 border border-border flex items-center justify-center shrink-0">
-                  <img src={`https://img.vietqr.io/image/vietinbank-101880510928-compact2.png?amount=${getTotalPrice()}&addInfo=PHELA${customer?.PhoneNumber?.slice(-4) || '9999'}&accountName=NGUYEN%20VAN%20KHOA`} alt="VietQR" className="w-full h-full object-contain" />
+                  <img src={payOsQrCode ? (payOsQrCode.startsWith('http') ? payOsQrCode : `https://quickchart.io/qr?text=${encodeURIComponent(payOsQrCode)}&size=200`) : `https://img.vietqr.io/image/mbbank-7414012005-compact2.png?amount=${getTotalPrice()}&addInfo=PHELA${customer?.PhoneNumber?.slice(-4) || '9999'}&accountName=NGUYEN%20VAN%20KHOA`} alt="VietQR" className="w-full h-full object-contain" />
                 </div>
                 <div className="text-xs space-y-1.5 flex-1">
-                  <p className="font-bold text-foreground">Thông tin chuyển khoản nhanh:</p>
-                  <p>Ngân hàng: <span className="font-mono text-primary font-bold">VietinBank</span></p>
-                  <p>Số tài khoản: <span className="font-mono text-primary font-bold">101880510928</span></p>
-                  <p>Chủ tài khoản: <span className="font-mono text-primary font-bold">NGUYEN VAN KHOA</span></p>
-                  <p>Số tiền: <span className="font-mono text-primary font-bold">{getTotalPrice().toLocaleString('vi-VN')} đ</span></p>
-                  <p>Nội dung CK: <span className="font-mono text-primary font-bold">PHELA{customer?.PhoneNumber?.slice(-4) || '9999'}</span></p>
+                  {isPolling ? (
+                    <div className="flex flex-col items-center justify-center h-full space-y-2 py-2">
+                      <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                      <p className="font-bold text-primary animate-pulse">Đang chờ quét mã...</p>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="font-bold text-foreground">Thông tin chuyển khoản nhanh:</p>
+                      <p>Ngân hàng: <span className="font-mono text-primary font-bold">{payOsDetails?.bin === '970422' ? 'MBBank' : (payOsDetails?.bin || 'MBBank')}</span></p>
+                      <p>Số tài khoản: <span className="font-mono text-primary font-bold">{payOsDetails?.accountNumber || '7414012005'}</span></p>
+                      <p>Chủ tài khoản: <span className="font-mono text-primary font-bold">NGUYEN VAN KHOA</span></p>
+                      <p>Số tiền: <span className="font-mono text-primary font-bold">{(payOsDetails?.amount || getTotalPrice()).toLocaleString('vi-VN')} đ</span></p>
+                      <p>Nội dung CK: <span className="font-mono text-primary font-bold">{payOsDetails?.description || `PHELA${customer?.PhoneNumber?.slice(-4) || '9999'}`}</span></p>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -875,17 +991,24 @@ export default function CustomerHome() {
               <Button 
                 variant="outline" 
                 className="flex-1 py-3.5 rounded-xl text-xs font-bold"
-                onClick={() => setIsCheckoutOpen(false)}
+                onClick={() => {
+                  setIsCheckoutOpen(false);
+                  setIsPolling(false);
+                  setPayOsQrCode('');
+                  setPayOsDetails(null);
+                }}
               >
-                Hủy
+                {isPolling ? 'Hủy giao dịch' : 'Hủy'}
               </Button>
-              <Button 
-                className="flex-[2] py-3.5 rounded-xl text-xs font-bold text-white font-serif uppercase tracking-wider"
-                onClick={() => handlePlaceOrder(paymentMethod)}
-                disabled={isSubmittingOrder}
-              >
-                {isSubmittingOrder ? 'Đang tạo đơn...' : 'Xác nhận Đơn hàng'}
-              </Button>
+              {!isPolling && (
+                <Button 
+                  className="flex-[2] py-3.5 rounded-xl text-xs font-bold text-white font-serif uppercase tracking-wider"
+                  onClick={() => handlePlaceOrder(paymentMethod)}
+                  disabled={isSubmittingOrder}
+                >
+                  {isSubmittingOrder ? 'Đang tạo đơn...' : 'Xác nhận Đơn hàng'}
+                </Button>
+              )}
             </div>
           </div>
         </Dialog>

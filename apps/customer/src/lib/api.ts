@@ -302,6 +302,8 @@ export const api = {
       if (typeof window !== 'undefined') {
         localStorage.setItem('phela_customer_token', 'mock_cust_token_' + Date.now());
         localStorage.setItem('phela_customer_user', JSON.stringify(cust));
+        localStorage.removeItem('chat_session_id'); // Xóa phiên chat cũ
+        window.dispatchEvent(new Event('customer_auth_changed'));
       }
       return cust;
     }
@@ -311,6 +313,8 @@ export const api = {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('phela_customer_token');
       localStorage.removeItem('phela_customer_user');
+      localStorage.removeItem('chat_session_id'); // Xóa phiên chat cũ
+      window.dispatchEvent(new Event('customer_auth_changed'));
     }
   },
 
@@ -332,7 +336,7 @@ export const api = {
 
   getDrinks: async (): Promise<Drink[]> => {
     try {
-      const res = await fetch(`${API_BASE}/drinks`, { cache: 'no-store' });
+      const res = await fetch(`${API_BASE}/drinks?limit=100`, { cache: 'no-store' });
       const payload = await res.json();
       if (res.ok) return payload.data;
       throw new Error();
@@ -465,6 +469,41 @@ export const api = {
       db.orders.push(newO);
       saveLocalState();
       return newO;
+    }
+  },
+
+  createPayOSLink: async (orderId: number, amount: number): Promise<{ checkoutUrl: string; qrCode: string; accountNumber?: string; description?: string; bin?: string; amount?: number; }> => {
+    try {
+      const res = await fetch(`${API_BASE}/payment/payos/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, amount }),
+      });
+      const payload = await res.json();
+      if (res.ok && payload.success) return payload.data;
+      throw new Error(payload.message || 'Lỗi kết nối PayOS');
+    } catch (e) {
+      // Mock fallback
+      return {
+        checkoutUrl: `/payment/mock/${orderId}`,
+        qrCode: `https://img.vietqr.io/image/mbbank-7414012005-compact2.png?amount=${amount}&addInfo=PHELA${orderId}&accountName=NGUYEN%20VAN%20KHOA`,
+        accountNumber: '7414012005',
+        bin: 'MBBank',
+        description: `PHELA${orderId}`,
+        amount: amount,
+      };
+    }
+  },
+
+  getOrderStatus: async (orderId: number): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/orders/customer-status/${orderId}`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      throw new Error();
+    } catch {
+      // Local fallback
+      return db.orders.find(o => o.OrderID === orderId);
     }
   },
 

@@ -1,11 +1,13 @@
 import app from './app';
 import { config } from './config/index';
 import { seedDatabaseIfEmpty } from './utils/seed';
+import { initSocketIo } from './modules/chat/chat.socket';
 
 // Auto-seed database if empty on server boot
 seedDatabaseIfEmpty();
 
 const server = app.listen(config.port, () => {
+  initSocketIo(server);
   console.log(`==================================================`);
   console.log(`  Phêla Shop Management API System Running...`);
   console.log(`  Port: ${config.port}`);

@@ -3,6 +3,7 @@ import { Playfair_Display, DM_Sans } from 'next/font/google';
 import './globals.css';
 import { Toaster } from 'sonner';
 import Providers from '../lib/query-provider';
+import { ChatWidget } from '@/components/chat/ChatWidget';
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -42,6 +43,7 @@ export default function RootLayout({
               },
             }}
           />
+          <ChatWidget />
         </Providers>
       </body>
     </html>

@@ -211,6 +211,7 @@ model Customer {
   Orders             Orders[]
   Reviews            Review[]
   Carts              Cart[]
+  ChatSessions       ChatSession[]
 
   @@map("Customer")
 }
@@ -406,4 +407,29 @@ model Review {
   Order       Orders?    @relation(fields: [OrderID], references: [OrderID], onUpdate: NoAction, onDelete: NoAction, map: "FK_Review_Order")
 
   @@map("Review")
+}
+
+model ChatSession {
+  SessionID   String        @id @default(uuid()) @db.UniqueIdentifier
+  CustomerID  Int?
+  Status      String        @default("AI_HANDLING") @db.VarChar(50) // AI_HANDLING, WAITING_FOR_ADMIN, ADMIN_HANDLING, CLOSED
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  Customer    Customer?     @relation(fields: [CustomerID], references: [CustomerID], onUpdate: Cascade, onDelete: Cascade, map: "FK_ChatSession_Customer")
+  Messages    ChatMessage[]
+
+  @@map("ChatSession")
+}
+
+model ChatMessage {
+  MessageID   Int         @id @default(autoincrement())
+  SessionID   String      @db.UniqueIdentifier
+  SenderType  String      @db.VarChar(20) // CUSTOMER, AI, ADMIN
+  Content     String      @db.NVarChar(Max)
+  createdAt   DateTime    @default(now())
+
+  Session     ChatSession @relation(fields: [SessionID], references: [SessionID], onUpdate: Cascade, onDelete: Cascade, map: "FK_ChatMessage_ChatSession")
+
+  @@map("ChatMessage")
 }
