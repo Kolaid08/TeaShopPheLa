@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { MessageCircle, X, Send, User, Bot, Headset } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import ReactMarkdown from 'react-markdown';
 
 // Generate or get a simple session ID (Must be valid UUID for SQL Server)
 const getSessionId = () => {
@@ -183,7 +184,11 @@ export function ChatWidget() {
                       "p-3 rounded-2xl text-sm",
                       isCustomer ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-background border shadow-sm rounded-tl-sm"
                     )}>
-                      {msg.Content}
+                      <div className="space-y-1 [&>p]:m-0 [&>ul]:list-disc [&>ul]:pl-4 [&>ul]:m-0 [&>ol]:list-decimal [&>ol]:pl-4 [&>ol]:m-0">
+                        <ReactMarkdown>
+                          {msg.Content}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -194,23 +199,37 @@ export function ChatWidget() {
 
           {/* Input Area */}
           <div className="p-3 bg-background border-t">
-            <form onSubmit={handleSend} className="flex gap-2">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={sessionStatus === 'CLOSED' ? "Chat đã đóng" : "Nhập tin nhắn..."}
-                disabled={sessionStatus === 'CLOSED'}
-                className="flex-1 px-4 py-2 border rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50"
-              />
-              <button 
-                type="submit" 
-                disabled={!input.trim() || sessionStatus === 'CLOSED'}
-                className="bg-primary text-primary-foreground p-2 rounded-full hover:bg-primary/90 transition-colors disabled:opacity-50 flex-shrink-0"
+            {sessionStatus === 'CLOSED' ? (
+              <button
+                onClick={() => {
+                  localStorage.removeItem('chat_session_id');
+                  setMessages([]);
+                  setSessionStatus('AI_HANDLING');
+                  const newSid = getSessionId();
+                  socket?.emit('join_session', { sessionId: newSid });
+                }}
+                className="w-full bg-primary text-primary-foreground py-2 rounded-full text-sm font-medium hover:bg-primary/90 transition-colors"
               >
-                <Send size={18} className="ml-0.5" />
+                Bắt đầu cuộc trò chuyện mới
               </button>
-            </form>
+            ) : (
+              <form onSubmit={handleSend} className="flex gap-2">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Nhập tin nhắn..."
+                  className="flex-1 px-4 py-2 border rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+                <button 
+                  type="submit" 
+                  disabled={!input.trim()}
+                  className="bg-primary text-primary-foreground p-2 rounded-full hover:bg-primary/90 transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  <Send size={18} className="ml-0.5" />
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}

@@ -5,6 +5,7 @@ import { io, Socket } from 'socket.io-client';
 import { Bot, Headset, User, Send, CheckCircle2, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import ReactMarkdown from 'react-markdown';
 
 export default function LiveChatPage() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -223,7 +224,11 @@ export default function LiveChatPage() {
                         "p-4 rounded-2xl text-sm shadow-sm",
                         isAdmin ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-background border rounded-tl-sm"
                       )}>
-                        {msg.Content}
+                        <div className="space-y-1 [&>p]:m-0 [&>ul]:list-disc [&>ul]:pl-4 [&>ul]:m-0 [&>ol]:list-decimal [&>ol]:pl-4 [&>ol]:m-0">
+                          <ReactMarkdown>
+                            {msg.Content}
+                          </ReactMarkdown>
+                        </div>
                         <div className={cn("text-[10px] mt-1 opacity-70", isAdmin ? "text-right" : "text-left")}>
                           {new Date(msg.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                         </div>
