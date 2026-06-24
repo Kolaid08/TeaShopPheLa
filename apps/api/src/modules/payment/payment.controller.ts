@@ -65,16 +65,24 @@ export const payOSWebhook = async (req: Request, res: Response) => {
     if (webhookData && webhookData.orderCode) {
       const orderCode = webhookData.orderCode;
       
-      // Update PaymentStatus = 'PAID' (We leave OrderStatus unchanged so it stays PENDING as COD)
-      // We also update PaymentMethod to 'QR_CODE' just in case.
-      await prisma.orders.update({
-        where: { OrderID: Number(orderCode) },
-        data: { 
-            PaymentStatus: 'PAID',
-            PaymentMethod: 'QR_CODE'
-        }
+      // Check if order exists first to avoid crash on dummy webhook pings
+      const orderExists = await prisma.orders.findUnique({
+        where: { OrderID: Number(orderCode) }
       });
-      console.log(`[PayOS Webhook] Payment confirmed for OrderID: ${orderCode}`);
+      
+      if (orderExists) {
+        // Update PaymentStatus = 'PAID'
+        await prisma.orders.update({
+          where: { OrderID: Number(orderCode) },
+          data: { 
+              PaymentStatus: 'PAID',
+              PaymentMethod: 'QR_CODE'
+          }
+        });
+        console.log(`[PayOS Webhook] Payment confirmed for OrderID: ${orderCode}`);
+      } else {
+        console.log(`[PayOS Webhook] Dummy ping or OrderID ${orderCode} not found.`);
+      }
     }
     
     res.status(200).json({ success: true });

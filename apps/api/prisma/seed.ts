@@ -110,10 +110,26 @@ async function main() {
   // 6. Drinks
   console.log('Đang xử lý Drinks...');
   const drinksData = [
-    { DrinkName: 'Ô Long Nhài Sữa', DrinkDescription: 'Trà Ô long thượng hạng ướp hương hoa nhài tinh tế, kết hợp sữa đặc biệt.', DrinkImageURL: 'http://localhost:3001/uploads/olong_nhai_sua.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: "Khói B'Lao", DrinkDescription: "Trà Ô long nướng mộc hương khói đậm đà B'Lao, quyện cùng sữa tươi thanh mát.", DrinkImageURL: "http://localhost:3001/uploads/khoi_blao.png", DrinkStatus: "ACTIVE", IsFeatured: true },
+    { DrinkName: 'Ô Long Nhài Sữa', DrinkDescription: 'Trà Ô long thượng hạng ướp hương hoa nhài tinh tế, kết hợp sữa đặc biệt.', DrinkImageURL: 'http://localhost:3001/uploads/o_long_nhai_sua.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
+    { DrinkName: "Khói B'Lao", DrinkDescription: "Trà Ô long nướng mộc hương khói đậm đà B'Lao, quyện cùng sữa tươi thanh mát.", DrinkImageURL: "http://localhost:3001/uploads/khoi_b_lao.png", DrinkStatus: 'ACTIVE', IsFeatured: true },
     { DrinkName: 'Phan Xi Păng', DrinkDescription: 'Sự kết hợp độc đáo giữa trà Ô long đặc sản và cốt dừa xay tuyết.', DrinkImageURL: 'http://localhost:3001/uploads/phan_xi_pang.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: 'Gấm', DrinkDescription: 'Trà Ô long Nhài kết hợp với trái cây nhiệt đới thanh mát.', DrinkImageURL: 'http://localhost:3001/uploads/gam_tra_sua.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
+    { DrinkName: 'Gấm', DrinkDescription: 'Trà Ô long Nhài kết hợp với trái cây nhiệt đới thanh mát.', DrinkImageURL: 'http://localhost:3001/uploads/gam.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
+    { DrinkName: 'Lang Biang', DrinkDescription: 'Trà Ô long đặc sản hoà quyện với hương vị núi rừng Lang Biang.', DrinkImageURL: 'http://localhost:3001/uploads/lang_biang.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
+    { DrinkName: 'Tấm', DrinkDescription: 'Trà xanh mộc châu ướp hương cốm non, thanh tao nhẹ nhàng.', DrinkImageURL: 'http://localhost:3001/uploads/tam.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
+    { DrinkName: 'Sương Tôn Môn', DrinkDescription: 'Trà đen hảo hạng kết hợp với lớp kem sữa béo ngậy.', DrinkImageURL: 'http://localhost:3001/uploads/suong_ton_mon.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
+    { DrinkName: 'Ô Long Phê La', DrinkDescription: 'Trà Ô long đặc sản Phê La nguyên bản.', DrinkImageURL: 'http://localhost:3001/uploads/o_long_phe_la.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
+    { DrinkName: 'Cà Phê Sữa Đá', DrinkDescription: 'Cà phê Việt Nam pha phin truyền thống với sữa đặc.', DrinkImageURL: 'http://localhost:3001/uploads/ca_phe_sua_da.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
+    { DrinkName: 'Bạc Xỉu', DrinkDescription: 'Cà phê hòa quyện với sữa đặc và sữa tươi, ngọt ngào dễ uống.', DrinkImageURL: 'http://localhost:3001/uploads/bac_xiu.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
+    { DrinkName: 'Trà Chanh Giã Tay', DrinkDescription: 'Trà đen kết hợp với chanh tươi giã tay thơm mát.', DrinkImageURL: 'http://localhost:3001/uploads/tra_chanh_gia_tay.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
+    { DrinkName: 'Trà Đào Cam Sả', DrinkDescription: 'Trà đào thanh mát thêm vị cam sả giải nhiệt.', DrinkImageURL: 'http://localhost:3001/uploads/tra_dao_cam_sa.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
+    { DrinkName: 'Trà Vải Lài', DrinkDescription: 'Trà nhài êm dịu kết hợp cùng trái vải tươi.', DrinkImageURL: 'http://localhost:3001/uploads/tra_vai_lai.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
+    { DrinkName: 'Matcha Latte', DrinkDescription: 'Trà xanh Nhật Bản nguyên chất với sữa tươi.', DrinkImageURL: 'http://localhost:3001/uploads/matcha_latte.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
+    { DrinkName: 'Sữa Tươi Trân Châu Đường Đen', DrinkDescription: 'Sữa tươi Đà Lạt quyện cùng trân châu nấu đường đen dẻo thơm.', DrinkImageURL: 'http://localhost:3001/uploads/sua_tuoi_tran_chau_duong_den.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
+    { DrinkName: 'Trà Xoài Macchiato', DrinkDescription: 'Trà xoài nhiệt đới phủ lớp macchiato mặn ngọt béo ngậy.', DrinkImageURL: 'http://localhost:3001/uploads/tra_xoai_macchiato.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
+    { DrinkName: 'Cà Phê Đen Đá', DrinkDescription: 'Cà phê đậm vị, đắng thanh, đúng chất cà phê phin.', DrinkImageURL: 'http://localhost:3001/uploads/ca_phe_den_da.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
+    { DrinkName: 'Trà Dâu Kem Phô Mai', DrinkDescription: 'Trà dâu tây tươi chua ngọt kèm lớp kem phô mai sánh mịn.', DrinkImageURL: 'http://localhost:3001/uploads/tra_dau_kem_pho_mai.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
+    { DrinkName: 'Hồng Trà Sữa', DrinkDescription: 'Hồng trà cổ điển pha cùng sữa bột béo ngậy.', DrinkImageURL: 'http://localhost:3001/uploads/hong_tra_sua.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
+    { DrinkName: 'Cà Phê Muối', DrinkDescription: 'Cà phê đắng nhẹ phủ lớp kem mặn độc đáo.', DrinkImageURL: 'http://localhost:3001/uploads/ca_phe_muoi.png', DrinkStatus: 'ACTIVE', IsFeatured: true }
   ];
   for (const d of drinksData) {
     const exists = await prisma.drink.findFirst({ where: { DrinkName: d.DrinkName } });
@@ -126,23 +142,26 @@ async function main() {
 
   // 7. Drink Sizes
   console.log('Đang xử lý Drink Sizes...');
-  const oLongNhai = await prisma.drink.findFirst({ where: { DrinkName: 'Ô Long Nhài Sữa' } });
-  const khoiBLao = await prisma.drink.findFirst({ where: { DrinkName: "Khói B'Lao" } });
+  const allDrinks = await prisma.drink.findMany();
   
-  if (oLongNhai && sizeM && sizeL) {
-    const existM = await prisma.drinkSize.findFirst({ where: { DrinkID: oLongNhai.DrinkID, SizeID: sizeM.SizeID } });
-    if (!existM) await prisma.drinkSize.create({ data: { DrinkID: oLongNhai.DrinkID, SizeID: sizeM.SizeID, UnitPrice: 45000, DrinkSizeStatus: 'AVAILABLE' } });
-    
-    const existL = await prisma.drinkSize.findFirst({ where: { DrinkID: oLongNhai.DrinkID, SizeID: sizeL.SizeID } });
-    if (!existL) await prisma.drinkSize.create({ data: { DrinkID: oLongNhai.DrinkID, SizeID: sizeL.SizeID, UnitPrice: 55000, DrinkSizeStatus: 'AVAILABLE' } });
-  }
+  if (sizeM && sizeL) {
+    for (const drink of allDrinks) {
+      // Size M
+      const existM = await prisma.drinkSize.findFirst({ where: { DrinkID: drink.DrinkID, SizeID: sizeM.SizeID } });
+      if (!existM) {
+        await prisma.drinkSize.create({ data: { DrinkID: drink.DrinkID, SizeID: sizeM.SizeID, UnitPrice: 45000, DrinkSizeStatus: 'AVAILABLE' } });
+      } else {
+        await prisma.drinkSize.update({ where: { DrinkSizeID: existM.DrinkSizeID }, data: { UnitPrice: 45000, DrinkSizeStatus: 'AVAILABLE' } });
+      }
 
-  if (khoiBLao && sizeM && sizeL) {
-    const existM = await prisma.drinkSize.findFirst({ where: { DrinkID: khoiBLao.DrinkID, SizeID: sizeM.SizeID } });
-    if (!existM) await prisma.drinkSize.create({ data: { DrinkID: khoiBLao.DrinkID, SizeID: sizeM.SizeID, UnitPrice: 50000, DrinkSizeStatus: 'AVAILABLE' } });
-    
-    const existL = await prisma.drinkSize.findFirst({ where: { DrinkID: khoiBLao.DrinkID, SizeID: sizeL.SizeID } });
-    if (!existL) await prisma.drinkSize.create({ data: { DrinkID: khoiBLao.DrinkID, SizeID: sizeL.SizeID, UnitPrice: 60000, DrinkSizeStatus: 'AVAILABLE' } });
+      // Size L
+      const existL = await prisma.drinkSize.findFirst({ where: { DrinkID: drink.DrinkID, SizeID: sizeL.SizeID } });
+      if (!existL) {
+        await prisma.drinkSize.create({ data: { DrinkID: drink.DrinkID, SizeID: sizeL.SizeID, UnitPrice: 55000, DrinkSizeStatus: 'AVAILABLE' } });
+      } else {
+        await prisma.drinkSize.update({ where: { DrinkSizeID: existL.DrinkSizeID }, data: { UnitPrice: 55000, DrinkSizeStatus: 'AVAILABLE' } });
+      }
+    }
   }
 
   // 8. MemberShip Levels

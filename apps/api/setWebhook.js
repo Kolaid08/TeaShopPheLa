@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const { PayOS } = require('@payos/node');
 
 const payos = new PayOS({
@@ -8,13 +9,14 @@ const payos = new PayOS({
 });
 
 async function main() {
-  const webhookUrl = "https://easy-oranges-go.loca.lt/api/v1/payment/payos/webhook";
+  const webhookUrl =
+    'https://reita-hyperspatial-rosily.ngrok-free.dev/api/v1/payment/payos/webhook';
   try {
     const result = await payos.webhooks.confirm(webhookUrl);
-    console.log("Cấu hình Webhook thành công!");
+    console.log('Cấu hình Webhook thành công!');
     console.log(result);
   } catch (error) {
-    console.error("Lỗi khi cấu hình Webhook:", error);
+    console.error('Lỗi khi cấu hình Webhook:', error);
   }
 }
 
