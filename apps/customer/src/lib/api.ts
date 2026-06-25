@@ -358,7 +358,7 @@ export const api = {
 
   getDrinkSizes: async (): Promise<DrinkSize[]> => {
     try {
-      const res = await fetch(`${API_BASE}/drink-sizes`, { cache: 'no-store' });
+      const res = await fetch(`${API_BASE}/drink-sizes?limit=1000`, { cache: 'no-store' });
       const payload = await res.json();
       if (res.ok) return payload.data;
       throw new Error();
