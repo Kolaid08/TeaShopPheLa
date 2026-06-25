@@ -488,7 +488,7 @@ export const api = {
   // DRINKS
   getDrinks: async (): Promise<Drink[]> => {
     try {
-      return await api.request('/drinks');
+      return await api.request('/drinks?limit=1000');
     } catch {
       return db.drinks;
     }
@@ -558,7 +558,7 @@ export const api = {
   // DRINK SIZES
   getDrinkSizes: async (): Promise<DrinkSize[]> => {
     try {
-      return await api.request('/drink-sizes');
+      return await api.request('/drink-sizes?limit=1000');
     } catch {
       return db.drinkSizes.map((ds) => ({
         ...ds,

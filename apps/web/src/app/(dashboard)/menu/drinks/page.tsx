@@ -23,6 +23,8 @@ export default function DrinksMenu() {
   const [allSizes, setAllSizes] = useState<Size[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -135,6 +137,11 @@ export default function DrinksMenu() {
     d.DrinkName.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
+  const totalPages = Math.ceil(filteredDrinks.length / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentDrinks = filteredDrinks.slice(indexOfFirstItem, indexOfLastItem);
+
   return (
     <div className="space-y-6 animate-fade-in font-sans">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
@@ -160,7 +167,10 @@ export default function DrinksMenu() {
         <Input
           placeholder="Tìm kiếm đồ uống theo tên..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setCurrentPage(1);
+          }}
           className="pl-10 py-3 rounded-xl cafe-panel"
         />
       </div>
@@ -188,7 +198,7 @@ export default function DrinksMenu() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredDrinks.map((drink) => (
+              {currentDrinks.map((drink) => (
                 <TableRow key={drink.DrinkID}>
                   <TableCell className="font-mono font-bold text-xs text-primary">
                     #DK-{drink.DrinkID}
@@ -228,6 +238,42 @@ export default function DrinksMenu() {
           </Table>
         )}
       </Card>
+
+      {/* Pagination Controls */}
+      {!isLoading && totalPages > 1 && (
+        <div className="flex justify-center items-center gap-2 pt-2">
+          <Button
+            variant="outline"
+            className="rounded-full w-10 h-10 p-0 flex items-center justify-center border-border"
+            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+          >
+            &lt;
+          </Button>
+          {Array.from({ length: totalPages }).map((_, idx) => (
+            <Button
+              key={idx}
+              variant={currentPage === idx + 1 ? 'default' : 'outline'}
+              className={`rounded-full w-10 h-10 p-0 flex items-center justify-center font-bold ${
+                currentPage === idx + 1
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'border-border text-muted-foreground'
+              }`}
+              onClick={() => setCurrentPage(idx + 1)}
+            >
+              {idx + 1}
+            </Button>
+          ))}
+          <Button
+            variant="outline"
+            className="rounded-full w-10 h-10 p-0 flex items-center justify-center border-border"
+            onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+          >
+            &gt;
+          </Button>
+        </div>
+      )}
 
       {/* Create/Update Modal Form */}
       <Dialog
