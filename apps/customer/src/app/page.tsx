@@ -154,7 +154,7 @@ export default function CustomerHome() {
   // Get pricing of currently customized size
   const getCurrentCustomPrice = () => {
     const sizeObj = drinkSizes.find((ds) => ds.DrinkSizeID === selectedSizeId);
-    const base = sizeObj?.UnitPrice || 0;
+    const base = Number(sizeObj?.UnitPrice || 0);
     const toppingsTotal = selectedToppings.reduce((acc, curr) => acc + curr.price, 0);
     return base + toppingsTotal;
   };
@@ -167,7 +167,7 @@ export default function CustomerHome() {
     if (!sizeObj) return;
 
     const toppingsTotal = selectedToppings.reduce((acc, curr) => acc + curr.price, 0);
-    const unitPrice = sizeObj.UnitPrice + toppingsTotal;
+    const unitPrice = Number(sizeObj.UnitPrice) + toppingsTotal;
 
     // Create unique key for same item customizations
     const itemKey = `${selectedSizeId}-${sugarLevel}-${iceLevel}-${selectedToppings.map(t=>t.name).sort().join(',')}`;
@@ -286,8 +286,8 @@ export default function CustomerHome() {
     if (sortOption === 'BEST_SELLING') return (b.SalesCount || 0) - (a.SalesCount || 0);
     if (sortOption === 'REVIEWS') return (b.AverageRating || 0) - (a.AverageRating || 0);
     
-    const aPrices = drinkSizes.filter(ds => ds.DrinkID === a.DrinkID).map(ds => ds.UnitPrice);
-    const bPrices = drinkSizes.filter(ds => ds.DrinkID === b.DrinkID).map(ds => ds.UnitPrice);
+    const aPrices = drinkSizes.filter(ds => ds.DrinkID === a.DrinkID).map(ds => Number(ds.UnitPrice));
+    const bPrices = drinkSizes.filter(ds => ds.DrinkID === b.DrinkID).map(ds => Number(ds.UnitPrice));
     const aPrice = aPrices.length > 0 ? Math.min(...aPrices) : 0;
     const bPrice = bPrices.length > 0 ? Math.min(...bPrices) : 0;
     
@@ -319,10 +319,12 @@ export default function CustomerHome() {
 
           {/* User profile & controls */}
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex flex-col text-right">
-              <span className="text-xs font-semibold text-muted-foreground">Xin chào,</span>
-              <span className="text-sm font-bold text-foreground truncate max-w-40">{customer.CustomerName}</span>
-            </div>
+            {customer && (
+              <div className="hidden sm:flex flex-col text-right">
+                <span className="text-xs font-semibold text-muted-foreground">Xin chào,</span>
+                <span className="text-sm font-bold text-foreground truncate max-w-40">{customer.CustomerName}</span>
+              </div>
+            )}
 
             {customer ? (
               <>
@@ -458,7 +460,7 @@ export default function CustomerHome() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {filteredDrinks.map((drink) => {
                 // Find all pricing options for display range
-                const prices = drinkSizes.filter(ds => ds.DrinkID === drink.DrinkID).map(ds => ds.UnitPrice);
+                const prices = drinkSizes.filter(ds => ds.DrinkID === drink.DrinkID).map(ds => Number(ds.UnitPrice));
                 const minPrice = prices.length > 0 ? Math.min(...prices) : 45000;
                 
                 return (

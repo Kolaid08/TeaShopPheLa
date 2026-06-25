@@ -131,7 +131,7 @@ export default function PosTerminal() {
           DrinkSizeID: mapping.DrinkSizeID,
           DrinkName: drink.DrinkName,
           SizeName: size.SizeName,
-          UnitPrice: mapping.UnitPrice,
+          UnitPrice: Number(mapping.UnitPrice),
           Quantity: 1,
           Note: '',
         },
