@@ -78,9 +78,14 @@ export interface Supplier {
 export interface IngredientReceipt {
   IngredientReceiptID: number;
   SupplierID: number;
+  ShipperID?: number;
   ReceivedDate: string;
-  IngredientReceiptStatus: 'PENDING' | 'CONFIRMED';
+  IngredientReceiptStatus: 'PENDING' | 'SHIPPING' | 'CONFIRMED';
+  ShippingAddress?: string;
+  Latitude?: number;
+  Longitude?: number;
   Supplier?: { SupplierName: string };
+  Shipper?: { FullName: string; PhoneNumber: string };
   IngredientReceiptDetails?: IngredientReceiptDetail[];
 }
 
@@ -120,9 +125,20 @@ export interface Order {
   ShopTableID?: number;
   EmployeeID: number;
   CreatedTime: string;
-  OrderStatus: 'PENDING' | 'PREPARING' | 'COMPLETED' | 'CANCELLED';
+  OrderStatus: 'PENDING' | 'PREPARING' | 'SHIPPING' | 'COMPLETED' | 'CANCELLED';
   TotalPrice: number;
   OrderNote?: string;
+  OrderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
+  ShippingAddress?: string;
+  Latitude?: number;
+  Longitude?: number;
+  ReceiverName?: string;
+  ReceiverPhone?: string;
+  DeliveryMethod?: 'INTERNAL' | 'THIRD_PARTY';
+  ShipperID?: number;
+  ThirdPartyShipperName?: string;
+  ThirdPartyShipperPhone?: string;
+  TrackingURL?: string;
   Customer?: { CustomerName: string; PhoneNumber: string };
   ShopTable?: { ShopTableNumber: number };
   Employee?: { FullName: string };
@@ -134,6 +150,9 @@ export interface OrderDetail {
   DrinkSizeID: number;
   Quantity: number;
   UnitPrice: number;
+  Sugar?: string;
+  Ice?: string;
+  Toppings?: string;
   DrinkSize?: {
     Drink?: { DrinkName: string };
     Size?: { SizeName: string };
@@ -967,6 +986,95 @@ export const api = {
         }
       }
       return db.orders[idx]!;
+    }
+  },
+  assignInternalShipper: async (orderId: number, shipperId: number): Promise<Order> => {
+    try {
+      return await api.request(`/shipper/assign-shipper`, {
+        method: 'POST',
+        body: JSON.stringify({ OrderID: orderId, ShipperID: shipperId }),
+      });
+    } catch (err: any) {
+      const idx = db.orders.findIndex((o) => o.OrderID === orderId);
+      if (idx === -1) throw err;
+      db.orders[idx]!.OrderStatus = 'SHIPPING';
+      db.orders[idx]!.DeliveryMethod = 'INTERNAL';
+      db.orders[idx]!.ShipperID = shipperId;
+      return db.orders[idx]!;
+    }
+  },
+  bookThirdPartyShipper: async (orderId: number): Promise<Order> => {
+    try {
+      return await api.request(`/shipper/book-third-party`, {
+        method: 'POST',
+        body: JSON.stringify({ OrderID: orderId }),
+      });
+    } catch (err: any) {
+      const idx = db.orders.findIndex((o) => o.OrderID === orderId);
+      if (idx === -1) throw err;
+      db.orders[idx]!.OrderStatus = 'SHIPPING';
+      db.orders[idx]!.DeliveryMethod = 'THIRD_PARTY';
+      db.orders[idx]!.ThirdPartyShipperName = 'Nguyễn Văn Grab (Mock)';
+      db.orders[idx]!.ThirdPartyShipperPhone = '0911222333';
+      db.orders[idx]!.TrackingURL = 'https://mock-tracking.phela.vn/TRACK-123';
+      return db.orders[idx]!;
+    }
+  },
+  getMyAssignedOrders: async (): Promise<Order[]> => {
+    try {
+      const res = await api.request(`/shipper/my-orders`);
+      return Array.isArray(res) ? res : res.data || [];
+    } catch {
+      const user = getSessionUser();
+      if (!user) return [];
+      return db.orders.filter(o => o.ShipperID === user.EmployeeID && ['SHIPPING', 'COMPLETED'].includes(o.OrderStatus)).map((o) => ({
+        ...o,
+        Customer: db.customers.find((c) => c.CustomerID === o.CustomerID),
+      }));
+    }
+  },
+  assignReceiptShipper: async (receiptId: number, shipperId: number, address?: string, lat?: number, lng?: number): Promise<IngredientReceipt> => {
+    try {
+      return await api.request(`/ingredient-receipts/${receiptId}/assign-shipper`, {
+        method: 'PATCH',
+        body: JSON.stringify({ ShipperID: shipperId, ShippingAddress: address, Latitude: lat, Longitude: lng }),
+      });
+    } catch (err: any) {
+      const idx = db.ingredientReceipts.findIndex((r) => r.IngredientReceiptID === receiptId);
+      if (idx === -1) throw err;
+      db.ingredientReceipts[idx]!.IngredientReceiptStatus = 'SHIPPING';
+      db.ingredientReceipts[idx]!.ShipperID = shipperId;
+      db.ingredientReceipts[idx]!.ShippingAddress = address;
+      db.ingredientReceipts[idx]!.Latitude = lat;
+      db.ingredientReceipts[idx]!.Longitude = lng;
+      return db.ingredientReceipts[idx]!;
+    }
+  },
+  getShipperReceipts: async (): Promise<IngredientReceipt[]> => {
+    try {
+      const res = await api.request(`/shipper/my-receipts`);
+      return Array.isArray(res) ? res : res.data || [];
+    } catch {
+      const user = getSessionUser();
+      if (!user) return [];
+      return db.ingredientReceipts.filter(r => r.ShipperID === user.EmployeeID && ['SHIPPING', 'CONFIRMED'].includes(r.IngredientReceiptStatus)).map((r) => ({
+        ...r,
+        Supplier: db.suppliers.find((s) => s.SupplierID === r.SupplierID),
+      }));
+    }
+  },
+  updateShipperReceiptStatus: async (receiptId: number, status: 'CONFIRMED'): Promise<IngredientReceipt> => {
+    try {
+      const res = await api.request(`/shipper/update-receipt-status`, {
+        method: 'POST',
+        body: JSON.stringify({ IngredientReceiptID: receiptId, Status: status }),
+      });
+      return res;
+    } catch (err: any) {
+      const idx = db.ingredientReceipts.findIndex((r) => r.IngredientReceiptID === receiptId);
+      if (idx === -1) throw err;
+      db.ingredientReceipts[idx]!.IngredientReceiptStatus = status;
+      return db.ingredientReceipts[idx]!;
     }
   },
 

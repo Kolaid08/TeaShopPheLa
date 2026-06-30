@@ -23,9 +23,11 @@ export const initSocketIo = (server: HttpServer) => {
       let session = await getSessionById(sessionId);
       
       if (!session) {
-        session = await createSession(sessionId, customerId);
+        await createSession(sessionId, customerId);
+        session = await getSessionById(sessionId);
       }
       
+      if (!session) return;
       socket.join(session.SessionID);
       socket.emit('session_joined', session);
     });

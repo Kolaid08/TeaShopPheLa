@@ -79,7 +79,7 @@ export const generateAIResponse = async (messages: { sender: string; text: strin
   const functionCalls = response.functionCalls();
   if (functionCalls && functionCalls.length > 0) {
     const call = functionCalls[0];
-    if (call.name === 'check_order_status') {
+    if (call && call.name === 'check_order_status') {
       const orderId = (call.args as any).orderId;
       try {
         const order = await prisma.orders.findUnique({

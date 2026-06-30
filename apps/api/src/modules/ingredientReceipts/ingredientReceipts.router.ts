@@ -42,6 +42,7 @@ router.get('/', async (req, res, next) => {
         orderBy: { [sortBy]: sortDir },
         include: {
           Supplier: { select: { SupplierName: true } },
+          Shipper: { select: { FullName: true, PhoneNumber: true } },
           IngredientReceiptDetails: {
             include: {
               Ingredient: { select: { IngredientName: true } },
@@ -74,6 +75,7 @@ router.get('/:id', async (req, res, next) => {
       where: { IngredientReceiptID: receiptId },
       include: {
         Supplier: true,
+        Shipper: { select: { FullName: true, PhoneNumber: true } },
         IngredientReceiptDetails: {
           include: { Ingredient: true },
         },
@@ -131,6 +133,55 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
     });
 
     return sendResponse(res, 201, true, 'Receipt created successfully', receipt);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /:id/assign-shipper - Assign a shipper to pick up the receipt (Manager/Admin only)
+router.patch('/:id/assign-shipper', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+  try {
+    const receiptId = parseInt(req.params.id || '');
+    if (isNaN(receiptId)) throw new AppError(400, 'Invalid ID format.');
+
+    const assignSchema = z.object({
+      ShipperID: z.number().int().positive(),
+      ShippingAddress: z.string().optional(),
+      Latitude: z.number().optional(),
+      Longitude: z.number().optional(),
+    });
+    const validatedData = assignSchema.parse(req.body);
+
+    const receipt = await prisma.ingredientReceipt.findUnique({
+      where: { IngredientReceiptID: receiptId },
+    });
+
+    if (!receipt) throw new AppError(404, 'Receipt not found.');
+    if (receipt.IngredientReceiptStatus !== 'PENDING') {
+      throw new AppError(400, 'Cannot assign shipper to a non-pending receipt.');
+    }
+
+    const shipper = await prisma.employee.findUnique({
+      where: { EmployeeID: validatedData.ShipperID },
+      include: { Role: true },
+    });
+
+    if (!shipper) {
+      throw new AppError(404, 'Shipper not found.');
+    }
+
+    const updatedReceipt = await prisma.ingredientReceipt.update({
+      where: { IngredientReceiptID: receiptId },
+      data: {
+        ShipperID: validatedData.ShipperID,
+        ShippingAddress: validatedData.ShippingAddress,
+        Latitude: validatedData.Latitude,
+        Longitude: validatedData.Longitude,
+        IngredientReceiptStatus: 'SHIPPING',
+      },
+    });
+
+    return sendResponse(res, 200, true, 'Shipper assigned successfully.', updatedReceipt);
   } catch (err) {
     next(err);
   }

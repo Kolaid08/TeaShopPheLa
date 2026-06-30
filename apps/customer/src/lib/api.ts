@@ -419,6 +419,12 @@ export const api = {
     TotalPrice: number;
     ShopTableID?: number;
     OrderNote?: string;
+    OrderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
+    ShippingAddress?: string;
+    Latitude?: number;
+    Longitude?: number;
+    ReceiverName?: string;
+    ReceiverPhone?: string;
   }): Promise<Order> => {
     const cust = getSessionCustomer();
     
@@ -432,6 +438,12 @@ export const api = {
           CustomerPhoneNumber: cust?.PhoneNumber || '0900000000',
           ShopTableID: data.ShopTableID || undefined,
           OrderNote: data.OrderNote || undefined,
+          OrderType: data.OrderType,
+          ShippingAddress: data.ShippingAddress,
+          Latitude: data.Latitude,
+          Longitude: data.Longitude,
+          ReceiverName: data.ReceiverName,
+          ReceiverPhone: data.ReceiverPhone,
           TotalPrice: data.TotalPrice,
           Items: data.Items.map((item) => ({
             DrinkSizeID: item.DrinkSizeID,
@@ -455,6 +467,10 @@ export const api = {
         OrderStatus: 'PENDING',
         TotalPrice: data.TotalPrice,
         OrderNote: data.OrderNote || undefined,
+        OrderType: data.OrderType || (data.ShopTableID ? 'DINE_IN' : 'TAKEAWAY'),
+        ShippingAddress: data.ShippingAddress || undefined,
+        ReceiverName: data.ReceiverName || undefined,
+        ReceiverPhone: data.ReceiverPhone || undefined,
         OrderDetails: data.Items.map((item) => ({
           OrderID: db.orders.length + 1,
           DrinkSizeID: item.DrinkSizeID,

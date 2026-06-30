@@ -15,7 +15,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/core';
-import { api, Order } from '@/lib/api';
+import { api, Order, Employee } from '@/lib/api';
 import { toast } from 'sonner';
 
 export default function OrdersPage() {
@@ -25,6 +25,9 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [selectedShipperId, setSelectedShipperId] = useState<number>(0);
+  const [isAssigning, setIsAssigning] = useState(false);
 
   const loadOrders = async () => {
     try {
@@ -36,7 +39,38 @@ export default function OrdersPage() {
 
   useEffect(() => {
     loadOrders();
+    api.getEmployees().then(list => setEmployees(list.filter(e => e.Role?.RoleName === 'Shipper' || !e.Role || e.Role?.RoleName === 'STAFF'))).catch(() => {});
   }, []);
+
+  const handleAssignShipper = async () => {
+    if (!selectedOrder || !selectedShipperId) return;
+    setIsAssigning(true);
+    try {
+      const res = await api.assignInternalShipper(selectedOrder.OrderID, selectedShipperId);
+      toast.success('Đã điều phối nhân viên giao hàng thành công.');
+      setSelectedOrder(res);
+      loadOrders();
+    } catch (err: any) {
+      toast.error('Lỗi khi điều phối giao hàng: ' + (err.message || ''));
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  const handleBookThirdParty = async () => {
+    if (!selectedOrder) return;
+    setIsAssigning(true);
+    try {
+      const res = await api.bookThirdPartyShipper(selectedOrder.OrderID);
+      toast.success('Đã gọi thành công đơn vị vận chuyển thứ 3.');
+      setSelectedOrder(res);
+      loadOrders();
+    } catch (err: any) {
+      toast.error('Lỗi khi gọi vận chuyển thứ 3: ' + (err.message || ''));
+    } finally {
+      setIsAssigning(false);
+    }
+  };
 
   const handleUpdateStatus = async (id: number, newStatus: string) => {
     try {
@@ -148,9 +182,12 @@ export default function OrdersPage() {
                     </span>
                   </TableCell>
                   <TableCell className="font-semibold">
-                    {order.ShopTable?.ShopTableNumber
-                      ? `Bàn số ${order.ShopTable.ShopTableNumber}`
-                      : 'Mang đi'}
+                    {order.OrderType === 'DELIVERY' 
+                      ? <Badge variant="neutral">Giao Hàng</Badge>
+                      : order.ShopTable?.ShopTableNumber
+                        ? `Bàn số ${order.ShopTable.ShopTableNumber}`
+                        : 'Mang đi'
+                    }
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground font-mono">
                     {new Date(order.CreatedTime).toLocaleString('vi-VN')}
@@ -239,6 +276,32 @@ export default function OrdersPage() {
                   {selectedOrder.OrderStatus}
                 </Badge>
               </div>
+              
+              {selectedOrder.OrderType === 'DELIVERY' && (
+                <div className="mt-4 pt-3 border-t border-border/60 space-y-2.5">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-primary block">Thông tin giao hàng:</span>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground font-bold">Người nhận:</span>
+                    <span className="font-bold text-foreground text-right">{selectedOrder.ReceiverName || selectedOrder.Customer?.CustomerName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground font-bold">SĐT nhận:</span>
+                    <span className="font-mono text-foreground text-right">{selectedOrder.ReceiverPhone || selectedOrder.Customer?.PhoneNumber}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground font-bold">Địa chỉ:</span>
+                    <span className="text-foreground text-right flex-1 ml-4 text-[10px]">{selectedOrder.ShippingAddress}</span>
+                  </div>
+                  {selectedOrder.DeliveryMethod && (
+                    <div className="flex justify-between mt-2 pt-2 border-t border-dashed border-border/50">
+                      <span className="text-muted-foreground font-bold">ĐV Vận Chuyển:</span>
+                      <span className="font-bold text-foreground">
+                        {selectedOrder.DeliveryMethod === 'INTERNAL' ? 'Nhân viên quán' : selectedOrder.ThirdPartyShipperName}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Items breakdown list */}
@@ -287,8 +350,30 @@ export default function OrdersPage() {
               selectedOrder.OrderStatus !== 'CANCELLED' && (
                 <div className="space-y-3 pt-4 border-t border-border/60">
                   <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block text-center">
-                    Cập nhật pha chế:
+                    Cập nhật / Điều phối:
                   </span>
+                  
+                  {selectedOrder.OrderType === 'DELIVERY' && selectedOrder.OrderStatus === 'PREPARING' && !selectedOrder.DeliveryMethod && (
+                    <div className="p-3 border border-border/50 bg-muted/20 rounded-xl space-y-3 mb-3">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Điều phối giao hàng</p>
+                      <div className="flex gap-2">
+                        <select 
+                          className="flex-1 text-xs rounded-lg border border-border bg-background px-2"
+                          value={selectedShipperId}
+                          onChange={(e)=>setSelectedShipperId(parseInt(e.target.value))}
+                        >
+                          <option value={0}>-- Chọn Shipper Nội Bộ --</option>
+                          {employees.map(e => <option key={e.EmployeeID} value={e.EmployeeID}>{e.FullName}</option>)}
+                        </select>
+                        <Button size="sm" onClick={handleAssignShipper} disabled={isAssigning || !selectedShipperId}>Giao NV</Button>
+                      </div>
+                      <div className="text-center text-[10px] text-muted-foreground">- HOẶC -</div>
+                      <Button variant="outline" className="w-full text-xs" onClick={handleBookThirdParty} disabled={isAssigning}>
+                        Gọi Grab/Ahamove
+                      </Button>
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     {selectedOrder.OrderStatus === 'PENDING' && (
                       <Button
@@ -298,12 +383,20 @@ export default function OrdersPage() {
                         <Play className="w-4 h-4" /> Pha chế
                       </Button>
                     )}
-                    {selectedOrder.OrderStatus === 'PREPARING' && (
+                    {selectedOrder.OrderStatus === 'PREPARING' && selectedOrder.OrderType !== 'DELIVERY' && (
                       <Button
                         className="flex-1 py-3 rounded-xl gap-1.5 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white"
                         onClick={() => handleUpdateStatus(selectedOrder.OrderID, 'COMPLETED')}
                       >
                         <CheckCircle2 className="w-4 h-4" /> Hoàn thành
+                      </Button>
+                    )}
+                    {selectedOrder.OrderStatus === 'SHIPPING' && selectedOrder.DeliveryMethod === 'THIRD_PARTY' && (
+                      <Button
+                        className="flex-1 py-3 rounded-xl gap-1.5 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white"
+                        onClick={() => handleUpdateStatus(selectedOrder.OrderID, 'COMPLETED')}
+                      >
+                        <CheckCircle2 className="w-4 h-4" /> Đã giao xong (3rd Party)
                       </Button>
                     )}
                     <Button

@@ -26,10 +26,37 @@ const createOrderSchema = z.object({
   OrderNote: z.string().max(500).optional().nullable(),
   Items: z.array(orderItemSchema).min(1),
   TotalPrice: z.number().positive().optional(),
+  OrderType: z.enum(['DINE_IN', 'TAKEAWAY', 'DELIVERY']).optional(),
+  ShippingAddress: z.string().optional().nullable(),
+  Latitude: z.number().optional().nullable(),
+  Longitude: z.number().optional().nullable(),
+  ReceiverName: z.string().optional().nullable(),
+  ReceiverPhone: z.string().optional().nullable(),
 });
 
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const d = R * c; // Distance in km
+  return d;
+}
+
 const updateStatusSchema = z.object({
-  OrderStatus: z.enum(['PENDING', 'PREPARING', 'COMPLETED', 'CANCELLED']),
+  OrderStatus: z.enum(['PENDING', 'PREPARING', 'SHIPPING', 'COMPLETED', 'CANCELLED']),
+});
+
+const assignShipperSchema = z.object({
+  ShipperID: z.number().int().optional().nullable(),
+  DeliveryMethod: z.enum(['INTERNAL', 'THIRD_PARTY']),
+  ThirdPartyShipperName: z.string().optional().nullable(),
+  ThirdPartyShipperPhone: z.string().optional().nullable(),
+  TrackingURL: z.string().optional().nullable(),
 });
 
 // Static catalog mapping of DrinkSizeID to DrinkName/Size/Price details for offline mock database representation
@@ -165,7 +192,25 @@ router.post('/customer-place', async (req, res, next) => {
       }
 
       const discountAmount = baseTotal * (discountRate / 100);
-      const finalPrice = baseTotal - discountAmount;
+      let finalPrice = baseTotal - discountAmount;
+      let computedDistance = null;
+      let shippingFee = 0;
+
+      if (validatedData.OrderType === 'DELIVERY' && validatedData.Latitude && validatedData.Longitude) {
+         // Default shop location (Ho Chi Minh City center)
+         const shopLat = 10.762622;
+         const shopLng = 106.660172;
+         computedDistance = calculateDistance(shopLat, shopLng, validatedData.Latitude, validatedData.Longitude);
+         
+         if (finalPrice >= 300000) {
+            shippingFee = 0; // Free ship > 300k
+         } else if (computedDistance <= 3) {
+            shippingFee = 15000;
+         } else {
+            shippingFee = 15000 + Math.ceil(computedDistance - 3) * 5000;
+         }
+         finalPrice += shippingFee;
+      }
 
       // Validate ShopTableID
       let validShopTableId = validatedData.ShopTableID || null;
@@ -188,6 +233,14 @@ router.post('/customer-place', async (req, res, next) => {
             OrderStatus: 'PENDING',
             TotalPrice: finalPrice,
             OrderNote: validatedData.OrderNote || null,
+            OrderType: validatedData.OrderType || (validShopTableId ? 'DINE_IN' : 'TAKEAWAY'),
+            ShippingAddress: validatedData.ShippingAddress || null,
+            Latitude: validatedData.Latitude || null,
+            Longitude: validatedData.Longitude || null,
+            Distance: computedDistance,
+            ReceiverName: validatedData.ReceiverName || validatedData.CustomerName || null,
+            ReceiverPhone: validatedData.ReceiverPhone || validatedData.CustomerPhoneNumber || null,
+            ShippingFee: shippingFee,
           },
         });
 
@@ -251,6 +304,12 @@ router.post('/customer-place', async (req, res, next) => {
         CreatedTime: new Date().toISOString(),
         OrderStatus: 'PENDING',
         TotalPrice: req.body.TotalPrice || 55000,
+        OrderType: validatedData.OrderType || (validatedData.ShopTableID ? 'DINE_IN' : 'TAKEAWAY'),
+        ShippingAddress: validatedData.ShippingAddress || null,
+        Latitude: validatedData.Latitude || null,
+        Longitude: validatedData.Longitude || null,
+        ReceiverName: validatedData.ReceiverName || validatedData.CustomerName || null,
+        ReceiverPhone: validatedData.ReceiverPhone || validatedData.CustomerPhoneNumber || null,
         OrderNote: validatedData.OrderNote || null,
         OrderDetails: validatedData.Items.map((item) => {
           const matched = mockDrinkSizesMap[item.DrinkSizeID] || { DrinkName: 'Trà Phêla', SizeName: 'M', UnitPrice: 50000 };
@@ -769,6 +828,52 @@ router.patch('/:id/status', async (req, res, next) => {
         serverMockOrders[idx],
       );
     }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /:id/assign-shipper - Assign a shipper to a delivery order
+router.patch('/:id/assign-shipper', verifyJWT, requireRole([1, 2]), async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id || '');
+    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
+
+    const validatedData = assignShipperSchema.parse(req.body);
+
+    const order = await prisma.orders.findUnique({
+      where: { OrderID: orderId },
+    });
+
+    if (!order) throw new AppError(404, 'Order not found.');
+
+    if (order.OrderType !== 'DELIVERY') {
+      throw new AppError(400, 'Chỉ có thể gán tài xế cho đơn Giao hàng (DELIVERY).');
+    }
+
+    if (order.OrderStatus !== 'PENDING' && order.OrderStatus !== 'PREPARING') {
+      throw new AppError(400, 'Chỉ có thể gán tài xế khi đơn đang ở trạng thái Chờ xác nhận hoặc Đang pha chế.');
+    }
+
+    const updatedOrder = await prisma.orders.update({
+      where: { OrderID: orderId },
+      data: {
+        OrderStatus: 'SHIPPING',
+        DeliveryMethod: validatedData.DeliveryMethod,
+        ShipperID: validatedData.DeliveryMethod === 'INTERNAL' ? validatedData.ShipperID : null,
+        ThirdPartyShipperName: validatedData.DeliveryMethod === 'THIRD_PARTY' ? validatedData.ThirdPartyShipperName : null,
+        ThirdPartyShipperPhone: validatedData.DeliveryMethod === 'THIRD_PARTY' ? validatedData.ThirdPartyShipperPhone : null,
+        TrackingURL: validatedData.DeliveryMethod === 'THIRD_PARTY' ? validatedData.TrackingURL : null,
+      },
+    });
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      'Đã gán tài xế và chuyển trạng thái đơn hàng sang Đang giao (SHIPPING).',
+      updatedOrder,
+    );
   } catch (err) {
     next(err);
   }

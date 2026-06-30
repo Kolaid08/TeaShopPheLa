@@ -26,6 +26,10 @@ import {
 } from '@/components/ui/core';
 import { api, Drink, DrinkSize, Customer, ShopTable } from '@/lib/api';
 import { toast } from 'sonner';
+import dynamic from 'next/dynamic';
+import AddressAutocomplete from '@/components/AddressAutocomplete';
+
+const MapPicker = dynamic(() => import('@/components/MapPicker'), { ssr: false });
 
 const removeAccents = (str: string) => {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
@@ -79,6 +83,15 @@ export default function CustomerHome() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'COD' | 'QR_CODE'>('COD');
+  
+  // Delivery states
+  const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY' | 'DELIVERY'>('TAKEAWAY');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [receiverName, setReceiverName] = useState('');
+  const [receiverPhone, setReceiverPhone] = useState('');
+  const [calculatedShippingFee, setCalculatedShippingFee] = useState<number>(0);
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   
   // PayOS states
   const [payOsQrCode, setPayOsQrCode] = useState<string>('');
@@ -229,7 +242,7 @@ export default function CustomerHome() {
     const discountRate = customer?.MemberShipLevel?.DiscountRate || 0;
     return Math.floor((getSubtotal() * discountRate) / 100);
   };
-  const getTotalPrice = () => getSubtotal() - getDiscountAmount();
+  const getTotalPrice = () => getSubtotal() - getDiscountAmount() + (orderType === 'DELIVERY' ? calculatedShippingFee : 0);
 
   // Submit checkout Order
   const handlePlaceOrder = async (method: 'QR_CODE' | 'COD') => {
@@ -252,6 +265,12 @@ export default function CustomerHome() {
         TotalPrice: getTotalPrice(),
         ShopTableID: tableId > 0 ? tableId : undefined,
         OrderNote: `${deliveryAddress ? `Giao hàng: ${deliveryAddress}` : ''}${orderNote ? ` | Ghi chú: ${orderNote}` : ''}`,
+        OrderType: orderType,
+        ShippingAddress: deliveryAddress || undefined,
+        Latitude: latitude || undefined,
+        Longitude: longitude || undefined,
+        ReceiverName: receiverName || undefined,
+        ReceiverPhone: receiverPhone || undefined,
       };
 
       const res = await api.createCustomerOrder(orderPayload);
@@ -698,36 +717,66 @@ export default function CustomerHome() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
+                <div className="space-y-4">
+                  {/* Order Type Selection */}
+                  <div className="flex bg-muted p-1 rounded-xl gap-1">
+                    <button onClick={() => setOrderType('TAKEAWAY')} className={`flex-1 text-xs py-2 rounded-lg font-bold transition-all ${orderType === 'TAKEAWAY' ? 'bg-background shadow text-primary' : 'text-muted-foreground'}`}>Mang đi</button>
+                    <button onClick={() => setOrderType('DINE_IN')} className={`flex-1 text-xs py-2 rounded-lg font-bold transition-all ${orderType === 'DINE_IN' ? 'bg-background shadow text-primary' : 'text-muted-foreground'}`}>Tại bàn</button>
+                    <button onClick={() => setOrderType('DELIVERY')} className={`flex-1 text-xs py-2 rounded-lg font-bold transition-all ${orderType === 'DELIVERY' ? 'bg-background shadow text-primary' : 'text-muted-foreground'}`}>Giao hàng</button>
+                  </div>
+
+                  {orderType === 'DINE_IN' && (
+                    <div className="space-y-1">
                       <label className="text-[10px] font-bold text-muted-foreground block mb-1 uppercase tracking-wide">Số bàn (Tại quầy)</label>
                       <select 
                         value={tableId}
                         onChange={(e)=>setTableId(parseInt(e.target.value))}
-                        className="w-full rounded-lg border border-border bg-background/50 p-2 text-xs"
+                        className="w-full rounded-lg border border-border bg-background p-2 text-xs"
                       >
-                        <option value={0}>Giao hàng mang đi</option>
+                        <option value={0}>Chọn bàn...</option>
                         {tables.map(t => (
                           <option key={t.ShopTableID} value={t.ShopTableID}>Bàn {t.ShopTableNumber}</option>
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground block mb-1 uppercase tracking-wide">Số điện thoại</label>
-                      <Input value={customer?.PhoneNumber || ''} disabled className="p-2 h-8 text-xs font-mono" />
-                    </div>
-                  </div>
+                  )}
 
-                  {tableId === 0 && (
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Địa chỉ giao hàng *</label>
-                      <Input 
-                        placeholder="Nhập địa chỉ nhà, văn phòng..." 
-                        value={deliveryAddress}
-                        onChange={(e)=>setDeliveryAddress(e.target.value)}
-                        className="text-xs h-8"
-                      />
+                  {orderType === 'DELIVERY' && (
+                    <div className="space-y-3 p-3 bg-muted/30 rounded-xl border border-border/50">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Gợi ý địa chỉ giao hàng *</label>
+                        <AddressAutocomplete 
+                          initialValue={deliveryAddress}
+                          onAddressSelect={(address: string, lat: number, lng: number) => {
+                            setDeliveryAddress(address);
+                            setLatitude(lat);
+                            setLongitude(lng);
+                            // calculate random fee
+                            setCalculatedShippingFee(Math.floor(Math.random() * 20 + 15) * 1000);
+                          }}
+                          onOpenMap={() => setIsMapModalOpen(true)}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Tên người nhận</label>
+                          <Input 
+                            placeholder={customer?.CustomerName || ''}
+                            value={receiverName}
+                            onChange={(e)=>setReceiverName(e.target.value)}
+                            className="text-xs h-8"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">SĐT liên hệ</label>
+                          <Input 
+                            placeholder={customer?.PhoneNumber || ''}
+                            value={receiverPhone}
+                            onChange={(e)=>setReceiverPhone(e.target.value)}
+                            className="text-xs h-8"
+                          />
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -1013,6 +1062,45 @@ export default function CustomerHome() {
           </div>
         </Dialog>
       )}
+
+      {/* C. Map Modal */}
+      <Dialog 
+        isOpen={isMapModalOpen}
+        onClose={() => setIsMapModalOpen(false)}
+        title="Chọn địa chỉ trên bản đồ"
+      >
+        <div className="space-y-4">
+          <MapPicker 
+            onLocationSelect={(lat, lng) => {
+              setLatitude(lat);
+              setLongitude(lng);
+            }} 
+            defaultLat={latitude || 10.762622}
+            defaultLng={longitude || 106.660172}
+          />
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-muted-foreground">Chi tiết số nhà, đường (Tùy chọn ghi thêm):</label>
+            <Input 
+              value={deliveryAddress}
+              onChange={(e) => setDeliveryAddress(e.target.value)}
+              placeholder="VD: 155 Lê Quý Đôn..."
+            />
+          </div>
+          <Button 
+            className="w-full mt-4" 
+            onClick={() => {
+              if (!latitude || !longitude) {
+                toast.error('Vui lòng chọn vị trí trên bản đồ');
+                return;
+              }
+              setCalculatedShippingFee(Math.floor(Math.random() * 20 + 15) * 1000);
+              setIsMapModalOpen(false);
+            }}
+          >
+            Xác nhận vị trí này
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

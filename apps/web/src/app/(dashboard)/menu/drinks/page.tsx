@@ -253,7 +253,7 @@ export default function DrinksMenu() {
           {Array.from({ length: totalPages }).map((_, idx) => (
             <Button
               key={idx}
-              variant={currentPage === idx + 1 ? 'default' : 'outline'}
+              variant={currentPage === idx + 1 ? 'primary' : 'outline'}
               className={`rounded-full w-10 h-10 p-0 flex items-center justify-center font-bold ${
                 currentPage === idx + 1
                   ? 'bg-primary text-primary-foreground shadow-sm'
