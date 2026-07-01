@@ -17,7 +17,7 @@ export const getAllPromotions = async (req: Request, res: Response) => {
 
 export const getPromotionById = async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id || '');
     const promotion = await prisma.promotion.findUnique({
       where: { PromotionID: id }
     });
@@ -54,7 +54,7 @@ export const createPromotion = async (req: Request, res: Response) => {
 
 export const updatePromotion = async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id || '');
     const { Name, Description, Type, Value, MinQuantity, TargetDrinkIDs, IsActive, StartDate, EndDate } = req.body;
     
     const promotion = await prisma.promotion.update({
@@ -79,7 +79,7 @@ export const updatePromotion = async (req: Request, res: Response) => {
 
 export const deletePromotion = async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id || '');
     await prisma.promotion.delete({
       where: { PromotionID: id }
     });

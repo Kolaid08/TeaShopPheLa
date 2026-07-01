@@ -1148,7 +1148,7 @@ router.patch('/:id/status', async (req, res, next) => {
 });
 
 // PATCH /:id/assign-shipper - Assign a shipper to a delivery order
-router.patch('/:id/assign-shipper', verifyJWT, requireRole([1, 2]), async (req, res, next) => {
+router.patch('/:id/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const orderId = parseInt(req.params.id || '');
     if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');

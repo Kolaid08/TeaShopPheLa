@@ -176,7 +176,7 @@ export default function PromotionsPage() {
                         {promo.Description}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="font-mono">
+                        <Badge variant="neutral" className="font-mono">
                           {promo.Type === 'PERCENT' ? 'Giảm %' : promo.Type === 'AMOUNT' ? 'Giảm Tiền' : 'Tặng Quà'}
                         </Badge>
                       </TableCell>
@@ -188,7 +188,7 @@ export default function PromotionsPage() {
                       </TableCell>
                       <TableCell>
                         <Badge 
-                          variant={promo.IsActive ? 'success' : 'secondary'} 
+                          variant={promo.IsActive ? 'success' : 'neutral'} 
                           className="cursor-pointer"
                           onClick={() => handleToggleActive(promo)}
                         >
@@ -212,7 +212,7 @@ export default function PromotionsPage() {
         )}
       </Card>
 
-      <Dialog isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingPromotion ? 'Sửa Khuyến Mãi' : 'Tạo Khuyến Mãi Mới'} maxWidth="md">
+      <Dialog isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingPromotion ? 'Sửa Khuyến Mãi' : 'Tạo Khuyến Mãi Mới'}>
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
           <div className="space-y-1.5">
             <label className="text-sm font-bold text-foreground">Tên chương trình</label>
