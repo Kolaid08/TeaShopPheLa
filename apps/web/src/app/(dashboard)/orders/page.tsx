@@ -99,8 +99,10 @@ export default function OrdersPage() {
             <option value="ALL">Tất cả trạng thái</option>
             <option value="PENDING">Chờ xử lý (Pending)</option>
             <option value="PREPARING">Đang pha chế (Preparing)</option>
+            <option value="SHIPPING">Đang giao hàng (Shipping)</option>
             <option value="COMPLETED">Đã hoàn thành (Completed)</option>
             <option value="CANCELLED">Đã hủy bỏ (Cancelled)</option>
+            <option value="DELIVERY_FAILED">Giao thất bại (Failed)</option>
           </select>
         </div>
       </div>
@@ -148,9 +150,11 @@ export default function OrdersPage() {
                     </span>
                   </TableCell>
                   <TableCell className="font-semibold">
-                    {order.ShopTable?.ShopTableNumber
-                      ? `Bàn số ${order.ShopTable.ShopTableNumber}`
-                      : 'Mang đi'}
+                    {order.DeliveryType === 'DELIVERY'
+                      ? <Badge variant="warning">Giao hàng GHN</Badge>
+                      : order.ShopTable?.ShopTableNumber
+                        ? `Bàn số ${order.ShopTable.ShopTableNumber}`
+                        : 'Mang đi'}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground font-mono">
                     {new Date(order.CreatedTime).toLocaleString('vi-VN')}
@@ -163,7 +167,7 @@ export default function OrdersPage() {
                       variant={
                         order.OrderStatus === 'COMPLETED'
                           ? 'success'
-                          : order.OrderStatus === 'CANCELLED'
+                          : order.OrderStatus === 'CANCELLED' || order.OrderStatus === 'DELIVERY_FAILED'
                             ? 'danger'
                             : order.OrderStatus === 'PREPARING'
                               ? 'warning'
@@ -229,7 +233,7 @@ export default function OrdersPage() {
                   variant={
                     selectedOrder.OrderStatus === 'COMPLETED'
                       ? 'success'
-                      : selectedOrder.OrderStatus === 'CANCELLED'
+                      : selectedOrder.OrderStatus === 'CANCELLED' || selectedOrder.OrderStatus === 'DELIVERY_FAILED'
                         ? 'danger'
                         : selectedOrder.OrderStatus === 'PREPARING'
                           ? 'warning'
@@ -239,6 +243,31 @@ export default function OrdersPage() {
                   {selectedOrder.OrderStatus}
                 </Badge>
               </div>
+
+              {/* Thông tin GHN nếu có */}
+              {selectedOrder.DeliveryType === 'DELIVERY' && (
+                <div className="mt-4 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-2.5">
+                  <h4 className="text-xs font-black text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
+                    Thông tin Giao Hàng Nhanh
+                  </h4>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground font-bold text-[10px] uppercase">Người nhận:</span>
+                    <span className="font-bold text-foreground text-xs">{selectedOrder.RecipientName || 'N/A'} - <span className="font-mono">{selectedOrder.RecipientPhone || 'N/A'}</span></span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground font-bold text-[10px] uppercase">Địa chỉ:</span>
+                    <span className="font-semibold text-foreground text-xs text-right max-w-[200px] leading-tight">{selectedOrder.DeliveryAddress || 'N/A'}</span>
+                  </div>
+                  {selectedOrder.GHN_OrderCode && (
+                    <div className="flex justify-between items-center pt-1 border-t border-amber-500/20">
+                      <span className="text-muted-foreground font-bold text-[10px] uppercase">Mã vận đơn:</span>
+                      <a href={`https://donhang.ghn.vn/?order_code=${selectedOrder.GHN_OrderCode}`} target="_blank" rel="noreferrer" className="font-mono text-amber-600 font-bold text-xs underline hover:text-amber-700">
+                        {selectedOrder.GHN_OrderCode}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Items breakdown list */}

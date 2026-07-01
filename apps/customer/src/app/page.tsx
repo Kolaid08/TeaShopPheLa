@@ -86,6 +86,16 @@ export default function CustomerHome() {
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [isPolling, setIsPolling] = useState(false);
 
+  // Shipping states
+  const [shippingFee, setShippingFee] = useState<number>(0);
+  const [provinces, setProvinces] = useState<any[]>([]);
+  const [districts, setDistricts] = useState<any[]>([]);
+  const [wards, setWards] = useState<any[]>([]);
+  
+  const [selectedProvinceId, setSelectedProvinceId] = useState<number>(0);
+  const [selectedDistrictId, setSelectedDistrictId] = useState<number>(0);
+  const [selectedWardCode, setSelectedWardCode] = useState<string>('');
+
   // Available options
   const toppingsList = [
     { name: 'Trân châu Hoàng Kim', price: 10000 },
@@ -119,6 +129,40 @@ export default function CustomerHome() {
     const savedCart = localStorage.getItem('phela_customer_cart');
     if (savedCart) setCart(JSON.parse(savedCart));
   }, [router]);
+
+  useEffect(() => {
+    api.getProvinces().then(setProvinces);
+  }, []);
+
+  useEffect(() => {
+    if (selectedProvinceId) {
+      api.getDistricts(selectedProvinceId).then(setDistricts);
+      setSelectedDistrictId(0);
+      setSelectedWardCode('');
+      setWards([]);
+      setShippingFee(0);
+    }
+  }, [selectedProvinceId]);
+
+  useEffect(() => {
+    if (selectedDistrictId) {
+      api.getWards(selectedDistrictId).then(setWards);
+      setSelectedWardCode('');
+      setShippingFee(0);
+    }
+  }, [selectedDistrictId]);
+
+  useEffect(() => {
+    if (selectedDistrictId && selectedWardCode && cart.length > 0) {
+      api.calculateFee({
+        to_district_id: selectedDistrictId,
+        to_ward_code: selectedWardCode,
+        items: cart.map(c => ({ DrinkSizeID: c.DrinkSizeID, Quantity: c.Quantity }))
+      }).then(res => setShippingFee(res.fee));
+    } else {
+      setShippingFee(0);
+    }
+  }, [selectedDistrictId, selectedWardCode, cart]);
 
   const saveCartState = (updatedCart: CartItem[]) => {
     setCart(updatedCart);
@@ -229,12 +273,17 @@ export default function CustomerHome() {
     const discountRate = customer?.MemberShipLevel?.DiscountRate || 0;
     return Math.floor((getSubtotal() * discountRate) / 100);
   };
-  const getTotalPrice = () => getSubtotal() - getDiscountAmount();
+  const getTotalPrice = () => getSubtotal() - getDiscountAmount() + shippingFee;
 
   // Submit checkout Order
   const handlePlaceOrder = async (method: 'QR_CODE' | 'COD') => {
     if (cart.length === 0) {
       toast.error('Giỏ hàng trống! Vui lòng chọn món nước.');
+      return;
+    }
+
+    if (tableId === 0 && (!selectedProvinceId || !selectedDistrictId || !selectedWardCode || !deliveryAddress)) {
+      toast.error('Vui lòng cung cấp đầy đủ thông tin địa chỉ giao hàng.');
       return;
     }
 
@@ -251,7 +300,14 @@ export default function CustomerHome() {
         })),
         TotalPrice: getTotalPrice(),
         ShopTableID: tableId > 0 ? tableId : undefined,
-        OrderNote: `${deliveryAddress ? `Giao hàng: ${deliveryAddress}` : ''}${orderNote ? ` | Ghi chú: ${orderNote}` : ''}`,
+        OrderNote: orderNote,
+        DeliveryType: tableId === 0 ? 'DELIVERY' : 'DINE_IN',
+        RecipientName: customer?.CustomerName,
+        RecipientPhone: customer?.PhoneNumber,
+        DeliveryAddress: deliveryAddress,
+        ProvinceID: selectedProvinceId || undefined,
+        DistrictID: selectedDistrictId || undefined,
+        WardCode: selectedWardCode || undefined,
       };
 
       const res = await api.createCustomerOrder(orderPayload);
@@ -692,6 +748,12 @@ export default function CustomerHome() {
                       <span className="font-mono">-{getDiscountAmount().toLocaleString('vi-VN')} đ</span>
                     </div>
                   ) : null}
+                  {shippingFee > 0 && (
+                    <div className="flex justify-between text-xs text-muted-foreground font-semibold">
+                      <span>Phí giao hàng (GHN)</span>
+                      <span className="font-mono">+{shippingFee.toLocaleString('vi-VN')} đ</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-base font-bold text-foreground pt-1 border-t border-border/30">
                     <span>Tổng thanh toán</span>
                     <span className="font-mono text-primary">{getTotalPrice().toLocaleString('vi-VN')} đ</span>
@@ -720,14 +782,55 @@ export default function CustomerHome() {
                   </div>
 
                   {tableId === 0 && (
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Địa chỉ giao hàng *</label>
-                      <Input 
-                        placeholder="Nhập địa chỉ nhà, văn phòng..." 
-                        value={deliveryAddress}
-                        onChange={(e)=>setDeliveryAddress(e.target.value)}
-                        className="text-xs h-8"
-                      />
+                    <div className="space-y-2 border border-border/60 p-2 rounded-xl bg-background/30">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Tỉnh/Thành</label>
+                          <select 
+                            value={selectedProvinceId} 
+                            onChange={(e) => setSelectedProvinceId(Number(e.target.value))}
+                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
+                          >
+                            <option value={0}>Chọn Tỉnh/Thành</option>
+                            {provinces.map(p => <option key={p.ProvinceID} value={p.ProvinceID}>{p.ProvinceName}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Quận/Huyện</label>
+                          <select 
+                            value={selectedDistrictId} 
+                            onChange={(e) => setSelectedDistrictId(Number(e.target.value))}
+                            disabled={!selectedProvinceId}
+                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
+                          >
+                            <option value={0}>Chọn Quận/Huyện</option>
+                            {districts.map(d => <option key={d.DistrictID} value={d.DistrictID}>{d.DistrictName}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Phường/Xã</label>
+                          <select 
+                            value={selectedWardCode} 
+                            onChange={(e) => setSelectedWardCode(e.target.value)}
+                            disabled={!selectedDistrictId}
+                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
+                          >
+                            <option value="">Chọn Phường/Xã</option>
+                            {wards.map(w => <option key={w.WardCode} value={w.WardCode}>{w.WardName}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Địa chỉ cụ thể *</label>
+                          <Input 
+                            placeholder="Số nhà, đường..." 
+                            value={deliveryAddress}
+                            onChange={(e)=>setDeliveryAddress(e.target.value)}
+                            className="text-xs h-8 bg-background"
+                          />
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -934,7 +1037,31 @@ export default function CustomerHome() {
           title="Xác nhận thanh toán đơn hàng"
         >
           <div className="space-y-6 text-center">
-            <p className="text-xs text-muted-foreground">Chọn phương thức thanh toán để kết toán hóa đơn order:</p>
+            <div className="bg-muted/30 border border-border/50 rounded-2xl p-4 text-left space-y-2">
+              <p className="font-bold text-sm mb-2 border-b border-border/50 pb-2">Chi tiết thanh toán</p>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Tạm tính ({cart.reduce((acc, curr) => acc + curr.Quantity, 0)} món)</span>
+                <span className="font-mono">{getSubtotal().toLocaleString('vi-VN')} đ</span>
+              </div>
+              {customer?.MemberShipLevel?.DiscountRate ? (
+                <div className="flex justify-between text-xs text-emerald-500 font-medium">
+                  <span>Hội viên ({customer.MemberShipLevel.DiscountRate}%)</span>
+                  <span className="font-mono">-{getDiscountAmount().toLocaleString('vi-VN')} đ</span>
+                </div>
+              ) : null}
+              {shippingFee > 0 && (
+                <div className="flex justify-between text-xs text-muted-foreground font-medium">
+                  <span>Phí giao hàng</span>
+                  <span className="font-mono">+{shippingFee.toLocaleString('vi-VN')} đ</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-bold text-primary pt-2 border-t border-border/50 mt-1">
+                <span>Tổng cộng</span>
+                <span className="font-mono text-lg">{getTotalPrice().toLocaleString('vi-VN')} đ</span>
+              </div>
+            </div>
+            
+            <p className="text-xs text-muted-foreground mt-4">Chọn phương thức thanh toán để kết toán hóa đơn order:</p>
             
             <div className="grid grid-cols-2 gap-4">
               {/* Payment Option 1: Cash/COD */}

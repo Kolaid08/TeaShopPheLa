@@ -120,9 +120,14 @@ export interface Order {
   ShopTableID?: number;
   EmployeeID: number;
   CreatedTime: string;
-  OrderStatus: 'PENDING' | 'PREPARING' | 'COMPLETED' | 'CANCELLED';
+  OrderStatus: 'PENDING' | 'PREPARING' | 'SHIPPING' | 'COMPLETED' | 'CANCELLED' | 'DELIVERY_FAILED';
   TotalPrice: number;
   OrderNote?: string;
+  DeliveryType?: string;
+  RecipientName?: string;
+  RecipientPhone?: string;
+  DeliveryAddress?: string;
+  GHN_OrderCode?: string;
   Customer?: { CustomerName: string; PhoneNumber: string };
   ShopTable?: { ShopTableNumber: number };
   Employee?: { FullName: string };
@@ -134,6 +139,9 @@ export interface OrderDetail {
   DrinkSizeID: number;
   Quantity: number;
   UnitPrice: number;
+  Sugar?: string;
+  Ice?: string;
+  Toppings?: string;
   DrinkSize?: {
     Drink?: { DrinkName: string };
     Size?: { SizeName: string };
