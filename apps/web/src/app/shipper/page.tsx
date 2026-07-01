@@ -33,7 +33,7 @@ export default function ShipperDashboard() {
       router.push('/login');
       return;
     }
-    if (user.Role !== 'Shipper' && user.Role !== 'System Admin') {
+    if (user.Role !== 'SHIPPER' && user.Role !== 'ADMIN') {
       router.push('/');
       return;
     }

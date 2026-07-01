@@ -17,6 +17,7 @@ export interface Drink {
   DrinkSizes?: DrinkSize[];
   AverageRating?: number;
   SalesCount?: number;
+  Recipes?: Recipe[];
 }
 
 export interface Size {
@@ -428,6 +429,7 @@ class LocalDatabase {
   ];
 
   shiftLogs: ShiftLog[] = [];
+  ingredientReceipts: IngredientReceipt[] = [];
 }
 
 const db = new LocalDatabase();
@@ -466,7 +468,7 @@ export const api = {
         employee: {
           EmployeeID: emp.EmployeeID,
           FullName: emp.FullName,
-          Role: emp.RoleID === 1 ? 'ADMIN' : emp.RoleID === 2 ? 'MANAGER' : 'STAFF',
+          Role: emp.RoleID === 1 ? 'ADMIN' : emp.RoleID === 2 ? 'MANAGER' : emp.RoleID === 4 ? 'SHIPPER' : 'STAFF',
         },
       };
       if (typeof window !== 'undefined') {
@@ -617,17 +619,7 @@ export const api = {
     }
   },
 
-  // INGREDIENTS
-  getIngredients: async (): Promise<Ingredient[]> => {
-    try {
-      return await api.request('/ingredients');
-    } catch {
-      return db.ingredients.map((ing) => ({
-        ...ing,
-        Unit: db.units.find((u) => u.UnitID === ing.UnitID),
-      }));
-    }
-  },
+
   getLowStockIngredients: async (threshold = 10): Promise<Ingredient[]> => {
     try {
       return await api.request(`/ingredients/low-stock?threshold=${threshold}`);
@@ -638,6 +630,17 @@ export const api = {
           ...ing,
           Unit: db.units.find((u) => u.UnitID === ing.UnitID),
         }));
+    }
+  },
+  // INGREDIENTS
+  getIngredients: async (): Promise<Ingredient[]> => {
+    try {
+      return await api.request('/ingredients?limit=1000');
+    } catch {
+      return db.ingredients.map(ing => ({
+        ...ing,
+        Unit: db.units.find(u => u.UnitID === ing.UnitID)
+      }));
     }
   },
   createIngredient: async (data: any): Promise<Ingredient> => {
@@ -1040,7 +1043,7 @@ export const api = {
         body: JSON.stringify({ ShipperID: shipperId, ShippingAddress: address, Latitude: lat, Longitude: lng }),
       });
     } catch (err: any) {
-      const idx = db.ingredientReceipts.findIndex((r) => r.IngredientReceiptID === receiptId);
+      const idx = db.ingredientReceipts.findIndex((r: IngredientReceipt) => r.IngredientReceiptID === receiptId);
       if (idx === -1) throw err;
       db.ingredientReceipts[idx]!.IngredientReceiptStatus = 'SHIPPING';
       db.ingredientReceipts[idx]!.ShipperID = shipperId;
@@ -1057,7 +1060,7 @@ export const api = {
     } catch {
       const user = getSessionUser();
       if (!user) return [];
-      return db.ingredientReceipts.filter(r => r.ShipperID === user.EmployeeID && ['SHIPPING', 'CONFIRMED'].includes(r.IngredientReceiptStatus)).map((r) => ({
+      return db.ingredientReceipts.filter((r: IngredientReceipt) => r.ShipperID === user.EmployeeID && ['SHIPPING', 'CONFIRMED'].includes(r.IngredientReceiptStatus)).map((r: IngredientReceipt) => ({
         ...r,
         Supplier: db.suppliers.find((s) => s.SupplierID === r.SupplierID),
       }));
@@ -1071,7 +1074,7 @@ export const api = {
       });
       return res;
     } catch (err: any) {
-      const idx = db.ingredientReceipts.findIndex((r) => r.IngredientReceiptID === receiptId);
+      const idx = db.ingredientReceipts.findIndex((r: IngredientReceipt) => r.IngredientReceiptID === receiptId);
       if (idx === -1) throw err;
       db.ingredientReceipts[idx]!.IngredientReceiptStatus = status;
       return db.ingredientReceipts[idx]!;
@@ -1324,4 +1327,56 @@ export const api = {
       };
     }
   },
+
+  checkVoucher: async (code: string, customerId?: number, targetProductId?: number): Promise<any> => {
+    try {
+      return await api.request('/vouchers/check', {
+        method: 'POST',
+        body: JSON.stringify({ Code: code, CustomerID: customerId, TargetProductID: targetProductId }),
+      });
+    } catch (e: any) {
+      throw new Error(e.message || 'Mã giảm giá không hợp lệ');
+    }
+  },
+
+  getVouchers: async (): Promise<any[]> => {
+    try {
+      return await api.request('/vouchers');
+    } catch {
+      return [];
+    }
+  },
+
+  createVoucher: async (data: any): Promise<any> => {
+    try {
+      return await api.request('/vouchers', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi tạo voucher');
+    }
+  },
+
+  getAbandonedCarts: async (): Promise<any[]> => {
+    try {
+      return await api.request('/carts/admin/abandoned');
+    } catch {
+      return [];
+    }
+  },
+
+  mockAbandonedCarts: async (): Promise<any> => {
+    try {
+      return await api.request('/carts/admin/abandoned/mock', { method: 'POST' });
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi mock carts');
+    }
+  },
+
+  // PROMOTIONS
+  getPromotions: async () => await api.request('/promotions'),
+  createPromotion: async (data: any) => await api.request('/promotions', { method: 'POST', body: JSON.stringify(data) }),
+  updatePromotion: async (id: number, data: any) => await api.request(`/promotions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePromotion: async (id: number) => await api.request(`/promotions/${id}`, { method: 'DELETE' }),
 };

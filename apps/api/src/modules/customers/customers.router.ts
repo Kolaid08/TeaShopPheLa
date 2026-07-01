@@ -14,6 +14,50 @@ const customerSchema = z.object({
   TotalMoneySpending: z.number().nonnegative().optional(),
 });
 
+// GET /public/profile/:phone - Get customer info publicly (for frontend sync)
+router.get('/public/profile/:phone', async (req, res, next) => {
+  try {
+    const phone = req.params.phone;
+    if (!phone) throw new AppError(400, 'Invalid phone number.');
+    const customer = await prisma.customer.findFirst({
+      where: { PhoneNumber: phone },
+      include: { MemberShipLevel: true },
+    });
+    if (!customer) throw new AppError(404, 'Customer not found.');
+    return sendResponse(res, 200, true, 'Customer retrieved', customer);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /public/login - Public login/registration for customer site
+router.post('/public/login', async (req, res, next) => {
+  try {
+    const { phoneNumber, fullName } = req.body;
+    if (!phoneNumber) throw new AppError(400, 'Phone number is required.');
+    
+    let customer = await prisma.customer.findFirst({
+      where: { PhoneNumber: phoneNumber },
+      include: { MemberShipLevel: true },
+    });
+
+    if (!customer) {
+      customer = await prisma.customer.create({
+        data: {
+          PhoneNumber: phoneNumber,
+          CustomerName: fullName || `Hội Viên Phêla ${phoneNumber.slice(-4)}`,
+          TotalMoneySpending: 0,
+          LevelID: 1, // Bronze Level
+        },
+        include: { MemberShipLevel: true },
+      });
+    }
+    return sendResponse(res, 200, true, 'Customer logged in successfully', customer);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Protect routes
 router.use(verifyJWT);
 

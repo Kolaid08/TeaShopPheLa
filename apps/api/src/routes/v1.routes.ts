@@ -22,6 +22,8 @@ import reviewsRouter from '../modules/reviews/reviews.router';
 import paymentRouter from '../modules/payment/payment.router';
 import chatRouter from '../modules/chat/chat.routes';
 import shipperRouter from '../modules/shipper/shipper.router';
+import vouchersRouter from '../modules/vouchers/vouchers.router';
+import promotionsRouter from '../modules/promotions/promotions.router';
 
 const router = Router();
 
@@ -54,5 +56,7 @@ router.use('/reviews', reviewsRouter);
 router.use('/payment', paymentRouter);
 router.use('/chat', chatRouter);
 router.use('/shipper', shipperRouter);
+router.use('/vouchers', vouchersRouter);
+router.use('/promotions', promotionsRouter);
 
 export default router;

@@ -4,6 +4,7 @@ import { prisma } from '../../utils/prisma';
 import { sendResponse } from '../../utils/response';
 import { verifyJWT, requireRole } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
+import { upgradeCustomerLevel } from '../customers/customers.router';
 
 const router = Router();
 
@@ -125,9 +126,32 @@ router.post('/update-status', verifyJWT, async (req: any, res, next) => {
   try {
     const { OrderID, OrderStatus } = updateStatusSchema.parse(req.body);
 
-    const updatedOrder = await prisma.orders.update({
+    const order = await prisma.orders.findUnique({
       where: { OrderID },
-      data: { OrderStatus },
+    });
+    if (!order) throw new AppError(404, 'Đơn hàng không tồn tại.');
+    if (order.OrderStatus === 'COMPLETED') throw new AppError(400, 'Cannot change the status of an already completed order.');
+    if (order.OrderStatus === 'CANCELLED') throw new AppError(400, 'Cannot change the status of an already cancelled order.');
+
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      const updated = await tx.orders.update({
+        where: { OrderID },
+        data: { OrderStatus },
+      });
+
+      if (OrderStatus === 'COMPLETED' && order.CustomerID) {
+        await tx.customer.update({
+          where: { CustomerID: order.CustomerID },
+          data: {
+            TotalMoneySpending: {
+              increment: order.TotalPrice,
+            },
+          },
+        });
+        await upgradeCustomerLevel(order.CustomerID, tx);
+      }
+      
+      return updated;
     });
 
     return sendResponse(res, 200, true, 'Cập nhật trạng thái đơn hàng thành công.', updatedOrder);

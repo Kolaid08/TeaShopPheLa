@@ -81,6 +81,10 @@ export interface Order {
   EmployeeID?: number;
   CreatedTime: string;
   OrderStatus: 'PENDING' | 'PREPARING' | 'COMPLETED' | 'CANCELLED';
+  OrderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
+  ShippingAddress?: string;
+  ReceiverName?: string;
+  ReceiverPhone?: string;
   TotalPrice: number;
   OrderNote?: string;
   Customer?: Customer;
@@ -274,38 +278,28 @@ export const api = {
   // CUSTOMER AUTHENTICATION (With auto-registration for new phones)
   customerLogin: async (phoneNumber: string, fullName = 'Khách Hàng Mới'): Promise<Customer> => {
     try {
-      // In real mode, check if customer exists, else create one
-      // (Since we are client-only, we first search via /customers on backend.
-      // Because /customers is protected, we can attempt standard mock or fallback lookup)
-      throw new Error('API Auth requires staff credentials; fallback to mock logic.');
-    } catch {
-      // Look up inside local database
-      let cust = db.customers.find((c) => c.PhoneNumber === phoneNumber);
+      const res = await fetch(`${API_BASE}/customers/public/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber, fullName }),
+      });
+      const payload = await res.json();
       
-      // Auto-register if not found
-      if (!cust) {
-        cust = {
-          CustomerID: db.customers.length + 1,
-          CustomerName: fullName === 'Khách Hàng Mới' ? `Hội Viên Phêla ${phoneNumber.slice(-4)}` : fullName,
-          PhoneNumber: phoneNumber,
-          TotalMoneySpending: 0,
-          LevelID: 1, // Bronze Level
-        };
-        db.customers.push(cust);
-        saveLocalState();
+      if (!res.ok || !payload.data) {
+        throw new Error(payload.message || 'Login failed');
       }
-
-      // Map membership level info
-      const level = db.levels.find((l) => l.LevelID === cust!.LevelID);
-      cust.MemberShipLevel = level ? { LevelName: level.LevelName, DiscountRate: level.DiscountRate } : { LevelName: 'Đồng (Bronze)', DiscountRate: 0 };
-
+      
+      const cust = payload.data;
       if (typeof window !== 'undefined') {
-        localStorage.setItem('phela_customer_token', 'mock_cust_token_' + Date.now());
+        localStorage.setItem('phela_customer_token', 'real_cust_token_' + Date.now());
         localStorage.setItem('phela_customer_user', JSON.stringify(cust));
         localStorage.removeItem('chat_session_id'); // Xóa phiên chat cũ
         window.dispatchEvent(new Event('customer_auth_changed'));
       }
       return cust;
+    } catch (error) {
+      console.error('Customer login error:', error);
+      throw error;
     }
   },
 
@@ -319,6 +313,23 @@ export const api = {
   },
 
   getCurrentCustomer: () => getSessionCustomer(),
+
+  syncCustomerProfile: async (phoneNumber: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/customers/public/profile/${phoneNumber}`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (res.ok && payload.data) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('phela_customer_user', JSON.stringify(payload.data));
+          window.dispatchEvent(new Event('customer_auth_changed'));
+        }
+        return payload.data;
+      }
+    } catch {
+      // fallback
+    }
+    return getSessionCustomer();
+  },
 
   // DRINKS CATALOG
   syncCart: async (Items: any[], customerId?: number, sessionId?: string): Promise<any> => {
@@ -379,6 +390,33 @@ export const api = {
       throw new Error();
     } catch {
       return db.tables;
+    }
+  },
+
+  getComboSuggestions: async (drinkSizeIds: number[]): Promise<any[]> => {
+    if (drinkSizeIds.length === 0) return [];
+    try {
+      const res = await fetch(`${API_BASE}/orders/customer-combos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ drinkSizeIds }),
+      });
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  getActivePromotions: async (): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/promotions/active`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (res.ok) return payload.data.filter((p: any) => p.IsActive);
+      return [];
+    } catch {
+      return [];
     }
   },
 
@@ -523,6 +561,27 @@ export const api = {
     }
   },
 
+  cancelCustomerOrder: async (orderId: number): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/orders/customer-cancel/${orderId}`, {
+        method: 'PATCH',
+      });
+      const payload = await res.json();
+      if (res.ok && payload.success) return payload.data;
+      throw new Error(payload.message || 'Lỗi hủy đơn hàng');
+    } catch (e: any) {
+      // Local fallback
+      const idx = db.orders.findIndex(o => o.OrderID === orderId);
+      const order = db.orders[idx];
+      if (order && order.OrderStatus === 'PENDING') {
+        order.OrderStatus = 'CANCELLED';
+        saveLocalState();
+        return order;
+      }
+      throw new Error(e?.message || 'Lỗi kết nối tới máy chủ');
+    }
+  },
+
   submitReview: async (data: { CustomerID: number; DrinkID: number; OrderID: number; Rating: number; Comment: string }): Promise<any> => {
     try {
       const res = await fetch(`${API_BASE}/reviews`, {
@@ -535,6 +594,33 @@ export const api = {
       throw new Error(payload.message || 'Lỗi gửi đánh giá');
     } catch (e: any) {
       throw new Error(e.message || 'Lỗi kết nối tới máy chủ');
+    }
+  },
+
+  getFrequentOrders: async (customerId: number): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/orders/customer-frequent/${customerId}`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (res.ok && payload.success) return payload.data;
+      return [];
+    } catch (e: any) {
+      // Local fallback: We can implement local grouping if we want, but for now just return empty array
+      return [];
+    }
+  },
+
+  checkVoucher: async (code: string, customerId?: number, targetProductId?: number): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/vouchers/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Code: code, CustomerID: customerId, TargetProductID: targetProductId }),
+      });
+      const payload = await res.json();
+      if (res.ok && payload.success) return payload.data;
+      throw new Error(payload.message || 'Mã giảm giá không hợp lệ');
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi kết nối kiểm tra mã giảm giá');
     }
   },
 };

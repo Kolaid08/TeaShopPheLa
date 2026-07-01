@@ -17,24 +17,38 @@ export const syncCart = async (req: Request, res: Response) => {
       }
     }
 
-    let cart = await prisma.cart.findFirst({
-      where: {
-        Status: 'ACTIVE',
-        OR: [
-          ...(SessionID ? [{ SessionID }] : []),
-          ...(validCustomerID ? [{ CustomerID: validCustomerID }] : [])
-        ]
+    let cart = null;
+
+    if (validCustomerID) {
+      cart = await prisma.cart.findFirst({
+        where: { Status: 'ACTIVE', CustomerID: validCustomerID },
+        orderBy: { updatedAt: 'desc' }
+      });
+      
+      // If no customer cart, try to claim an anonymous session cart
+      if (!cart && SessionID) {
+        const anonCart = await prisma.cart.findFirst({
+          where: { Status: 'ACTIVE', SessionID, CustomerID: null },
+          orderBy: { updatedAt: 'desc' }
+        });
+        if (anonCart) {
+          cart = await prisma.cart.update({
+            where: { CartID: anonCart.CartID },
+            data: { CustomerID: validCustomerID }
+          });
+        }
       }
-    });
+    } else if (SessionID) {
+      // Anonymous user
+      cart = await prisma.cart.findFirst({
+        where: { Status: 'ACTIVE', SessionID, CustomerID: null },
+        orderBy: { updatedAt: 'desc' }
+      });
+    }
 
     if (!cart) {
       cart = await prisma.cart.create({
         data: { SessionID, CustomerID: validCustomerID }
-      });
-    } else if (validCustomerID && !cart.CustomerID) {
-      cart = await prisma.cart.update({
-        where: { CartID: cart.CartID },
-        data: { CustomerID: validCustomerID }
       });
     }
 
@@ -89,9 +103,21 @@ export const getCart = async (req: Request, res: Response) => {
 };
 export const getAbandonedCarts = async (req: Request, res: Response) => {
   try {
-    const abandonedCarts = await prisma.cart.findMany({
+    // Tìm các giỏ hàng không được cập nhật quá 24h và có chứa sản phẩm
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    // Auto update status to ABANDONED for these carts
+    await prisma.cart.updateMany({
       where: {
         Status: 'ACTIVE',
+        updatedAt: { lt: twentyFourHoursAgo },
+      },
+      data: { Status: 'ABANDONED' }
+    });
+
+    const abandonedCarts = await prisma.cart.findMany({
+      where: {
+        Status: 'ABANDONED',
         CartItems: {
           some: {} // Only get carts that actually have items
         }
@@ -123,6 +149,20 @@ export const getAbandonedCarts = async (req: Request, res: Response) => {
     }));
 
     res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const mockAbandonedCarts = async (req: Request, res: Response) => {
+  try {
+    const twentyFiveHoursAgo = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    await prisma.cart.updateMany({
+      where: { Status: 'ACTIVE' },
+      data: { updatedAt: twentyFiveHoursAgo, Status: 'ABANDONED' }
+    });
+    res.status(200).json({ success: true, message: 'Mocked successfully' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error' });

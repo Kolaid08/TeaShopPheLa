@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Search, Eye, Calendar, Coffee, Filter, CheckCircle2, XCircle, Play } from 'lucide-react';
+import { Search, Eye, Calendar, Coffee, Filter, CheckCircle2, XCircle, Play, Ticket } from 'lucide-react';
 import {
   Button,
   Input,
@@ -84,6 +84,80 @@ export default function OrdersPage() {
       }
     } catch (err: any) {
       toast.error(err.message || 'Lỗi cập nhật trạng thái hóa đơn.');
+    }
+  };
+
+  const handlePrintReceipt = (order: Order) => {
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>In Hóa Đơn #${order.OrderID}</title>
+            <style>
+              body { font-family: monospace; width: 80mm; margin: 0; padding: 10px; color: #000; }
+              .center { text-align: center; }
+              .right { text-align: right; }
+              .bold { font-weight: bold; }
+              .dashed { border-bottom: 1px dashed #000; margin: 10px 0; }
+              .flex { display: flex; justify-content: space-between; }
+              table { width: 100%; border-collapse: collapse; }
+              th, td { padding: 4px 0; text-align: left; }
+              th.center, td.center { text-align: center; }
+              th.right, td.right { text-align: right; }
+            </style>
+          </head>
+          <body>
+            <div class="center">
+              <h2 style="margin:0;">PHÊLA CAFE</h2>
+              <p style="margin:2px 0;">Tầng 1, Tòa nhà Wow, TP. Hà Nội</p>
+              <p style="margin:2px 0;">SĐT: 0123.456.789</p>
+            </div>
+            <div class="dashed"></div>
+            <h3 class="center" style="margin:5px 0;">HÓA ĐƠN THANH TOÁN</h3>
+            <p style="margin:2px 0;">Số HĐ: #${order.OrderID}</p>
+            <p style="margin:2px 0;">Ngày: ${new Date(order.CreatedTime || Date.now()).toLocaleString('vi-VN')}</p>
+            ${order.Customer ? `<p style="margin:2px 0;">Khách hàng: ${order.Customer.CustomerName}</p>` : ''}
+            ${order.ShopTable ? `<p style="margin:2px 0;">Bàn: ${order.ShopTable.ShopTableNumber}</p>` : ''}
+            <div class="dashed"></div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Món</th>
+                  <th class="center">SL</th>
+                  <th class="right">T.Tiền</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${order.OrderDetails?.map((item: any) => {
+                  const itemTotal = item.UnitPrice * item.Quantity;
+                  return `
+                    <tr>
+                      <td>
+                        ${item.DrinkSize?.Drink?.DrinkName} (${item.DrinkSize?.Size?.SizeName})
+                      </td>
+                      <td class="center">${item.Quantity}</td>
+                      <td class="right">${itemTotal.toLocaleString('vi-VN')}</td>
+                    </tr>
+                  `;
+                }).join('') || ''}
+              </tbody>
+            </table>
+            <div class="dashed"></div>
+            <div class="flex bold" style="font-size: 16px; margin-top: 5px; padding-top: 5px;">
+              <span>THÀNH TIỀN:</span><span>${order.TotalPrice.toLocaleString('vi-VN')}</span>
+            </div>
+            <div class="dashed"></div>
+            <p class="center" style="font-style: italic;">Cảm ơn quý khách và hẹn gặp lại!</p>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 500);
     }
   };
 
@@ -413,10 +487,16 @@ export default function OrdersPage() {
             <div className="flex gap-4">
               <Button
                 variant="outline"
-                className="w-full py-3 rounded-xl"
+                className="flex-1 py-3 rounded-xl"
                 onClick={() => setIsDetailOpen(false)}
               >
                 Thoát chi tiết
+              </Button>
+              <Button
+                className="flex-1 py-3 rounded-xl font-serif uppercase tracking-wider font-extrabold gap-2"
+                onClick={() => handlePrintReceipt(selectedOrder)}
+              >
+                <Ticket className="w-4 h-4" /> In Hóa Đơn
               </Button>
             </div>
           </div>

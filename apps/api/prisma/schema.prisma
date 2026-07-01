@@ -47,6 +47,7 @@ model DrinkSize {
   Size            Size          @relation(fields: [SizeID], references: [SizeID], onDelete: Cascade, map: "FK_DrinkSize_Size")
   OrderDetails    OrderDetail[]
   CartItems       CartItem[]
+  Vouchers        Voucher[]
 
   @@map("DrinkSize")
 }
@@ -185,6 +186,7 @@ model Customer {
   MemberShipLevel    MemberShipLevel @relation(fields: [LevelID], references: [LevelID], map: "FK_Customer_MemberShipLevel")
   Orders             Orders[]
   Reviews            Review[]
+  Vouchers           Voucher[]
 
   @@map("Customer")
 }
@@ -403,4 +405,40 @@ model ChatMessage {
   Session    ChatSession @relation(fields: [SessionID], references: [SessionID], onDelete: Cascade, map: "FK_ChatMessage_ChatSession")
 
   @@map("ChatMessage")
+}
+
+model Voucher {
+  VoucherID       Int         @id @default(autoincrement())
+  Code            String      @unique @db.VarChar(50)
+  DiscountType    String      @default("PERCENT") @db.VarChar(20)
+  DiscountValue   Float
+  TargetProductID Int?
+  OwnerID         Int?
+  Creator         String      @default("ADMIN") @db.VarChar(20)
+  IsUsed          Boolean     @default(false)
+  ValidUntil      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  Customer        Customer?   @relation(fields: [OwnerID], references: [CustomerID], onDelete: Cascade, map: "FK_Voucher_Customer")
+  DrinkSize       DrinkSize?  @relation(fields: [TargetProductID], references: [DrinkSizeID], onDelete: Cascade, map: "FK_Voucher_DrinkSize")
+
+  @@map("Voucher")
+}
+
+model Promotion {
+  PromotionID    Int         @id @default(autoincrement())
+  Name           String      @db.NVarChar(255)
+  Description    String?     @db.NVarChar(500)
+  Type           String      @default("PERCENT") @db.VarChar(20)
+  Value          Float
+  MinQuantity    Int         @default(2)
+  TargetDrinkIDs String?     @db.NVarChar(500)
+  IsActive       Boolean     @default(true)
+  StartDate      DateTime?
+  EndDate        DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@map("Promotion")
 }

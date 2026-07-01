@@ -13,6 +13,7 @@ import {
   MapPin,
   ShoppingBag,
   Sparkles,
+  Ticket,
 } from 'lucide-react';
 import { Card, Button, Badge, Dialog } from '@/components/ui/core';
 import { api, Order, Customer } from '@/lib/api';
@@ -43,6 +44,12 @@ export default function HistoryPage() {
       }
     }
     setCustomer(active);
+
+    if (active && active.PhoneNumber) {
+      api.syncCustomerProfile(active.PhoneNumber).then((updatedCust) => {
+        if (updatedCust) setCustomer(updatedCust);
+      });
+    }
 
     const loadOrderHistory = async () => {
       try {
@@ -109,6 +116,81 @@ export default function HistoryPage() {
     }
   };
 
+  const handlePrintReceipt = (order: Order) => {
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>In Hóa Đơn #${order.OrderID}</title>
+            <style>
+              body { font-family: monospace; width: 80mm; margin: 0; padding: 10px; color: #000; }
+              .center { text-align: center; }
+              .right { text-align: right; }
+              .bold { font-weight: bold; }
+              .dashed { border-bottom: 1px dashed #000; margin: 10px 0; }
+              .flex { display: flex; justify-content: space-between; }
+              table { width: 100%; border-collapse: collapse; }
+              th, td { padding: 4px 0; text-align: left; }
+              th.center, td.center { text-align: center; }
+              th.right, td.right { text-align: right; }
+            </style>
+          </head>
+          <body>
+            <div class="center">
+              <h2 style="margin:0;">PHÊLA CAFE</h2>
+              <p style="margin:2px 0;">Tầng 1, Tòa nhà Wow, TP. Hà Nội</p>
+              <p style="margin:2px 0;">SĐT: 0123.456.789</p>
+            </div>
+            <div class="dashed"></div>
+            <h3 class="center" style="margin:5px 0;">HÓA ĐƠN THANH TOÁN</h3>
+            <p style="margin:2px 0;">Số HĐ: #${order.OrderID}</p>
+            <p style="margin:2px 0;">Ngày: ${new Date(order.CreatedTime || Date.now()).toLocaleString('vi-VN')}</p>
+            ${customer ? `<p style="margin:2px 0;">Khách hàng: ${customer.CustomerName}</p>` : ''}
+            ${order.ShopTable ? `<p style="margin:2px 0;">Bàn: ${order.ShopTable.ShopTableNumber}</p>` : ''}
+            ${order.ShippingAddress ? `<p style="margin:2px 0;">Giao đến: ${order.ShippingAddress}</p>` : ''}
+            <div class="dashed"></div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Món</th>
+                  <th class="center">SL</th>
+                  <th class="right">T.Tiền</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${order.OrderDetails?.map((item: any) => {
+                  const itemTotal = item.UnitPrice * item.Quantity;
+                  return `
+                    <tr>
+                      <td>
+                        ${item.DrinkSize?.Drink?.DrinkName} (${item.DrinkSize?.Size?.SizeName})
+                      </td>
+                      <td class="center">${item.Quantity}</td>
+                      <td class="right">${itemTotal.toLocaleString('vi-VN')}</td>
+                    </tr>
+                  `;
+                }).join('') || ''}
+              </tbody>
+            </table>
+            <div class="dashed"></div>
+            <div class="flex bold" style="font-size: 16px; margin-top: 5px; padding-top: 5px;">
+              <span>THÀNH TIỀN:</span><span>${order.TotalPrice.toLocaleString('vi-VN')}</span>
+            </div>
+            <div class="dashed"></div>
+            <p class="center" style="font-style: italic;">Cảm ơn quý khách và hẹn gặp lại!</p>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    }
+  };
+
   const handleOpenReview = (order: Order, drinkId: number, drinkName: string) => {
     setReviewOrder(order);
     setReviewDrinkId(drinkId);
@@ -146,6 +228,18 @@ export default function HistoryPage() {
       toast.error(err.message || 'Lỗi khi gửi đánh giá.');
     } finally {
       setIsSubmittingReview(false);
+    }
+  };
+
+  const handleCancelOrder = async (order: Order) => {
+    if (confirm('Bạn có chắc chắn muốn hủy đơn hàng này không? Hành động này không thể hoàn tác.')) {
+      try {
+        const cancelledOrder = await api.cancelCustomerOrder(order.OrderID);
+        setOrders(prev => prev.map(o => o.OrderID === order.OrderID ? { ...o, OrderStatus: 'CANCELLED' } : o));
+        toast.success('Hủy đơn hàng thành công.');
+      } catch (err: any) {
+        toast.error(err.message || 'Lỗi hủy đơn hàng.');
+      }
     }
   };
 
@@ -420,19 +514,39 @@ export default function HistoryPage() {
                   )}
 
                   {/* Re-order action button row */}
-                  <div className="pt-3 flex justify-between items-center">
+                  <div className="pt-3 flex flex-wrap justify-between items-center gap-2">
                     <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                       <Clock className="w-3.5 h-3.5" />
-                      <span>Phục vụ tại bàn / mang đi</span>
+                      <span>{order.OrderType === 'DELIVERY' ? 'Giao hàng tận nơi' : 'Phục vụ tại bàn / mang đi'}</span>
                     </div>
-                    <Button
-                      onClick={() => handleReorder(order)}
-                      size="sm"
-                      variant="outline"
-                      className="rounded-xl text-xs font-serif uppercase tracking-wider font-bold gap-1 border-primary/40 hover:bg-primary hover:text-white"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" /> Mua lại đơn này
-                    </Button>
+                    <div className="flex flex-wrap gap-2 justify-end">
+                      {order.OrderStatus === 'PENDING' && (
+                        <Button
+                          onClick={() => handleCancelOrder(order)}
+                          size="sm"
+                          variant="outline"
+                          className="rounded-xl text-xs font-serif uppercase tracking-wider font-bold gap-1 border-red-500/40 text-red-500 hover:bg-red-500 hover:text-white"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Hủy đơn
+                        </Button>
+                      )}
+                      <Button
+                        onClick={() => handlePrintReceipt(order)}
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl text-xs font-serif uppercase tracking-wider font-bold gap-1 border-primary/40 text-primary hover:bg-primary/10"
+                      >
+                        <Ticket className="w-3.5 h-3.5" /> In PDF
+                      </Button>
+                      <Button
+                        onClick={() => handleReorder(order)}
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl text-xs font-serif uppercase tracking-wider font-bold gap-1 border-primary/40 hover:bg-primary hover:text-white"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Mua lại đơn này
+                      </Button>
+                    </div>
                   </div>
                 </Card>
               );

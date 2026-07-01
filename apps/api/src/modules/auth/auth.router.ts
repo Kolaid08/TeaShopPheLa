@@ -36,7 +36,7 @@ router.post('/login', async (req, res, next) => {
     const tokenPayload = {
       EmployeeID: employee.EmployeeID,
       Email: employee.Email,
-      RoleName: employee.Role.RoleName,
+      RoleName: employee.Role.RoleName.toUpperCase(),
     };
 
     const accessToken = jwt.sign(tokenPayload, config.jwt.accessSecret, {
@@ -68,7 +68,7 @@ router.post('/login', async (req, res, next) => {
       employee: {
         EmployeeID: employee.EmployeeID,
         FullName: employee.FullName,
-        Role: employee.Role.RoleName,
+        Role: employee.Role.RoleName.toUpperCase(),
       },
     });
   } catch (err) {

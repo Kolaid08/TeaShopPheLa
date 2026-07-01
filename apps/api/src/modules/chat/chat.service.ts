@@ -39,6 +39,13 @@ export const updateSessionStatus = async (sessionId: string, status: 'AI_HANDLIN
   });
 };
 
+export const updateSessionCustomer = async (sessionId: string, customerId: number) => {
+  return await prisma.chatSession.update({
+    where: { SessionID: sessionId },
+    data: { CustomerID: customerId },
+  });
+};
+
 export const getAdminSessions = async () => {
   // Get active sessions (Waiting or Admin Handling) for the admin dashboard
   return await prisma.chatSession.findMany({

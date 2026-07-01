@@ -5,6 +5,7 @@ import { io, Socket } from 'socket.io-client';
 import { MessageCircle, X, Send, User, Bot, Headset } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
+import { api } from '@/lib/api';
 
 // Generate or get a simple session ID (Must be valid UUID for SQL Server)
 const getSessionId = () => {
@@ -55,9 +56,11 @@ export function ChatWidget() {
     setSocket(newSocket);
 
     const sessionId = getSessionId();
+    const customer = api.getCurrentCustomer();
+    const customerId = customer ? customer.CustomerID : undefined;
 
     newSocket.on('connect', () => {
-      newSocket.emit('join_session', { sessionId });
+      newSocket.emit('join_session', { sessionId, customerId });
     });
 
     newSocket.on('session_joined', (session) => {
@@ -185,9 +188,44 @@ export function ChatWidget() {
                       isCustomer ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-background border shadow-sm rounded-tl-sm"
                     )}>
                       <div className="space-y-1 [&>p]:m-0 [&>ul]:list-disc [&>ul]:pl-4 [&>ul]:m-0 [&>ol]:list-decimal [&>ol]:pl-4 [&>ol]:m-0">
-                        <ReactMarkdown>
-                          {msg.Content}
-                        </ReactMarkdown>
+                        {(() => {
+                          const content = msg.Content || '';
+                          const buyNowRegex = /\[BUY_NOW:([A-Za-z0-9-]+):(\d+)\]/g;
+                          const parts = [];
+                          let lastIndex = 0;
+                          let match;
+                          
+                          while ((match = buyNowRegex.exec(content)) !== null) {
+                            if (match.index > lastIndex) {
+                              parts.push(<ReactMarkdown key={lastIndex}>{content.slice(lastIndex, match.index)}</ReactMarkdown>);
+                            }
+                            const code = match[1];
+                            const drinkSizeId = match[2];
+                            
+                            parts.push(
+                              <div key={match.index} className="mt-2 mb-1">
+                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 max-w-[220px]">
+                                  <p className="text-emerald-800 text-xs font-bold mb-2 leading-tight">Mã ưu đãi 10%: <span className="bg-emerald-200/60 px-1 py-0.5 rounded font-mono block mt-1">{code}</span></p>
+                                  <button 
+                                     onClick={() => {
+                                       window.dispatchEvent(new CustomEvent('ai_buy_now', { detail: { code, drinkSizeId: Number(drinkSizeId) } }));
+                                     }}
+                                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-xs transition-colors shadow-sm"
+                                  >
+                                     Áp dụng mã
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                            lastIndex = buyNowRegex.lastIndex;
+                          }
+                          
+                          if (lastIndex < content.length) {
+                            parts.push(<ReactMarkdown key={lastIndex}>{content.slice(lastIndex)}</ReactMarkdown>);
+                          }
+                          
+                          return parts.length > 0 ? parts : <ReactMarkdown>{content}</ReactMarkdown>;
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -206,7 +244,9 @@ export function ChatWidget() {
                   setMessages([]);
                   setSessionStatus('AI_HANDLING');
                   const newSid = getSessionId();
-                  socket?.emit('join_session', { sessionId: newSid });
+                  const customer = api.getCurrentCustomer();
+                  const customerId = customer ? customer.CustomerID : undefined;
+                  socket?.emit('join_session', { sessionId: newSid, customerId });
                 }}
                 className="w-full bg-primary text-primary-foreground py-2 rounded-full text-sm font-medium hover:bg-primary/90 transition-colors"
               >

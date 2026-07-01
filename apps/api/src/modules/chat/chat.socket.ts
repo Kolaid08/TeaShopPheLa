@@ -1,6 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
-import { createSession, getSessionById, addMessage, updateSessionStatus } from './chat.service';
+import { createSession, getSessionById, addMessage, updateSessionStatus, updateSessionCustomer } from './chat.service';
 import { generateAIResponse } from './ai.service';
 import { config } from '../../config';
 
@@ -24,6 +24,9 @@ export const initSocketIo = (server: HttpServer) => {
       
       if (!session) {
         await createSession(sessionId, customerId);
+        session = await getSessionById(sessionId);
+      } else if (customerId && session.CustomerID !== customerId) {
+        await updateSessionCustomer(sessionId, customerId);
         session = await getSessionById(sessionId);
       }
       
@@ -55,7 +58,7 @@ export const initSocketIo = (server: HttpServer) => {
           // Remove the latest customer message from history since it's passed as newMessage
           history.pop(); 
 
-          let aiText = await generateAIResponse(history, content);
+          let aiText = await generateAIResponse(history, content, session.CustomerID);
           
           let isHandoff = false;
           if (aiText.includes('[HANDOFF_TO_HUMAN]')) {

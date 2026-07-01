@@ -175,7 +175,7 @@ export default function DashboardHome() {
                 const maxVal = Math.max(...stats.monthlyRevenueChart.map((x: any) => x.revenue));
                 const heightPct = maxVal > 0 ? (m.revenue / maxVal) * 80 : 10;
                 return (
-                  <div key={i} className="flex-1 flex flex-col items-center group relative z-10">
+                  <div key={i} className="h-full flex-1 flex flex-col justify-end items-center group relative z-10">
                     <div
                       style={{ height: `${heightPct}%` }}
                       className="w-full max-w-[28px] rounded-t-lg bg-gradient-to-t from-primary to-orange-400 group-hover:from-orange-400 group-hover:to-orange-300 transition-all duration-300 relative shadow-lg shadow-primary/10"
@@ -270,67 +270,7 @@ export default function DashboardHome() {
         </CardContent>
       </Card>
       
-      {/* Abandoned Carts tracking */}
-      <Card className="cafe-panel">
-        <CardHeader className="flex flex-row items-center justify-between border-b border-border/60 pb-4">
-          <div>
-            <CardTitle>Giỏ hàng bị bỏ quên (Abandoned Carts)</CardTitle>
-            <CardDescription>
-              Theo dõi khách hàng đã thêm món nhưng chưa tiến hành thanh toán
-            </CardDescription>
-          </div>
-          <Badge variant="info" className="text-primary border-primary/20 bg-primary/10">
-            Khách hàng tiềm năng
-          </Badge>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
-            {stats.abandonedCarts && stats.abandonedCarts.length > 0 ? (
-              stats.abandonedCarts.map((cart: any) => (
-                <div
-                  key={cart.CartID}
-                  className="flex items-center justify-between px-6 py-4 hover:bg-muted/30 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center">
-                      <ShoppingCart className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-foreground">
-                        {cart.Customer ? cart.Customer.CustomerName : 'Khách vãn lai'}
-                        {cart.Customer && (
-                          <span className="text-xs font-normal text-muted-foreground ml-2">
-                            {cart.Customer.PhoneNumber}
-                          </span>
-                        )}
-                      </h4>
-                      <div className="flex flex-col gap-0.5 mt-1">
-                        {cart.ItemsPreview.map((item: any, idx: number) => (
-                          <span key={idx} className="text-xs text-muted-foreground font-medium">
-                            {item.Quantity}x {item.DrinkName} ({item.SizeName})
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-bold text-primary font-mono">
-                      {cart.TotalPrice.toLocaleString('vi-VN')} đ
-                    </div>
-                    <span className="text-[10px] text-muted-foreground block font-semibold mt-1">
-                      {new Date(cart.updatedAt).toLocaleString('vi-VN')}
-                    </span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="p-8 text-center text-muted-foreground text-sm font-medium">
-                Không có giỏ hàng nào đang bị bỏ quên.
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+
     </div>
   );
 }

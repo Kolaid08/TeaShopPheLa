@@ -32,9 +32,15 @@ export default function LoginPage() {
 
     setIsLoading(true);
     try {
-      await api.login(pinCode, password || undefined);
+      const response = await api.login(pinCode, password || undefined);
       toast.success('Đăng nhập cổng làm việc Phêla thành công!');
-      router.push('/');
+      
+      const role = response?.employee?.Role;
+      if (role === 'SHIPPER') {
+        router.push('/shipper');
+      } else {
+        router.push('/');
+      }
     } catch (err: any) {
       toast.error(err.message || 'Mã PIN hoặc mật khẩu không chính xác.');
     } finally {

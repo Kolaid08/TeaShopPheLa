@@ -50,6 +50,32 @@ export async function seedDatabaseIfEmpty() {
           RoleID: 3, // STAFF (RoleID 3)
         }
       });
+
+      await prisma.employee.create({
+        data: {
+          FullName: 'Lê Đình Quản Lý',
+          PhoneNumber: '0966554433',
+          Email: 'manager@phela.vn',
+          Birth: new Date('1992-02-10'),
+          Sex: 'MALE',
+          PINCode: '2222',
+          password: hashedPassword,
+          RoleID: 2, // MANAGER (RoleID 2)
+        }
+      });
+
+      await prisma.employee.create({
+        data: {
+          FullName: 'Trần Văn Shipper',
+          PhoneNumber: '0933445566',
+          Email: 'shipper@phela.vn',
+          Birth: new Date('1997-11-25'),
+          Sex: 'MALE',
+          PINCode: '3333',
+          password: hashedPassword,
+          RoleID: 3, // STAFF - Shipper
+        }
+      });
     }
 
     // 3. Membership Levels
@@ -183,6 +209,10 @@ export async function seedDatabaseIfEmpty() {
           { IngredientName: 'Hạt cà phê Robusta Bảo Lộc', QuantityStock: 40.00, UnitID: 2 },
           { IngredientName: 'Sữa đặc ông thọ', QuantityStock: 8.50, UnitID: 1 }, // Cảnh báo tồn kho thấp
           { IngredientName: 'Thạch ô long giòn', QuantityStock: 25.00, UnitID: 2 },
+          { IngredientName: 'Kem trứng tươi', QuantityStock: 10.00, UnitID: 1 },
+          { IngredientName: 'Trà Ô Long Nhài', QuantityStock: 30.00, UnitID: 2 },
+          { IngredientName: 'Mứt chanh dây nhiệt đới', QuantityStock: 15.00, UnitID: 1 },
+          { IngredientName: 'Nước cốt dừa nguyên chất', QuantityStock: 20.00, UnitID: 3 },
         ],
       });
     }
@@ -265,7 +295,7 @@ export async function seedDatabaseIfEmpty() {
       const r2 = await prisma.recipe.create({ data: { DrinkID: 2 } });
       await prisma.recipeDetail.createMany({
         data: [
-          { RecipeID: r2.RecipeID, IngredientID: 1, Quantity: 0.02 },
+          { RecipeID: r2.RecipeID, IngredientID: 11, Quantity: 0.02 }, // 11 is Trà Ô Long Nhài
           { RecipeID: r2.RecipeID, IngredientID: 2, Quantity: 0.03 },
           { RecipeID: r2.RecipeID, IngredientID: 3, Quantity: 0.04 },
         ]
@@ -275,9 +305,9 @@ export async function seedDatabaseIfEmpty() {
       const r3 = await prisma.recipe.create({ data: { DrinkID: 3 } });
       await prisma.recipeDetail.createMany({
         data: [
-          { RecipeID: r3.RecipeID, IngredientID: 7, Quantity: 0.02 }, // 0.02 Kg robusta
-          { RecipeID: r3.RecipeID, IngredientID: 5, Quantity: 0.05 }, // 0.05 hộp kem béo
-          { RecipeID: r3.RecipeID, IngredientID: 3, Quantity: 0.03 }, // 0.03 L đường
+          { RecipeID: r3.RecipeID, IngredientID: 7, Quantity: 0.02 }, // Robusta
+          { RecipeID: r3.RecipeID, IngredientID: 13, Quantity: 0.05 }, // Nước cốt dừa
+          { RecipeID: r3.RecipeID, IngredientID: 3, Quantity: 0.03 }, // Đường
         ]
       });
 
@@ -286,7 +316,7 @@ export async function seedDatabaseIfEmpty() {
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r4.RecipeID, IngredientID: 1, Quantity: 0.02 },
-          { RecipeID: r4.RecipeID, IngredientID: 4, Quantity: 0.05 }, // 0.05 Kg trân châu hoàng kim
+          { RecipeID: r4.RecipeID, IngredientID: 4, Quantity: 0.05 },
           { RecipeID: r4.RecipeID, IngredientID: 3, Quantity: 0.04 },
         ]
       });
@@ -296,7 +326,75 @@ export async function seedDatabaseIfEmpty() {
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r5.RecipeID, IngredientID: 1, Quantity: 0.02 },
-          { RecipeID: r5.RecipeID, IngredientID: 3, Quantity: 0.05 },
+          { RecipeID: r5.RecipeID, IngredientID: 12, Quantity: 0.05 }, // Mứt chanh dây nhiệt đới
+          { RecipeID: r5.RecipeID, IngredientID: 3, Quantity: 0.03 },
+        ]
+      });
+
+      // Drink 6: Cà Phê Trứng Phêla (DrinkID 6)
+      const r6 = await prisma.recipe.create({ data: { DrinkID: 6 } });
+      await prisma.recipeDetail.createMany({
+        data: [
+          { RecipeID: r6.RecipeID, IngredientID: 7, Quantity: 0.02 }, // Robusta
+          { RecipeID: r6.RecipeID, IngredientID: 10, Quantity: 0.05 }, // Kem trứng tươi
+          { RecipeID: r6.RecipeID, IngredientID: 8, Quantity: 0.02 }, // Sữa đặc
+        ]
+      });
+
+      // Drink 7: Trà Sữa Matcha Ô Long (DrinkID 7)
+      const r7 = await prisma.recipe.create({ data: { DrinkID: 7 } });
+      await prisma.recipeDetail.createMany({
+        data: [
+          { RecipeID: r7.RecipeID, IngredientID: 6, Quantity: 0.01 }, // Matcha
+          { RecipeID: r7.RecipeID, IngredientID: 1, Quantity: 0.015 }, // Trà Ô Long
+          { RecipeID: r7.RecipeID, IngredientID: 2, Quantity: 0.03 }, // Sữa bột
+          { RecipeID: r7.RecipeID, IngredientID: 3, Quantity: 0.03 }, // Đường
+        ]
+      });
+
+      // Drink 8: Cà Phê Espresso Sữa Đặc (DrinkID 8)
+      const r8 = await prisma.recipe.create({ data: { DrinkID: 8 } });
+      await prisma.recipeDetail.createMany({
+        data: [
+          { RecipeID: r8.RecipeID, IngredientID: 7, Quantity: 0.025 }, // Robusta
+          { RecipeID: r8.RecipeID, IngredientID: 8, Quantity: 0.03 }, // Sữa đặc
+        ]
+      });
+    }
+
+    // 12.5. Ingredient Receipts
+    const receiptCount = await prisma.ingredientReceipt.count();
+    if (receiptCount === 0) {
+      console.log('Seeding ingredient receipts...');
+      const rec1 = await prisma.ingredientReceipt.create({
+        data: {
+          SupplierID: 1, // Nông trại Ô Long
+          ShipperID: 3, // Trần Văn Shipper
+          ReceivedDate: new Date(),
+          IngredientReceiptStatus: 'CONFIRMED',
+          ShippingAddress: '45 Đường 28/3, Bảo Lộc',
+        }
+      });
+      await prisma.ingredientReceiptDetail.createMany({
+        data: [
+          { IngredientReceiptID: rec1.IngredientReceiptID, IngredientID: 1, Quantity: 10, CostPrice: 150000 },
+          { IngredientReceiptID: rec1.IngredientReceiptID, IngredientID: 11, Quantity: 5, CostPrice: 180000 },
+        ]
+      });
+
+      const rec2 = await prisma.ingredientReceipt.create({
+        data: {
+          SupplierID: 2, // Nhà phân phối Nguyên An
+          ShipperID: 3, // Trần Văn Shipper
+          ReceivedDate: new Date(),
+          IngredientReceiptStatus: 'PENDING',
+          ShippingAddress: '120/8 Hoàng Hoa Thám, Tân Bình',
+        }
+      });
+      await prisma.ingredientReceiptDetail.createMany({
+        data: [
+          { IngredientReceiptID: rec2.IngredientReceiptID, IngredientID: 12, Quantity: 20, CostPrice: 85000 },
+          { IngredientReceiptID: rec2.IngredientReceiptID, IngredientID: 13, Quantity: 15, CostPrice: 65000 },
         ]
       });
     }
@@ -336,12 +434,19 @@ export async function seedDatabaseIfEmpty() {
           const randomDay = Math.floor(Math.random() * 28) + 1;
           const orderDate = new Date(year, normalizedMonth, randomDay, 14, 30, 0);
 
+          const randomVal = Math.random();
+          const orderType = randomVal < 0.6 ? 'DINE_IN' : (randomVal < 0.8 ? 'TAKE_AWAY' : 'DELIVERY');
+          const paymentMethod = Math.random() < 0.7 ? 'BANKING' : 'CASH';
+
           const order = await prisma.orders.create({
             data: {
               CustomerID: (Math.floor(Math.random() * 4) + 1), // random customer 1-4
               EmployeeID: 2,
-              ShopTableID: Math.random() > 0.5 ? (Math.floor(Math.random() * 4) + 1) : null,
+              ShopTableID: orderType === 'DINE_IN' ? (Math.floor(Math.random() * 4) + 1) : null,
               OrderStatus: 'COMPLETED',
+              OrderType: orderType,
+              PaymentMethod: paymentMethod,
+              PaymentStatus: 'COMPLETED',
               TotalPrice: (Math.floor(Math.random() * 3) + 1) * 55000,
               CreatedTime: orderDate,
               createdAt: orderDate,

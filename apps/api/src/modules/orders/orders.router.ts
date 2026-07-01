@@ -7,6 +7,39 @@ import { AppError } from '../../middleware/errorHandler';
 import { upgradeCustomerLevel } from '../customers/customers.router';
 import { payos } from '../payment/payment.controller';
 
+async function processOrderIngredients(tx: any, items: { DrinkSizeID: number, Quantity: number }[], mode: 'deduct' | 'refund') {
+  for (const item of items) {
+    const ds = await tx.drinkSize.findUnique({
+      where: { DrinkSizeID: item.DrinkSizeID },
+      include: { Size: true }
+    });
+    if (!ds) continue;
+    
+    const multiplier = ds.Size.VolumeML / 500.0;
+    const recipe = await tx.recipe.findFirst({
+      where: { DrinkID: ds.DrinkID },
+      orderBy: { createdAt: 'desc' },
+      include: { RecipeDetails: true },
+    });
+
+    if (recipe) {
+      for (const detail of recipe.RecipeDetails) {
+        const baseQuantity = detail.Quantity.toNumber();
+        const quantityToAdjust = baseQuantity * multiplier * item.Quantity;
+
+        await tx.ingredient.update({
+          where: { IngredientID: detail.IngredientID },
+          data: {
+            QuantityStock: mode === 'deduct'
+              ? { decrement: quantityToAdjust }
+              : { increment: quantityToAdjust },
+          },
+        });
+      }
+    }
+  }
+}
+
 const router = Router();
 
 const orderItemSchema = z.object({
@@ -32,6 +65,7 @@ const createOrderSchema = z.object({
   Longitude: z.number().optional().nullable(),
   ReceiverName: z.string().optional().nullable(),
   ReceiverPhone: z.string().optional().nullable(),
+  VoucherCode: z.string().optional().nullable(),
 });
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -84,6 +118,142 @@ const mockDrinkSizesMap: Record<number, { DrinkName: string; SizeName: string; U
 export const serverMockOrders: any[] = [];
 
 // Public customer storefront order endpoints (NO verifyJWT check required)
+router.post('/customer-combos', async (req, res, next) => {
+  try {
+    const { drinkSizeIds } = req.body;
+    if (!drinkSizeIds || !Array.isArray(drinkSizeIds) || drinkSizeIds.length === 0) {
+      return sendResponse(res, 200, true, 'No combos', []);
+    }
+
+    const ordersWithItems = await prisma.orderDetail.findMany({
+      where: { DrinkSizeID: { in: drinkSizeIds } },
+      select: { OrderID: true }
+    });
+
+    if (ordersWithItems.length === 0) {
+      return sendResponse(res, 200, true, 'No combos', []);
+    }
+
+    const orderIds = Array.from(new Set(ordersWithItems.map(o => o.OrderID)));
+
+    const otherItems = await prisma.orderDetail.findMany({
+      where: {
+        OrderID: { in: orderIds },
+        DrinkSizeID: { notIn: drinkSizeIds }
+      },
+      include: {
+        DrinkSize: { include: { Drink: true, Size: true } }
+      }
+    });
+
+    const freqMap = new Map<number, { count: number, item: any }>();
+    for (const item of otherItems) {
+      if (!freqMap.has(item.DrinkSizeID)) {
+        freqMap.set(item.DrinkSizeID, { count: 0, item });
+      }
+      freqMap.get(item.DrinkSizeID)!.count++;
+    }
+
+    const sorted = Array.from(freqMap.values()).sort((a, b) => b.count - a.count).slice(0, 3);
+    
+    const result = sorted.map(s => ({
+      DrinkSizeID: s.item.DrinkSizeID,
+      DrinkName: s.item.DrinkSize.Drink.DrinkName,
+      SizeName: s.item.DrinkSize.Size.SizeName,
+      UnitPrice: s.item.DrinkSize.UnitPrice,
+      DrinkImageURL: s.item.DrinkSize.Drink.DrinkImageURL,
+      FrequencyCount: s.count
+    }));
+
+    return sendResponse(res, 200, true, 'Combo suggestions', result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/customer-frequent/:customerId', async (req, res, next) => {
+  try {
+    const customerId = parseInt(req.params.customerId || '0');
+    if (isNaN(customerId) || customerId <= 0) {
+      return sendResponse(res, 200, true, 'No frequent items', []);
+    }
+
+    // Lấy tất cả OrderDetails của khách hàng này từ các đơn hoàn thành
+    const details = await prisma.orderDetail.findMany({
+      where: {
+        Orders: {
+          CustomerID: customerId,
+          OrderStatus: { in: ['COMPLETED', 'PENDING', 'PREPARING', 'READY'] },
+        },
+      },
+      include: {
+        DrinkSize: {
+          include: { Drink: true, Size: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200, // Look at recent 200 items to avoid perf issue
+    });
+
+    if (details.length === 0) {
+      return sendResponse(res, 200, true, 'No frequent items', []);
+    }
+
+    // Gom nhóm theo DrinkSizeID
+    const frequencyMap = new Map<number, { count: number, item: any, configs: any[] }>();
+    
+    for (const d of details) {
+      if (!frequencyMap.has(d.DrinkSizeID)) {
+        frequencyMap.set(d.DrinkSizeID, { count: 0, item: d, configs: [] });
+      }
+      const entry = frequencyMap.get(d.DrinkSizeID)!;
+      entry.count += 1;
+      entry.configs.push({ Sugar: d.Sugar, Ice: d.Ice, Toppings: d.Toppings || '' });
+    }
+
+    // Sort by count
+    const sorted = Array.from(frequencyMap.values()).sort((a, b) => b.count - a.count).slice(0, 5); // Lấy Top 5
+
+    // Build final response with most common config for each
+    const result = sorted.map(s => {
+      // Find most common config
+      const configCount = new Map<string, number>();
+      for (const cfg of s.configs) {
+        const key = `${cfg.Sugar}|${cfg.Ice}|${cfg.Toppings}`;
+        configCount.set(key, (configCount.get(key) || 0) + 1);
+      }
+      
+      let bestConfigStr = '';
+      let maxCfg = 0;
+      for (const [key, count] of configCount.entries()) {
+        if (count > maxCfg) {
+          maxCfg = count;
+          bestConfigStr = key;
+        }
+      }
+      const [sugar, ice, toppings] = bestConfigStr.split('|');
+
+      return {
+        DrinkSizeID: s.item.DrinkSizeID,
+        DrinkName: s.item.DrinkSize.Drink.DrinkName,
+        SizeName: s.item.DrinkSize.Size.SizeName,
+        UnitPrice: s.item.DrinkSize.UnitPrice,
+        DrinkImageURL: s.item.DrinkSize.Drink.DrinkImageURL,
+        FrequencyCount: s.count,
+        PreferredConfig: {
+          Sugar: sugar,
+          Ice: ice,
+          Toppings: toppings
+        }
+      };
+    });
+
+    return sendResponse(res, 200, true, 'Lấy danh sách món tủ thành công', result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/customer-place', async (req, res, next) => {
   try {
     const validatedData = createOrderSchema.parse(req.body);
@@ -191,8 +361,61 @@ router.post('/customer-place', async (req, res, next) => {
         }
       }
 
-      const discountAmount = baseTotal * (discountRate / 100);
-      let finalPrice = baseTotal - discountAmount;
+      // Check Voucher
+      let voucherDiscountAmount = 0;
+      let membershipDiscount = 0;
+      let usedVoucherId = null;
+
+      if (validatedData.VoucherCode) {
+        // @ts-ignore - Prisma types might be out of sync if server is not restarted yet
+        const voucher = await prisma.voucher.findUnique({ where: { Code: validatedData.VoucherCode } });
+        if (!voucher) throw new AppError(404, 'Mã giảm giá không tồn tại');
+        if (voucher.IsUsed) throw new AppError(400, 'Mã giảm giá đã được sử dụng');
+        if (voucher.ValidUntil && new Date(voucher.ValidUntil) < new Date()) throw new AppError(400, 'Mã giảm giá đã hết hạn');
+        if (voucher.OwnerID && customerId && voucher.OwnerID !== customerId) throw new AppError(403, 'Mã giảm giá không dành cho tài khoản này');
+
+        // Apply voucher
+        let targetItemTotal = 0;
+        let otherItemsTotal = 0;
+
+        if (voucher.TargetProductID) {
+          // Find exactly 1 item in the cart to apply
+          let applied = false;
+          for (const item of validatedData.Items) {
+            if (item.DrinkSizeID === voucher.TargetProductID && !applied) {
+               // apply to 1 cup
+               targetItemTotal += item.UnitPrice;
+               otherItemsTotal += item.UnitPrice * (item.Quantity - 1);
+               applied = true;
+            } else {
+               otherItemsTotal += item.UnitPrice * item.Quantity;
+            }
+          }
+          if (!applied) throw new AppError(400, 'Giỏ hàng không chứa món được áp dụng mã giảm giá');
+        } else {
+           targetItemTotal = baseTotal;
+           otherItemsTotal = 0;
+        }
+
+        // Calculate voucher discount on targetItemTotal
+        if (voucher.DiscountType === 'PERCENT') {
+           voucherDiscountAmount = targetItemTotal * (voucher.DiscountValue / 100);
+        } else {
+           voucherDiscountAmount = voucher.DiscountValue;
+           if (voucherDiscountAmount > targetItemTotal) voucherDiscountAmount = targetItemTotal;
+        }
+
+        // The remaining items still get membership discount
+        membershipDiscount = otherItemsTotal * (discountRate / 100);
+        usedVoucherId = voucher.VoucherID;
+        
+      } else {
+        // Normal membership discount on whole bill
+        membershipDiscount = baseTotal * (discountRate / 100);
+      }
+
+      const totalDiscount = voucherDiscountAmount + membershipDiscount;
+      let finalPrice = baseTotal - totalDiscount;
       let computedDistance = null;
       let shippingFee = 0;
 
@@ -257,6 +480,16 @@ router.post('/customer-place', async (req, res, next) => {
             };
           }),
         });
+
+        await processOrderIngredients(tx, validatedData.Items, 'deduct');
+
+        if (usedVoucherId) {
+          // @ts-ignore
+          await tx.voucher.update({
+            where: { VoucherID: usedVoucherId },
+            data: { IsUsed: true }
+          });
+        }
 
         return tx.orders.findUnique({
           where: { OrderID: order.OrderID },
@@ -404,6 +637,56 @@ router.get('/customer-status/:id', async (req, res, next) => {
       const order = serverMockOrders.find(o => o.OrderID === orderId);
       if (!order) throw new AppError(404, 'Order not found offline');
       return sendResponse(res, 200, true, 'Status Offline', order);
+    }
+  } catch(err) {
+    next(err);
+  }
+});
+
+// PATCH /customer-cancel/:id - Public cancel endpoint for customers
+router.patch('/customer-cancel/:id', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id || '');
+    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
+
+    try {
+      const order = await prisma.orders.findUnique({
+        where: { OrderID: orderId },
+        include: { OrderDetails: true }
+      });
+      if (!order) throw new AppError(404, 'Order not found.');
+
+      if (order.OrderStatus !== 'PENDING') {
+        throw new AppError(400, 'Chỉ có thể hủy đơn hàng khi đang ở trạng thái Chờ xử lý.');
+      }
+
+      const updatedOrder = await prisma.$transaction(async (tx) => {
+        const updated = await tx.orders.update({
+          where: { OrderID: orderId },
+          data: { OrderStatus: 'CANCELLED' }
+        });
+
+        // Refund inventory
+        const itemsToRefund = order.OrderDetails.map((od) => ({
+          DrinkSizeID: od.DrinkSizeID,
+          Quantity: od.Quantity,
+        }));
+        await processOrderIngredients(tx, itemsToRefund, 'refund');
+
+        return updated;
+      });
+
+      return sendResponse(res, 200, true, 'Đã hủy đơn hàng thành công.', updatedOrder);
+    } catch (dbErr: any) {
+      if (dbErr.statusCode === 400 || dbErr.statusCode === 404) throw dbErr;
+      
+      const idx = serverMockOrders.findIndex((o) => o.OrderID === orderId);
+      if (idx === -1) throw new AppError(404, 'Order not found in server memory.');
+      if (serverMockOrders[idx].OrderStatus !== 'PENDING') {
+        throw new AppError(400, 'Chỉ có thể hủy đơn hàng khi đang ở trạng thái Chờ xử lý.');
+      }
+      serverMockOrders[idx].OrderStatus = 'CANCELLED';
+      return sendResponse(res, 200, true, 'Đã hủy đơn hàng thành công (Offline Mode).', serverMockOrders[idx]);
     }
   } catch(err) {
     next(err);
@@ -604,9 +887,10 @@ router.post('/', async (req, res, next) => {
 
       // 4. Calculate Customer Discount
       let discountRate = 0;
-      if (validatedData.CustomerID) {
+      let customerId = validatedData.CustomerID || null;
+      if (customerId) {
         const customer = await prisma.customer.findUnique({
-          where: { CustomerID: validatedData.CustomerID },
+          where: { CustomerID: customerId },
           include: { MemberShipLevel: true },
         });
         if (!customer) {
@@ -615,8 +899,55 @@ router.post('/', async (req, res, next) => {
         discountRate = customer.MemberShipLevel.DiscountRate.toNumber();
       }
 
-      const discountAmount = baseTotal * (discountRate / 100);
-      const finalPrice = baseTotal - discountAmount;
+      // Check Voucher
+      let voucherDiscountAmount = 0;
+      let membershipDiscount = 0;
+      let usedVoucherId = null;
+
+      if (validatedData.VoucherCode) {
+        const voucher = await prisma.voucher.findUnique({ where: { Code: validatedData.VoucherCode } });
+        if (!voucher) throw new AppError(404, 'Mã giảm giá không tồn tại');
+        if (voucher.IsUsed) throw new AppError(400, 'Mã giảm giá đã được sử dụng');
+        if (voucher.ValidUntil && new Date(voucher.ValidUntil) < new Date()) throw new AppError(400, 'Mã giảm giá đã hết hạn');
+        if (voucher.OwnerID && customerId && voucher.OwnerID !== customerId) throw new AppError(403, 'Mã giảm giá không dành cho tài khoản này');
+
+        // Apply voucher
+        let targetItemTotal = 0;
+        let otherItemsTotal = 0;
+
+        if (voucher.TargetProductID) {
+          // Find exactly 1 item in the cart to apply
+          let applied = false;
+          for (const item of validatedData.Items) {
+            if (item.DrinkSizeID === voucher.TargetProductID && !applied) {
+               targetItemTotal += item.UnitPrice;
+               otherItemsTotal += item.UnitPrice * (item.Quantity - 1);
+               applied = true;
+            } else {
+               otherItemsTotal += item.UnitPrice * item.Quantity;
+            }
+          }
+          if (!applied) throw new AppError(400, 'Giỏ hàng không chứa món được áp dụng mã giảm giá');
+        } else {
+           targetItemTotal = baseTotal;
+           otherItemsTotal = 0;
+        }
+
+        if (voucher.DiscountType === 'PERCENT') {
+           voucherDiscountAmount = targetItemTotal * (voucher.DiscountValue / 100);
+        } else {
+           voucherDiscountAmount = voucher.DiscountValue;
+           if (voucherDiscountAmount > targetItemTotal) voucherDiscountAmount = targetItemTotal;
+        }
+
+        membershipDiscount = otherItemsTotal * (discountRate / 100);
+        usedVoucherId = voucher.VoucherID;
+      } else {
+        membershipDiscount = baseTotal * (discountRate / 100);
+      }
+
+      const totalDiscount = voucherDiscountAmount + membershipDiscount;
+      const finalPrice = baseTotal - totalDiscount;
 
       // Validate ShopTableID
       let validShopTableId = validatedData.ShopTableID || null;
@@ -655,6 +986,16 @@ router.post('/', async (req, res, next) => {
             };
           }),
         });
+
+        await processOrderIngredients(tx, validatedData.Items, 'deduct');
+
+        if (usedVoucherId) {
+          // @ts-ignore
+          await tx.voucher.update({
+            where: { VoucherID: usedVoucherId },
+            data: { IsUsed: true }
+          });
+        }
 
         return tx.orders.findUnique({
           where: { OrderID: order.OrderID },
@@ -751,45 +1092,18 @@ router.patch('/:id/status', async (req, res, next) => {
           await upgradeCustomerLevel(order.CustomerID, tx);
         }
 
-        // 4. Tự động khấu trừ nguyên liệu pha chế trong kho khi hoàn thành đơn
-        if (validatedData.OrderStatus === 'COMPLETED') {
+        // 4. Hoàn trả nguyên liệu nếu đơn hàng bị HỦY và trước đó chưa pha chế
+        if (validatedData.OrderStatus === 'CANCELLED' && order.OrderStatus === 'PENDING') {
           const orderDetails = await tx.orderDetail.findMany({
             where: { OrderID: orderId },
-            include: {
-              DrinkSize: {
-                select: { DrinkID: true },
-              },
-            },
           });
-
-          for (const item of orderDetails) {
-            const drinkId = item.DrinkSize.DrinkID;
-            const quantityOrdered = item.Quantity;
-
-            // Lấy các công thức pha chế liên kết với đồ uống này
-            const recipes = await tx.recipe.findMany({
-              where: { DrinkID: drinkId },
-              include: {
-                RecipeDetails: true,
-              },
-            });
-
-            for (const recipe of recipes) {
-              for (const detail of recipe.RecipeDetails) {
-                const quantityToDeduct = detail.Quantity.toNumber() * quantityOrdered;
-
-                // Giảm trừ tồn kho nguyên liệu tương ứng
-                await tx.ingredient.update({
-                  where: { IngredientID: detail.IngredientID },
-                  data: {
-                    QuantityStock: {
-                      decrement: quantityToDeduct,
-                    },
-                  },
-                });
-              }
-            }
-          }
+          
+          const itemsToRefund = orderDetails.map((od: any) => ({
+            DrinkSizeID: od.DrinkSizeID,
+            Quantity: od.Quantity
+          }));
+          
+          await processOrderIngredients(tx, itemsToRefund, 'refund');
         }
 
         return updated;

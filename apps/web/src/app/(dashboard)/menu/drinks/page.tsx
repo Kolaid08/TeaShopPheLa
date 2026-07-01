@@ -15,12 +15,13 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/core';
-import { api, Drink, Size } from '@/lib/api';
+import { api, Drink, Size, Ingredient } from '@/lib/api';
 import { toast } from 'sonner';
 
 export default function DrinksMenu() {
   const [drinks, setDrinks] = useState<Drink[]>([]);
   const [allSizes, setAllSizes] = useState<Size[]>([]);
+  const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -36,12 +37,18 @@ export default function DrinksMenu() {
   const [drinkStatus, setDrinkStatus] = useState('ACTIVE');
   const [drinkImage, setDrinkImage] = useState('');
   const [selectedSizes, setSelectedSizes] = useState<{ SizeID: number; UnitPrice: string }[]>([]);
+  const [selectedRecipeDetails, setSelectedRecipeDetails] = useState<{ IngredientID: number; Quantity: string }[]>([]);
 
   const loadData = async () => {
     try {
-      const [drinksData, sizesData] = await Promise.all([api.getDrinks(), api.getSizes()]);
+      const [drinksData, sizesData, ingredientsData] = await Promise.all([
+        api.getDrinks(), 
+        api.getSizes(),
+        api.getIngredients()
+      ]);
       setDrinks(drinksData);
       setAllSizes(sizesData);
+      setAllIngredients(ingredientsData);
     } catch {}
     setIsLoading(false);
   };
@@ -57,6 +64,7 @@ export default function DrinksMenu() {
     setDrinkStatus('ACTIVE');
     setDrinkImage('');
     setSelectedSizes([]);
+    setSelectedRecipeDetails([]);
     setIsFormOpen(true);
   };
 
@@ -70,6 +78,12 @@ export default function DrinksMenu() {
       drink.DrinkSizes?.filter((ds) => ds.DrinkSizeStatus === 'AVAILABLE').map((ds) => ({
         SizeID: ds.SizeID,
         UnitPrice: ds.UnitPrice.toString(),
+      })) || []
+    );
+    setSelectedRecipeDetails(
+      drink.Recipes?.[0]?.RecipeDetails?.map((rd) => ({
+        IngredientID: rd.IngredientID,
+        Quantity: rd.Quantity.toString(),
       })) || []
     );
     setIsFormOpen(true);
@@ -99,6 +113,13 @@ export default function DrinksMenu() {
       return;
     }
 
+    const recipePayload = selectedRecipeDetails
+      .filter(rd => rd.IngredientID > 0 && parseFloat(rd.Quantity || '0') > 0)
+      .map(rd => ({
+        IngredientID: rd.IngredientID,
+        Quantity: parseFloat(rd.Quantity || '0')
+      }));
+
     try {
       const payload = {
         DrinkName: drinkName,
@@ -106,6 +127,7 @@ export default function DrinksMenu() {
         DrinkImageURL: drinkImage || null,
         DrinkStatus: drinkStatus,
         sizes: sizesPayload,
+        RecipeDetails: recipePayload,
       };
 
       if (selectedDrink) {
@@ -367,6 +389,63 @@ export default function DrinksMenu() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-muted-foreground uppercase flex justify-between items-center mb-1.5">
+              <span>Định lượng chuẩn (Size 500ml)</span>
+              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedRecipeDetails([...selectedRecipeDetails, { IngredientID: 0, Quantity: '' }])} className="h-6 text-xs px-2 py-0 rounded-md">
+                + Thêm
+              </Button>
+            </label>
+            <div className="space-y-2">
+              {selectedRecipeDetails.map((rd, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <select
+                    value={rd.IngredientID}
+                    onChange={(e) => {
+                      const newDetails = [...selectedRecipeDetails];
+                      if (newDetails[index]) {
+                        newDetails[index].IngredientID = parseInt(e.target.value);
+                        setSelectedRecipeDetails(newDetails);
+                      }
+                    }}
+                    className="flex-1 rounded-xl border border-border bg-background/50 px-3 h-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                  >
+                    <option value={0}>-- Chọn nguyên liệu --</option>
+                    {allIngredients.map(ing => (
+                      <option key={ing.IngredientID} value={ing.IngredientID}>
+                        {ing.IngredientName} ({ing.Unit?.UnitName || ''})
+                      </option>
+                    ))}
+                  </select>
+                  <Input 
+                    placeholder="Số lượng"
+                    type="number"
+                    step="0.01"
+                    value={rd.Quantity}
+                    onChange={(e) => {
+                      const newDetails = [...selectedRecipeDetails];
+                      if (newDetails[index]) {
+                        newDetails[index].Quantity = e.target.value;
+                        setSelectedRecipeDetails(newDetails);
+                      }
+                    }}
+                    className="w-24 bg-background/50 h-8 text-sm rounded-xl"
+                  />
+                  <Button type="button" variant="ghost" size="sm" onClick={() => {
+                    const newDetails = [...selectedRecipeDetails];
+                    newDetails.splice(index, 1);
+                    setSelectedRecipeDetails(newDetails);
+                  }} className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+              {selectedRecipeDetails.length === 0 && (
+                <p className="text-xs text-muted-foreground italic text-center py-2 border border-dashed border-border rounded-lg">Chưa có nguyên liệu nào. Bấm + Thêm để nhập định lượng.</p>
+              )}
             </div>
           </div>
 
