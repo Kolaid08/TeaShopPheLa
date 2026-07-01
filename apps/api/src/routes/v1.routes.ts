@@ -21,6 +21,7 @@ import cartsRouter from '../modules/carts/carts.router';
 import reviewsRouter from '../modules/reviews/reviews.router';
 import paymentRouter from '../modules/payment/payment.router';
 import chatRouter from '../modules/chat/chat.routes';
+import shippingRouter from '../modules/shipping/shipping.router';
 
 const router = Router();
 
@@ -52,5 +53,6 @@ router.use('/carts', cartsRouter);
 router.use('/reviews', reviewsRouter);
 router.use('/payment', paymentRouter);
 router.use('/chat', chatRouter);
+router.use('/shipping', shippingRouter);
 
 export default router;

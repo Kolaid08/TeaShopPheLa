@@ -7,6 +7,8 @@ import { AppError } from '../../middleware/errorHandler';
 import { upgradeCustomerLevel } from '../customers/customers.router';
 import { payos } from '../payment/payment.controller';
 
+import { GhnService } from '../shipping/ghn.service';
+
 const router = Router();
 
 const orderItemSchema = z.object({
@@ -26,6 +28,15 @@ const createOrderSchema = z.object({
   OrderNote: z.string().max(500).optional().nullable(),
   Items: z.array(orderItemSchema).min(1),
   TotalPrice: z.number().positive().optional(),
+  
+  // Shipping fields
+  DeliveryType: z.enum(['DINE_IN', 'DELIVERY', 'PICKUP']).optional().default('DINE_IN'),
+  RecipientName: z.string().optional().nullable(),
+  RecipientPhone: z.string().optional().nullable(),
+  DeliveryAddress: z.string().optional().nullable(),
+  ProvinceID: z.number().int().optional().nullable(),
+  DistrictID: z.number().int().optional().nullable(),
+  WardCode: z.string().optional().nullable(),
 });
 
 const updateStatusSchema = z.object({
@@ -165,7 +176,28 @@ router.post('/customer-place', async (req, res, next) => {
       }
 
       const discountAmount = baseTotal * (discountRate / 100);
-      const finalPrice = baseTotal - discountAmount;
+      let finalPrice = baseTotal - discountAmount;
+      let shippingFee = 0;
+
+      if (validatedData.DeliveryType === 'DELIVERY' && validatedData.DistrictID && validatedData.WardCode) {
+        let totalWeight = 0;
+        for (const item of validatedData.Items) {
+           const ds = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
+           if (ds) {
+              totalWeight += (ds.Size.WeightGram || 500) * item.Quantity;
+           }
+        }
+        if (totalWeight <= 0) totalWeight = 500;
+        
+        shippingFee = await GhnService.calculateFee({
+           to_district_id: validatedData.DistrictID,
+           to_ward_code: validatedData.WardCode,
+           weight: totalWeight,
+           insurance_value: finalPrice,
+        });
+        
+        finalPrice += shippingFee;
+      }
 
       // Validate ShopTableID
       let validShopTableId = validatedData.ShopTableID || null;
@@ -188,6 +220,15 @@ router.post('/customer-place', async (req, res, next) => {
             OrderStatus: 'PENDING',
             TotalPrice: finalPrice,
             OrderNote: validatedData.OrderNote || null,
+            DeliveryType: validatedData.DeliveryType,
+            RecipientName: validatedData.RecipientName,
+            RecipientPhone: validatedData.RecipientPhone,
+            DeliveryAddress: validatedData.DeliveryAddress,
+            ProvinceID: validatedData.ProvinceID,
+            DistrictID: validatedData.DistrictID,
+            WardCode: validatedData.WardCode,
+            ShippingFee: shippingFee > 0 ? shippingFee : null,
+            DiscountAmount: discountAmount > 0 ? discountAmount : null,
           },
         });
 
@@ -285,36 +326,103 @@ router.get('/customer-history/:phoneNumber', async (req, res, next) => {
         where: {
           Customer: { PhoneNumber: phoneNumber },
         },
-        orderBy: { OrderID: 'desc' },
         include: {
-          Customer: { select: { CustomerName: true, PhoneNumber: true } },
-          ShopTable: { select: { ShopTableNumber: true } },
-          Employee: { select: { FullName: true } },
-          Reviews: { select: { DrinkID: true, Rating: true } },
+          Customer: true,
+          ShopTable: true,
           OrderDetails: {
             include: {
               DrinkSize: {
-                include: {
-                  Drink: { select: { DrinkName: true } },
-                  Size: { select: { SizeName: true } },
-                },
+                include: { Drink: true, Size: true },
               },
             },
           },
         },
+        orderBy: { CreatedTime: 'desc' },
       });
-      return sendResponse(res, 200, true, 'Lịch sử đặt hàng hội viên', dbOrders);
-    } catch {
-      // Offline fallback: filter from serverMockOrders by phone number
-      const clientOrders = serverMockOrders
-        .filter((o) => o.Customer?.PhoneNumber === phoneNumber)
-        .sort((a, b) => b.OrderID - a.OrderID);
+
+      const payloadData = dbOrders.map((o) => ({
+        OrderID: o.OrderID,
+        CustomerID: o.CustomerID,
+        Customer: o.Customer ? { CustomerName: o.Customer.CustomerName, PhoneNumber: o.Customer.PhoneNumber } : null,
+        ShopTableID: o.ShopTableID,
+        ShopTable: o.ShopTable ? { ShopTableNumber: o.ShopTable.ShopTableNumber } : null,
+        OrderStatus: o.OrderStatus,
+        TotalPrice: o.TotalPrice,
+        ShippingFee: o.ShippingFee,
+        DiscountAmount: o.DiscountAmount,
+        CreatedTime: o.CreatedTime,
+        PaymentMethod: o.PaymentMethod,
+        PaymentStatus: o.PaymentStatus,
+        OrderDetails: o.OrderDetails.map((od) => ({
+          Quantity: od.Quantity,
+          UnitPrice: od.UnitPrice,
+          DrinkSize: {
+            Drink: { DrinkName: od.DrinkSize?.Drink?.DrinkName || 'N/A' },
+            Size: { SizeName: od.DrinkSize?.Size?.SizeName || 'N/A' },
+          },
+        })),
+      }));
+
+      // Lấy thêm các đơn hàng tạm trong Offline Mode để gộp vào (tránh bị mất đơn giao diện)
+      const offlineOrders = serverMockOrders.filter(o => o.Customer?.PhoneNumber === phoneNumber);
+      
+      const combinedOrders = [...offlineOrders, ...payloadData].sort((a: any, b: any) => {
+        return new Date(b.CreatedTime).getTime() - new Date(a.CreatedTime).getTime();
+      });
+
+      return sendResponse(res, 200, true, 'Lịch sử đơn hàng', combinedOrders);
+    } catch (err) {
+      // Fallback if DB completely down
+      const clientOrders = serverMockOrders.filter(o => o.Customer?.PhoneNumber === phoneNumber);
       return sendResponse(res, 200, true, 'Lịch sử đặt hàng hội viên (Offline Mode)', clientOrders);
     }
   } catch (err) {
     next(err);
   }
 });
+
+// Helper to push order to GHN if it's a paid delivery order
+async function checkAndSyncGHN(order: any) {
+  if (order.DeliveryType === 'DELIVERY' && !order.GHN_OrderCode) {
+    try {
+      const orderDetails = await prisma.orderDetail.findMany({
+        where: { OrderID: order.OrderID },
+        include: { DrinkSize: { include: { Size: true, Drink: true } } },
+      });
+      const items = orderDetails.map((d) => ({
+        name: d.DrinkSize.Drink.DrinkName,
+        quantity: d.Quantity,
+        price: d.UnitPrice.toNumber(),
+        weight: d.DrinkSize.Size.WeightGram || 500,
+      }));
+      const totalWeight = items.reduce((acc, curr) => acc + curr.weight * curr.quantity, 0) || 500;
+
+      const isCOD = (order.PaymentMethod === 'COD' || !order.PaymentMethod) && order.PaymentStatus !== 'PAID';
+      const ghnCode = await GhnService.createOrder({
+        to_name: order.RecipientName || 'Khách hàng',
+        to_phone: order.RecipientPhone || '0900000000',
+        to_address: order.DeliveryAddress || 'Không có địa chỉ',
+        to_ward_code: order.WardCode || '',
+        to_district_id: order.DistrictID || 0,
+        weight: totalWeight,
+        insurance_value: order.TotalPrice.toNumber(),
+        cod_amount: isCOD ? order.TotalPrice.toNumber() : 0,
+        content: `Đơn hàng Phê La #${order.OrderID}`,
+        items,
+      });
+
+      await prisma.orders.update({
+        where: { OrderID: order.OrderID },
+        data: { GHN_OrderCode: ghnCode, OrderStatus: 'PREPARING' },
+      });
+      console.log(`[GHN Sync] Order ${order.OrderID} synced to GHN with code ${ghnCode}`);
+      return ghnCode;
+    } catch (e) {
+      console.error(`[GHN Sync] Failed for order ${order.OrderID}`, e);
+    }
+  }
+  return null;
+}
 
 // GET /customer-status/:id - Public status polling for customer UI
 router.get('/customer-status/:id', async (req, res, next) => {
@@ -337,6 +445,10 @@ router.get('/customer-status/:id', async (req, res, next) => {
               data: { PaymentStatus: 'PAID', PaymentMethod: 'QR_CODE' }
             });
             console.log(`[PayOS Polling] Auto-updated order ${order.OrderID} to PAID`);
+            
+            // Sync to GHN if it's a delivery order
+            const ghnCode = await checkAndSyncGHN(order);
+            if (ghnCode) order.GHN_OrderCode = ghnCode;
           }
         } catch {}
       }
@@ -483,6 +595,10 @@ router.get('/:id', async (req, res, next) => {
               data: { PaymentStatus: 'PAID', PaymentMethod: 'QR_CODE' },
             });
             console.log(`[PayOS Polling] Auto-updated order ${order.OrderID} to PAID`);
+
+            // Sync to GHN if it's a delivery order
+            const ghnCode = await checkAndSyncGHN(order);
+            if (ghnCode) order.GHN_OrderCode = ghnCode;
           }
         } catch (payosErr: any) {
           // Ignore errors if the payment link doesn't exist on PayOS yet or expired
@@ -736,6 +852,12 @@ router.patch('/:id/status', async (req, res, next) => {
         return updated;
       });
 
+      // 5. Sync to GHN if shop accepts the order (PREPARING)
+      if (validatedData.OrderStatus === 'PREPARING' && updatedOrder.DeliveryType === 'DELIVERY' && !updatedOrder.GHN_OrderCode) {
+        const ghnCode = await checkAndSyncGHN(updatedOrder);
+        if (ghnCode) updatedOrder.GHN_OrderCode = ghnCode;
+      }
+
       return sendResponse(
         res,
         200,
@@ -769,6 +891,40 @@ router.patch('/:id/status', async (req, res, next) => {
         serverMockOrders[idx],
       );
     }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /ghn-webhook - Handle status updates from GHN (Bỏ qua verifyJWT vì GHN gọi)
+router.post('/ghn-webhook', async (req, res, next) => {
+  try {
+    const { OrderCode, Status } = req.body;
+    // Status từ GHN: 'ready_to_pick', 'picking', 'delivering', 'delivered', 'cancel', 'return'...
+    if (OrderCode && Status) {
+      const order = await prisma.orders.findFirst({ where: { GHN_OrderCode: OrderCode } });
+      if (order) {
+        let newStatus = order.OrderStatus;
+        if (Status === 'delivering' || Status === 'picking') newStatus = 'SHIPPING';
+        if (Status === 'delivered') {
+           newStatus = 'COMPLETED';
+           // Tích điểm & Nâng hạng thẻ khi giao thành công
+           if (order.CustomerID) {
+              await upgradeCustomerLevel(order.CustomerID, order.TotalPrice.toNumber());
+           }
+        }
+        if (Status === 'cancel' || Status === 'return' || Status === 'returned') newStatus = 'DELIVERY_FAILED';
+
+        if (newStatus !== order.OrderStatus) {
+          await prisma.orders.update({
+            where: { OrderID: order.OrderID },
+            data: { OrderStatus: newStatus }
+          });
+          console.log(`[GHN Webhook] Order ${order.OrderID} status updated to ${newStatus}`);
+        }
+      }
+    }
+    return sendResponse(res, 200, true, 'Webhook received', null);
   } catch (err) {
     next(err);
   }

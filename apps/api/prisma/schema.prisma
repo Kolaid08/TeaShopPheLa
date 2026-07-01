@@ -37,6 +37,7 @@ model Size {
   SizeName    String      @db.VarChar(50)
   Description String?     @db.NVarChar(255)
   VolumeML    Int
+  WeightGram  Int         @default(500) // Trọng lượng ước tính (gram) dùng cho GHN
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -240,6 +241,18 @@ model Orders {
   PaymentMethod String?      @db.VarChar(50)
   PaymentStatus String?      @db.VarChar(50)
   AppTransId   String?       @db.VarChar(100)
+  
+  // GHN Shipping Info
+  DeliveryType   String        @default("DINE_IN") @db.VarChar(50)
+  RecipientName  String?       @db.NVarChar(255)
+  RecipientPhone String?       @db.VarChar(20)
+  DeliveryAddress String?      @db.NVarChar(500)
+  ProvinceID     Int?
+  DistrictID     Int?
+  WardCode       String?       @db.VarChar(50)
+  ShippingFee    Decimal?      @db.Decimal(10, 2)
+  DiscountAmount Decimal?      @db.Decimal(10, 2)
+  GHN_OrderCode  String?       @db.VarChar(100)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 

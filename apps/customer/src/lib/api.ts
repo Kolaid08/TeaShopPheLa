@@ -82,6 +82,8 @@ export interface Order {
   CreatedTime: string;
   OrderStatus: 'PENDING' | 'PREPARING' | 'COMPLETED' | 'CANCELLED';
   TotalPrice: number;
+  ShippingFee?: number;
+  DiscountAmount?: number;
   OrderNote?: string;
   Customer?: Customer;
   ShopTable?: ShopTable;
@@ -419,6 +421,13 @@ export const api = {
     TotalPrice: number;
     ShopTableID?: number;
     OrderNote?: string;
+    DeliveryType?: string;
+    RecipientName?: string;
+    RecipientPhone?: string;
+    DeliveryAddress?: string;
+    ProvinceID?: number;
+    DistrictID?: number;
+    WardCode?: string;
   }): Promise<Order> => {
     const cust = getSessionCustomer();
     
@@ -433,6 +442,13 @@ export const api = {
           ShopTableID: data.ShopTableID || undefined,
           OrderNote: data.OrderNote || undefined,
           TotalPrice: data.TotalPrice,
+          DeliveryType: data.DeliveryType,
+          RecipientName: data.RecipientName,
+          RecipientPhone: data.RecipientPhone,
+          DeliveryAddress: data.DeliveryAddress,
+          ProvinceID: data.ProvinceID,
+          DistrictID: data.DistrictID,
+          WardCode: data.WardCode,
           Items: data.Items.map((item) => ({
             DrinkSizeID: item.DrinkSizeID,
             Quantity: item.Quantity,
@@ -519,6 +535,52 @@ export const api = {
       throw new Error(payload.message || 'Lỗi gửi đánh giá');
     } catch (e: any) {
       throw new Error(e.message || 'Lỗi kết nối tới máy chủ');
+    }
+  },
+
+  // SHIPPING & GHN API
+  getProvinces: async (): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/provinces`);
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+  getDistricts: async (provinceId: number): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/districts/${provinceId}`);
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+  getWards: async (districtId: number): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/wards/${districtId}`);
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+  calculateFee: async (data: { to_district_id: number; to_ward_code: string; items: { DrinkSizeID: number; Quantity: number; }[] }): Promise<{ fee: number, totalWeight: number }> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/calculate-fee`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return { fee: 0, totalWeight: 0 };
+    } catch {
+      return { fee: 0, totalWeight: 0 };
     }
   },
 };
