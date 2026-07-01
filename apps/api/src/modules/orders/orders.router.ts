@@ -812,38 +812,64 @@ router.patch('/:id/status', async (req, res, next) => {
         if (validatedData.OrderStatus === 'COMPLETED') {
           const orderDetails = await tx.orderDetail.findMany({
             where: { OrderID: orderId },
-            include: {
-              DrinkSize: {
-                select: { DrinkID: true },
-              },
-            },
           });
 
           for (const item of orderDetails) {
-            const drinkId = item.DrinkSize.DrinkID;
+            const drinkSizeId = item.DrinkSizeID;
             const quantityOrdered = item.Quantity;
 
-            // Lấy các công thức pha chế liên kết với đồ uống này
+            // A. Khấu trừ nguyên liệu của Nước (Recipe)
             const recipes = await tx.recipe.findMany({
-              where: { DrinkID: drinkId },
-              include: {
-                RecipeDetails: true,
-              },
+              where: { DrinkSizeID: drinkSizeId },
+              include: { RecipeDetails: true },
             });
 
             for (const recipe of recipes) {
               for (const detail of recipe.RecipeDetails) {
                 const quantityToDeduct = detail.Quantity.toNumber() * quantityOrdered;
 
-                // Giảm trừ tồn kho nguyên liệu tương ứng
+                const ingredient = await tx.ingredient.findUnique({ where: { IngredientID: detail.IngredientID } });
+                if (!ingredient) throw new AppError(404, `Không tìm thấy nguyên liệu (ID: ${detail.IngredientID})`);
+                
+                if (ingredient.QuantityStock.toNumber() < quantityToDeduct) {
+                  throw new AppError(400, `Không đủ nguyên liệu "${ingredient.IngredientName}" trong kho. Cần ${quantityToDeduct}, hiện có ${ingredient.QuantityStock}.`);
+                }
+
                 await tx.ingredient.update({
                   where: { IngredientID: detail.IngredientID },
                   data: {
-                    QuantityStock: {
-                      decrement: quantityToDeduct,
-                    },
+                    QuantityStock: { decrement: quantityToDeduct },
                   },
                 });
+              }
+            }
+
+            // B. Khấu trừ nguyên liệu của Topping
+            if (item.Toppings) {
+              const selectedToppings = item.Toppings.split(',').map(t => t.trim()).filter(Boolean);
+              for (const toppingName of selectedToppings) {
+                const topping = await tx.topping.findFirst({
+                  where: { ToppingName: toppingName },
+                  include: { ToppingRecipeDetails: true }
+                });
+                
+                if (topping) {
+                  for (const detail of topping.ToppingRecipeDetails) {
+                    const quantityToDeduct = detail.Quantity.toNumber() * quantityOrdered;
+                    
+                    const ingredient = await tx.ingredient.findUnique({ where: { IngredientID: detail.IngredientID } });
+                    if (!ingredient) throw new AppError(404, `Không tìm thấy nguyên liệu Topping (ID: ${detail.IngredientID})`);
+                    
+                    if (ingredient.QuantityStock.toNumber() < quantityToDeduct) {
+                      throw new AppError(400, `Không đủ nguyên liệu "${ingredient.IngredientName}" cho Topping "${toppingName}". Cần ${quantityToDeduct}, hiện có ${ingredient.QuantityStock}.`);
+                    }
+
+                    await tx.ingredient.update({
+                      where: { IngredientID: detail.IngredientID },
+                      data: { QuantityStock: { decrement: quantityToDeduct } },
+                    });
+                  }
+                }
               }
             }
           }

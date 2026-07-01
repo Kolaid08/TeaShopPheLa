@@ -20,14 +20,17 @@ export const initSocketIo = (server: HttpServer) => {
 
     // Customer joins their own session room
     socket.on('join_session', async ({ sessionId, customerId }: { sessionId: string, customerId?: number }) => {
-      let session = await getSessionById(sessionId);
+      let session: any = await getSessionById(sessionId);
       
       if (!session) {
         session = await createSession(sessionId, customerId);
+        session.Messages = [];
       }
       
-      socket.join(session.SessionID);
-      socket.emit('session_joined', session);
+      if (session) {
+        socket.join(session.SessionID);
+        socket.emit('session_joined', session);
+      }
     });
 
     // Customer sends a message

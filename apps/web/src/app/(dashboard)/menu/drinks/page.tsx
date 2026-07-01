@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Plus, Edit3, Trash2, Layers, Coffee, Search } from 'lucide-react';
+import { Plus, Edit3, Trash2, Layers, Coffee, Search, Beaker } from 'lucide-react';
 import {
   Button,
   Input,
@@ -15,33 +15,49 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/core';
-import { api, Drink, Size } from '@/lib/api';
+import { api, Drink, Size, Ingredient, Recipe } from '@/lib/api';
 import { toast } from 'sonner';
 
 export default function DrinksMenu() {
   const [drinks, setDrinks] = useState<Drink[]>([]);
   const [allSizes, setAllSizes] = useState<Size[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
 
-  // Modal states
+  // Drink Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedDrink, setSelectedDrink] = useState<Drink | null>(null);
 
-  // Form states
+  // Drink Form states
   const [drinkName, setDrinkName] = useState('');
   const [drinkDescription, setDrinkDescription] = useState('');
   const [drinkStatus, setDrinkStatus] = useState('ACTIVE');
   const [drinkImage, setDrinkImage] = useState('');
   const [selectedSizes, setSelectedSizes] = useState<{ SizeID: number; UnitPrice: string }[]>([]);
 
+  // Recipe Modal states
+  const [isRecipeFormOpen, setIsRecipeFormOpen] = useState(false);
+  const [recipeDrink, setRecipeDrink] = useState<Drink | null>(null);
+  
+  // Recipe Form states: map of DrinkSizeID -> array of { IngredientID, Quantity }
+  const [recipeConfig, setRecipeConfig] = useState<Record<number, { IngredientID: number; Quantity: string; RecipeID?: number }[]>>({});
+
   const loadData = async () => {
     try {
-      const [drinksData, sizesData] = await Promise.all([api.getDrinks(), api.getSizes()]);
+      const [drinksData, sizesData, ingredientsData, recipesData] = await Promise.all([
+        api.getDrinks(),
+        api.getSizes(),
+        api.getIngredients(),
+        api.getRecipes()
+      ]);
       setDrinks(drinksData);
       setAllSizes(sizesData);
+      setIngredients(ingredientsData);
+      setRecipes(recipesData);
     } catch {}
     setIsLoading(false);
   };
@@ -49,6 +65,8 @@ export default function DrinksMenu() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // --- DRINK CRUD ---
 
   const openCreateForm = () => {
     setSelectedDrink(null);
@@ -132,6 +150,103 @@ export default function DrinksMenu() {
       toast.error(err.message || 'Lỗi xóa đồ uống.');
     }
   };
+
+
+  // --- RECIPE CRUD ---
+
+  const openRecipeForm = (drink: Drink) => {
+    setRecipeDrink(drink);
+    
+    // Khởi tạo state cấu hình cho từng DrinkSizeID của món nước này
+    const initialConfig: Record<number, { IngredientID: number; Quantity: string; RecipeID?: number }[]> = {};
+    
+    drink.DrinkSizes?.forEach(ds => {
+      // Tìm xem có recipe nào cho DrinkSizeID này chưa
+      const existingRecipe = recipes.find(r => r.DrinkSizeID === ds.DrinkSizeID);
+      if (existingRecipe && existingRecipe.RecipeDetails) {
+        initialConfig[ds.DrinkSizeID] = existingRecipe.RecipeDetails.map(rd => ({
+          IngredientID: rd.IngredientID,
+          Quantity: rd.Quantity.toString(),
+          RecipeID: existingRecipe.RecipeID
+        }));
+      } else {
+        initialConfig[ds.DrinkSizeID] = []; // Mặc định rỗng
+      }
+    });
+
+    setRecipeConfig(initialConfig);
+    setIsRecipeFormOpen(true);
+  };
+
+  const handleSaveRecipe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recipeDrink) return;
+
+    try {
+      let savedCount = 0;
+      // Lặp qua từng DrinkSizeID để tạo hoặc cập nhật Recipe
+      for (const ds of recipeDrink.DrinkSizes || []) {
+        const configForSize = recipeConfig[ds.DrinkSizeID] || [];
+        
+        // Chỉ gửi những nguyên liệu hợp lệ
+        const validIngredients = configForSize
+          .filter(c => c.IngredientID > 0 && parseFloat(c.Quantity) > 0)
+          .map(c => ({
+            IngredientID: c.IngredientID,
+            Quantity: parseFloat(c.Quantity)
+          }));
+        
+        const existingRecipe = recipes.find(r => r.DrinkSizeID === ds.DrinkSizeID);
+        
+        if (validIngredients.length > 0) {
+          const payload = {
+            DrinkSizeID: ds.DrinkSizeID,
+            Ingredients: validIngredients
+          };
+          
+          if (existingRecipe) {
+            await api.updateRecipe(existingRecipe.RecipeID, payload);
+          } else {
+            await api.createRecipe(payload);
+          }
+          savedCount++;
+        } else if (existingRecipe) {
+          // Nếu xóa hết nguyên liệu, có thể là họ muốn xóa công thức
+          await api.deleteRecipe(existingRecipe.RecipeID);
+        }
+      }
+      
+      toast.success(`Đã cập nhật công thức cho ${savedCount} kích cỡ thành công!`);
+      setIsRecipeFormOpen(false);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi lưu công thức.');
+    }
+  };
+
+  const addIngredientToRecipe = (drinkSizeId: number) => {
+    const config = { ...recipeConfig };
+    if (!config[drinkSizeId]) config[drinkSizeId] = [];
+    config[drinkSizeId].push({ IngredientID: 0, Quantity: '' });
+    setRecipeConfig(config);
+  };
+
+  const updateRecipeIngredient = (drinkSizeId: number, index: number, field: 'IngredientID' | 'Quantity', value: string) => {
+    const config = { ...recipeConfig };
+    if (!config[drinkSizeId] || !config[drinkSizeId]![index]) return;
+    if (field === 'IngredientID') config[drinkSizeId]![index]!.IngredientID = parseInt(value) || 0;
+    if (field === 'Quantity') config[drinkSizeId]![index]!.Quantity = value;
+    setRecipeConfig(config);
+  };
+
+  const removeRecipeIngredient = (drinkSizeId: number, index: number) => {
+    const config = { ...recipeConfig };
+    if (!config[drinkSizeId] || !config[drinkSizeId]![index]) return;
+    config[drinkSizeId]!.splice(index, 1);
+    setRecipeConfig(config);
+  };
+
+  // --- RENDER ---
 
   const filteredDrinks = drinks.filter((d) =>
     d.DrinkName.toLowerCase().includes(searchTerm.toLowerCase()),
@@ -218,6 +333,14 @@ export default function DrinksMenu() {
                     <Button
                       size="sm"
                       variant="outline"
+                      className="rounded-xl border-primary/20 text-primary hover:bg-primary/5"
+                      onClick={() => openRecipeForm(drink)}
+                    >
+                      <Beaker className="w-3.5 h-3.5" /> Công thức
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       className="rounded-xl"
                       onClick={() => openUpdateForm(drink)}
                     >
@@ -253,7 +376,7 @@ export default function DrinksMenu() {
           {Array.from({ length: totalPages }).map((_, idx) => (
             <Button
               key={idx}
-              variant={currentPage === idx + 1 ? 'default' : 'outline'}
+              variant={currentPage === idx + 1 ? 'primary' : 'outline'}
               className={`rounded-full w-10 h-10 p-0 flex items-center justify-center font-bold ${
                 currentPage === idx + 1
                   ? 'bg-primary text-primary-foreground shadow-sm'
@@ -384,6 +507,86 @@ export default function DrinksMenu() {
               className="flex-1 py-3 rounded-xl font-serif uppercase tracking-wider font-extrabold"
             >
               Lưu Lại
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Recipe Configuration Modal */}
+      <Dialog
+        isOpen={isRecipeFormOpen}
+        onClose={() => setIsRecipeFormOpen(false)}
+        title={`Công thức: ${recipeDrink?.DrinkName}`}
+      >
+        <form onSubmit={handleSaveRecipe} className="space-y-6 max-h-[80vh] overflow-y-auto pr-2">
+          {recipeDrink?.DrinkSizes?.map(ds => {
+            const sizeInfo = allSizes.find(s => s.SizeID === ds.SizeID);
+            const currentConfig = recipeConfig[ds.DrinkSizeID] || [];
+            
+            return (
+              <div key={ds.DrinkSizeID} className="border border-border rounded-xl overflow-hidden">
+                <div className="bg-muted/50 px-4 py-3 flex justify-between items-center border-b border-border">
+                  <div>
+                    <h3 className="font-bold font-serif text-primary">Size {sizeInfo?.SizeName}</h3>
+                    <p className="text-xs text-muted-foreground">{sizeInfo?.VolumeML}ml - Giá: {new Intl.NumberFormat('vi-VN').format(ds.UnitPrice)}đ</p>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" onClick={() => addIngredientToRecipe(ds.DrinkSizeID)} className="h-8 rounded-lg text-xs font-bold gap-1">
+                    <Plus className="w-3 h-3" /> Thêm nguyên liệu
+                  </Button>
+                </div>
+                
+                <div className="p-4 space-y-2 bg-background/30">
+                  {currentConfig.map((item, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <select
+                        className="flex-1 rounded-xl border border-border bg-background/50 px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                        value={item.IngredientID}
+                        onChange={(e) => updateRecipeIngredient(ds.DrinkSizeID, idx, 'IngredientID', e.target.value)}
+                      >
+                        <option value={0}>-- Chọn nguyên liệu --</option>
+                        {ingredients.map(ing => (
+                          <option key={ing.IngredientID} value={ing.IngredientID}>
+                            {ing.IngredientName} ({ing.Unit?.UnitName})
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="Số lượng"
+                        value={item.Quantity}
+                        onChange={(e) => updateRecipeIngredient(ds.DrinkSizeID, idx, 'Quantity', e.target.value)}
+                        className="w-24 h-9 bg-background/50"
+                      />
+                      <Button type="button" variant="outline" className="w-9 h-9 p-0 text-red-500 border-red-200" onClick={() => removeRecipeIngredient(ds.DrinkSizeID, idx)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {currentConfig.length === 0 && (
+                    <div className="text-center py-2 text-xs text-muted-foreground italic">
+                      Chưa có công thức. Món kích cỡ này sẽ không trừ kho khi bán.
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          <div className="flex gap-4 pt-4 border-t border-border sticky bottom-0 bg-card py-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 py-3 rounded-xl"
+              onClick={() => setIsRecipeFormOpen(false)}
+            >
+              Hủy
+            </Button>
+            <Button
+              type="submit"
+              className="flex-1 py-3 rounded-xl font-serif uppercase tracking-wider font-extrabold"
+            >
+              Lưu Công Thức
             </Button>
           </div>
         </form>

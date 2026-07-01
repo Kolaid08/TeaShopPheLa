@@ -252,7 +252,7 @@ export async function seedDatabaseIfEmpty() {
       console.log('Seeding recipes...');
 
       // Drink 1: Trà Ô Long sữa Phêla (DrinkID 1)
-      const r1 = await prisma.recipe.create({ data: { DrinkID: 1 } });
+      const r1 = await prisma.recipe.create({ data: { DrinkSizeID: 1 } });
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r1.RecipeID, IngredientID: 1, Quantity: 0.02 }, // 0.02 Kg trà
@@ -262,7 +262,7 @@ export async function seedDatabaseIfEmpty() {
       });
 
       // Drink 2: Trà sữa Oolong Nhài (DrinkID 2)
-      const r2 = await prisma.recipe.create({ data: { DrinkID: 2 } });
+      const r2 = await prisma.recipe.create({ data: { DrinkSizeID: 2 } });
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r2.RecipeID, IngredientID: 1, Quantity: 0.02 },
@@ -272,7 +272,7 @@ export async function seedDatabaseIfEmpty() {
       });
 
       // Drink 3: Cà phê Cốt dừa Phêla (DrinkID 3)
-      const r3 = await prisma.recipe.create({ data: { DrinkID: 3 } });
+      const r3 = await prisma.recipe.create({ data: { DrinkSizeID: 3 } });
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r3.RecipeID, IngredientID: 7, Quantity: 0.02 }, // 0.02 Kg robusta
@@ -282,7 +282,7 @@ export async function seedDatabaseIfEmpty() {
       });
 
       // Drink 4: Trà Ô Long trân châu (DrinkID 4)
-      const r4 = await prisma.recipe.create({ data: { DrinkID: 4 } });
+      const r4 = await prisma.recipe.create({ data: { DrinkSizeID: 4 } });
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r4.RecipeID, IngredientID: 1, Quantity: 0.02 },
@@ -292,12 +292,41 @@ export async function seedDatabaseIfEmpty() {
       });
 
       // Drink 5: Trà Ô Long Nhiệt Đới (DrinkID 5)
-      const r5 = await prisma.recipe.create({ data: { DrinkID: 5 } });
+      const r5 = await prisma.recipe.create({ data: { DrinkSizeID: 5 } });
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r5.RecipeID, IngredientID: 1, Quantity: 0.02 },
           { RecipeID: r5.RecipeID, IngredientID: 3, Quantity: 0.05 },
         ]
+      });
+    }
+
+    // 12.5. Toppings & ToppingRecipeDetails
+    const toppingCount = await prisma.topping.count();
+    if (toppingCount === 0) {
+      console.log('Seeding toppings...');
+      const tranChau = await prisma.ingredient.findFirst({ where: { IngredientName: { contains: 'Trân châu' } } });
+      const thach = await prisma.ingredient.findFirst({ where: { IngredientName: { contains: 'Thạch' } } });
+      const kem = await prisma.ingredient.findFirst({ where: { IngredientName: { contains: 'Kem' } } });
+      const fallback = await prisma.ingredient.findFirst();
+
+      const id1 = tranChau?.IngredientID || fallback?.IngredientID || 1;
+      const id2 = thach?.IngredientID || fallback?.IngredientID || 1;
+      const id3 = kem?.IngredientID || fallback?.IngredientID || 1;
+
+      const t1 = await prisma.topping.create({ data: { ToppingName: 'Trân châu đen', Price: 10000 } });
+      await prisma.toppingRecipeDetail.create({
+        data: { ToppingID: t1.ToppingID, IngredientID: id1, Quantity: 0.05 }
+      });
+
+      const t2 = await prisma.topping.create({ data: { ToppingName: 'Thạch ô long giòn', Price: 12000 } });
+      await prisma.toppingRecipeDetail.create({
+        data: { ToppingID: t2.ToppingID, IngredientID: id2, Quantity: 0.05 }
+      });
+
+      const t3 = await prisma.topping.create({ data: { ToppingName: 'Kem trứng', Price: 15000 } });
+      await prisma.toppingRecipeDetail.create({
+        data: { ToppingID: t3.ToppingID, IngredientID: id3, Quantity: 0.03 }
       });
     }
 

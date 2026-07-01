@@ -279,7 +279,7 @@ export default function DashboardHome() {
               Theo dõi khách hàng đã thêm món nhưng chưa tiến hành thanh toán
             </CardDescription>
           </div>
-          <Badge variant="outline" className="text-primary border-primary/20 bg-primary/10">
+          <Badge variant="neutral" className="text-primary border-primary/20 bg-primary/10">
             Khách hàng tiềm năng
           </Badge>
         </CardHeader>

@@ -23,6 +23,8 @@ import paymentRouter from '../modules/payment/payment.router';
 import chatRouter from '../modules/chat/chat.routes';
 import shippingRouter from '../modules/shipping/shipping.router';
 
+import toppingsRouter from '../modules/toppings/toppings.router';
+
 const router = Router();
 
 // v1 Root healthcheck
@@ -54,5 +56,6 @@ router.use('/reviews', reviewsRouter);
 router.use('/payment', paymentRouter);
 router.use('/chat', chatRouter);
 router.use('/shipping', shippingRouter);
+router.use('/toppings', toppingsRouter);
 
 export default router;
