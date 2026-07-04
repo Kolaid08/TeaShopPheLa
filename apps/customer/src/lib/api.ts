@@ -538,6 +538,19 @@ export const api = {
     }
   },
 
+  cancelOrder: async (orderId: number): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/orders/customer-cancel/${orderId}`, {
+        method: 'POST',
+      });
+      const payload = await res.json();
+      if (res.ok && payload.success) return payload.data;
+      throw new Error(payload.message || 'Lỗi huỷ đơn hàng');
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi kết nối tới máy chủ');
+    }
+  },
+
   // SHIPPING & GHN API
   getProvinces: async (): Promise<any[]> => {
     try {

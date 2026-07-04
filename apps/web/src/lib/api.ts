@@ -142,6 +142,9 @@ export interface Order {
   RecipientPhone?: string;
   DeliveryAddress?: string;
   GHN_OrderCode?: string;
+  RefundStatus?: string;
+  RefundAmount?: number;
+  RefundReason?: string;
   Customer?: { CustomerName: string; PhoneNumber: string };
   ShopTable?: { ShopTableNumber: number };
   Employee?: { FullName: string };
@@ -998,11 +1001,25 @@ export const api = {
           const spend = db.customers[custIdx]!.TotalMoneySpending;
           const qual = db.levels
             .filter((l) => l.RequiredMoney <= spend)
-            .sort((a, b) => b.RequiredMoney - a.RequiredMoney);
-          if (qual[0]) db.customers[custIdx]!.LevelID = qual[0].LevelID;
+            .sort((a, b) => b.RequiredMoney - a.RequiredMoney)[0];
+          if (qual) {
+            db.customers[custIdx]!.LevelID = qual.LevelID;
+          }
         }
       }
+
       return db.orders[idx]!;
+    }
+  },
+
+  refundOrder: async (id: number, amount: number, reason: string): Promise<Order> => {
+    try {
+      return await api.request(`/orders/${id}/refund`, {
+        method: 'POST',
+        body: JSON.stringify({ RefundAmount: amount, RefundReason: reason }),
+      });
+    } catch (err: any) {
+      throw new Error(err.message || 'Lỗi hệ thống khi hoàn tiền.');
     }
   },
 
