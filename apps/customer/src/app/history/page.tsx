@@ -109,6 +109,21 @@ export default function HistoryPage() {
     }
   };
 
+  const handleCancelOrder = async (orderId: number) => {
+    if (!confirm('Bạn có chắc chắn muốn huỷ đơn hàng này?')) return;
+    
+    try {
+      await api.cancelOrder(orderId);
+      toast.success('Huỷ đơn hàng thành công!');
+      
+      // Refresh
+      const historyList = await api.getCustomerOrders();
+      setOrders(historyList);
+    } catch (e: any) {
+      toast.error(e.message || 'Lỗi huỷ đơn hàng.');
+    }
+  };
+
   const handleOpenReview = (order: Order, drinkId: number, drinkName: string) => {
     setReviewOrder(order);
     setReviewDrinkId(drinkId);
@@ -442,14 +457,26 @@ export default function HistoryPage() {
                       <Clock className="w-3.5 h-3.5" />
                       <span>Phục vụ tại bàn / mang đi</span>
                     </div>
-                    <Button
-                      onClick={() => handleReorder(order)}
-                      size="sm"
-                      variant="outline"
-                      className="rounded-xl text-xs font-serif uppercase tracking-wider font-bold gap-1 border-primary/40 hover:bg-primary hover:text-white"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" /> Mua lại đơn này
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {order.OrderStatus === 'PENDING' && (
+                        <Button
+                          onClick={() => handleCancelOrder(order.OrderID)}
+                          size="sm"
+                          variant="danger"
+                          className="rounded-xl text-xs font-serif uppercase tracking-wider font-bold gap-1"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Hủy & Hoàn tiền
+                        </Button>
+                      )}
+                      <Button
+                        onClick={() => handleReorder(order)}
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl text-xs font-serif uppercase tracking-wider font-bold gap-1 border-primary/40 hover:bg-primary hover:text-white"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Mua lại đơn này
+                      </Button>
+                    </div>
                   </div>
                 </Card>
               );

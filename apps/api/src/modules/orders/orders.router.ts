@@ -43,6 +43,11 @@ const updateStatusSchema = z.object({
   OrderStatus: z.enum(['PENDING', 'PREPARING', 'COMPLETED', 'CANCELLED']),
 });
 
+const refundSchema = z.object({
+  RefundAmount: z.coerce.number().nonnegative(),
+  RefundReason: z.string().optional(),
+});
+
 // Static catalog mapping of DrinkSizeID to DrinkName/Size/Price details for offline mock database representation
 const mockDrinkSizesMap: Record<number, { DrinkName: string; SizeName: string; UnitPrice: number }> = {
   1: { DrinkName: 'Trà Ô Long sữa Phêla', SizeName: 'S', UnitPrice: 45000 },
@@ -316,6 +321,40 @@ router.post('/customer-place', async (req, res, next) => {
   }
 });
 
+// POST /customer-cancel/:id - Customer cancels PENDING order
+router.post('/customer-cancel/:id', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id || '');
+    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
+
+    const order = await prisma.orders.findUnique({
+      where: { OrderID: orderId },
+    });
+
+    if (!order) throw new AppError(404, 'Order not found.');
+
+    if (order.OrderStatus !== 'PENDING') {
+      throw new AppError(400, 'Chỉ có thể huỷ đơn hàng khi đang ở trạng thái Chờ duyệt (PENDING).');
+    }
+
+    const isPaid = order.PaymentStatus === 'PAID';
+
+    const updated = await prisma.orders.update({
+      where: { OrderID: orderId },
+      data: {
+        OrderStatus: 'CANCELLED',
+        RefundStatus: isPaid ? 'REQUESTED' : 'NONE', // Nếu đã thanh toán, chuyển sang yêu cầu hoàn tiền
+        RefundAmount: isPaid ? order.TotalPrice : 0,
+        RefundReason: 'Khách hàng tự huỷ qua ứng dụng.',
+      },
+    });
+
+    return sendResponse(res, 200, true, 'Huỷ đơn hàng thành công', updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/customer-history/:phoneNumber', async (req, res, next) => {
   try {
     const phoneNumber = req.params.phoneNumber;
@@ -423,6 +462,63 @@ async function checkAndSyncGHN(order: any) {
   }
   return null;
 }
+
+// POST /:id/refund - Process Refund
+router.post('/:id/refund', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id || '');
+    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
+
+    const validatedData = refundSchema.parse(req.body);
+
+    const order = await prisma.orders.findUnique({
+      where: { OrderID: orderId },
+    });
+
+    if (!order) throw new AppError(404, 'Order not found.');
+
+    if (order.RefundStatus === 'FULL' || order.RefundStatus === 'PARTIAL') {
+      throw new AppError(400, 'Order has already been refunded.');
+    }
+
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      let refundStatus = 'FULL';
+      if (validatedData.RefundAmount < order.TotalPrice.toNumber()) {
+        refundStatus = 'PARTIAL';
+      }
+
+      const updated = await tx.orders.update({
+        where: { OrderID: orderId },
+        data: {
+          RefundStatus: refundStatus,
+          RefundAmount: validatedData.RefundAmount,
+          RefundReason: validatedData.RefundReason || null,
+          OrderStatus: 'CANCELLED',
+        },
+      });
+
+      // Bù trừ công nợ hội viên nếu đơn hàng đã COMPLETED trước đó
+      if (order.OrderStatus === 'COMPLETED' && order.CustomerID) {
+        await tx.customer.update({
+          where: { CustomerID: order.CustomerID },
+          data: {
+            TotalMoneySpending: {
+              decrement: validatedData.RefundAmount,
+            },
+          },
+        });
+        
+        await upgradeCustomerLevel(order.CustomerID, tx);
+      }
+
+      return updated;
+    });
+
+    return sendResponse(res, 200, true, 'Hoàn tiền thành công', updatedOrder);
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /customer-status/:id - Public status polling for customer UI
 router.get('/customer-status/:id', async (req, res, next) => {

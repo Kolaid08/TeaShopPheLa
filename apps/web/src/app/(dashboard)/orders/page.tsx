@@ -25,6 +25,11 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  
+  // Refund modal states
+  const [isRefundOpen, setIsRefundOpen] = useState(false);
+  const [refundAmount, setRefundAmount] = useState<number>(0);
+  const [refundReason, setRefundReason] = useState<string>('');
 
   const loadOrders = async () => {
     try {
@@ -56,6 +61,20 @@ export default function OrdersPage() {
   const openOrderDetail = (order: Order) => {
     setSelectedOrder(order);
     setIsDetailOpen(true);
+  };
+
+  const handleRefundSubmit = async () => {
+    if (!selectedOrder) return;
+    try {
+      await api.refundOrder(selectedOrder.OrderID, refundAmount, refundReason);
+      toast.success(`Đã hoàn tiền ${refundAmount.toLocaleString('vi-VN')} đ cho đơn hàng #${selectedOrder.OrderID}`);
+      setIsRefundOpen(false);
+      loadOrders();
+      // Update selected order view
+      setSelectedOrder((prev) => (prev ? { ...prev, RefundStatus: 'PARTIAL', RefundAmount: refundAmount, RefundReason: refundReason, OrderStatus: 'CANCELLED' } : null));
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi hoàn tiền hóa đơn.');
+    }
   };
 
   // Filter orders
@@ -244,6 +263,22 @@ export default function OrdersPage() {
                 </Badge>
               </div>
 
+              {selectedOrder.RefundStatus && selectedOrder.RefundStatus !== 'NONE' && (
+                <div className="flex justify-between items-center pt-2 border-t border-border">
+                  <span className="text-muted-foreground font-bold">Hoàn tiền:</span>
+                  <div className="text-right">
+                    <Badge variant={selectedOrder.RefundStatus === 'FULL' || selectedOrder.RefundStatus === 'PARTIAL' ? 'success' : 'warning'}>
+                      {selectedOrder.RefundStatus === 'REQUESTED' ? 'Đang yêu cầu' : selectedOrder.RefundStatus === 'PARTIAL' ? 'Một phần' : 'Toàn bộ'}
+                    </Badge>
+                    {(selectedOrder.RefundAmount || 0) > 0 && (
+                      <div className="text-[10px] font-mono font-bold mt-1 text-danger">
+                        -{Number(selectedOrder.RefundAmount).toLocaleString('vi-VN')} đ
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Thông tin GHN nếu có */}
               {selectedOrder.DeliveryType === 'DELIVERY' && (
                 <div className="mt-4 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-2.5">
@@ -346,6 +381,24 @@ export default function OrdersPage() {
                 </div>
               )}
 
+            {/* Refund Action Trigger */}
+            {(selectedOrder.OrderStatus === 'CANCELLED' || selectedOrder.OrderStatus === 'COMPLETED') &&
+              (!selectedOrder.RefundStatus || selectedOrder.RefundStatus === 'NONE' || selectedOrder.RefundStatus === 'REQUESTED') && (
+                <div className="pt-2">
+                  <Button
+                    variant="outline"
+                    className="w-full py-3 rounded-xl border-amber-500/50 text-amber-600 hover:bg-amber-50"
+                    onClick={() => {
+                      setRefundAmount(selectedOrder.TotalPrice);
+                      setRefundReason(selectedOrder.RefundStatus === 'REQUESTED' ? 'Khách hàng yêu cầu hủy đơn' : '');
+                      setIsRefundOpen(true);
+                    }}
+                  >
+                    Hoàn tiền (Refund)
+                  </Button>
+                </div>
+            )}
+
             <div className="flex gap-4">
               <Button
                 variant="outline"
@@ -357,6 +410,47 @@ export default function OrdersPage() {
             </div>
           </div>
         )}
+      </Dialog>
+
+      {/* Refund Modal */}
+      <Dialog
+        isOpen={isRefundOpen}
+        onClose={() => setIsRefundOpen(false)}
+        title="Thực hiện Hoàn Tiền"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Bạn đang thực hiện thủ tục hoàn tiền cho hóa đơn #{selectedOrder?.OrderID}. 
+            Vui lòng thực hiện chuyển khoản tay cho khách trước khi xác nhận trên hệ thống.
+          </p>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-muted-foreground">Số tiền hoàn (VNĐ)</label>
+            <Input
+              type="number"
+              value={refundAmount}
+              onChange={(e) => setRefundAmount(Number(e.target.value))}
+              placeholder="VD: 55000"
+            />
+            <p className="text-[10px] text-muted-foreground font-mono italic">
+              * Tổng tiền hóa đơn gốc: {selectedOrder?.TotalPrice.toLocaleString('vi-VN')} đ
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-muted-foreground">Lý do hoàn tiền</label>
+            <Input
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+              placeholder="Khách đổi ý, hết nguyên liệu..."
+            />
+          </div>
+
+          <div className="pt-4 border-t border-border flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setIsRefundOpen(false)}>Hủy bỏ</Button>
+            <Button variant="danger" onClick={handleRefundSubmit}>Xác nhận Hoàn tiền</Button>
+          </div>
+        </div>
       </Dialog>
     </div>
   );

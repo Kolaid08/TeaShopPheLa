@@ -281,6 +281,12 @@ model Orders {
   ShippingFee    Decimal?      @db.Decimal(10, 2)
   DiscountAmount Decimal?      @db.Decimal(10, 2)
   GHN_OrderCode  String?       @db.VarChar(100)
+
+  // Refund Info
+  RefundStatus   String        @default("NONE") @db.VarChar(50) // NONE, REQUESTED, PARTIAL, FULL
+  RefundAmount   Decimal?      @db.Decimal(10, 2)
+  RefundReason   String?       @db.NVarChar(500)
+
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
