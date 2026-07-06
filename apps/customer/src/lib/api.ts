@@ -623,4 +623,15 @@ export const api = {
       throw new Error(e.message || 'Lỗi kết nối kiểm tra mã giảm giá');
     }
   },
+
+  getChatboxCombos: async (): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/promotions/chatbox-combos`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (res.ok && payload.success) return payload.data;
+      return [];
+    } catch (e: any) {
+      return [];
+    }
+  },
 };

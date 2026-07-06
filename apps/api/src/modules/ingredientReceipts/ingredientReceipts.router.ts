@@ -21,6 +21,7 @@ const receiptSchema = z.object({
 
 // Protect routes
 router.use(verifyJWT);
+router.use(requireRole(['ADMIN', 'MANAGER', 'STAFF']));
 
 // GET / - List all receipts with optional paginations
 router.get('/', async (req, res, next) => {
@@ -91,7 +92,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a receipt + nested details (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = receiptSchema.parse(req.body);
 
@@ -139,7 +140,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PATCH /:id/assign-shipper - Assign a shipper to pick up the receipt (Manager/Admin only)
-router.patch('/:id/assign-shipper', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.patch('/:id/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const receiptId = parseInt(req.params.id || '');
     if (isNaN(receiptId)) throw new AppError(400, 'Invalid ID format.');
@@ -188,7 +189,7 @@ router.patch('/:id/assign-shipper', requireRole(['ADMIN', 'MANAGER']), async (re
 });
 
 // PATCH /:id/confirm - Confirm a receipt and trigger stock increment (Manager/Admin only)
-router.patch('/:id/confirm', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.patch('/:id/confirm', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const receiptId = parseInt(req.params.id || '');
     if (isNaN(receiptId)) throw new AppError(400, 'Invalid ID format.');
@@ -239,7 +240,7 @@ router.patch('/:id/confirm', requireRole(['ADMIN', 'MANAGER']), async (req, res,
 });
 
 // DELETE /:id - Delete a pending receipt (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const receiptId = parseInt(req.params.id || '');
     if (isNaN(receiptId)) throw new AppError(400, 'Invalid ID format.');

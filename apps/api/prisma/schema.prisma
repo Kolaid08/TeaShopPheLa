@@ -435,6 +435,7 @@ model Promotion {
   MinQuantity    Int         @default(2)
   TargetDrinkIDs String?     @db.NVarChar(500)
   IsActive       Boolean     @default(true)
+  IsCombo        Boolean     @default(false)
   StartDate      DateTime?
   EndDate        DateTime?
   createdAt      DateTime    @default(now())

@@ -33,6 +33,18 @@ export default function PromotionsPage() {
   const [type, setType] = useState('PERCENT'); // PERCENT, AMOUNT, FREE_ITEM
   const [value, setValue] = useState<number>(0);
   const [minQuantity, setMinQuantity] = useState<number>(2);
+  const [drinkSizes, setDrinkSizes] = useState<any[]>([]);
+  const [targetDrinkIDs, setTargetDrinkIDs] = useState<number[]>([]);
+  const [isCombo, setIsCombo] = useState<boolean>(false);
+
+  const loadOptions = async () => {
+    try {
+      const sizes = await api.getDrinkSizes();
+      setDrinkSizes(sizes.filter((s: any) => s.DrinkSizeStatus === 'AVAILABLE'));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -47,6 +59,7 @@ export default function PromotionsPage() {
 
   useEffect(() => {
     loadData();
+    loadOptions();
   }, []);
 
   const handleOpenModal = (promo: any = null) => {
@@ -57,6 +70,16 @@ export default function PromotionsPage() {
       setType(promo.Type);
       setValue(promo.Value);
       setMinQuantity(promo.MinQuantity);
+      setIsCombo(promo.IsCombo || false);
+      if (promo.TargetDrinkIDs) {
+        try {
+          setTargetDrinkIDs(JSON.parse(promo.TargetDrinkIDs));
+        } catch {
+          setTargetDrinkIDs([]);
+        }
+      } else {
+        setTargetDrinkIDs([]);
+      }
     } else {
       setEditingPromotion(null);
       setName('');
@@ -64,6 +87,8 @@ export default function PromotionsPage() {
       setType('PERCENT');
       setValue(0);
       setMinQuantity(2);
+      setTargetDrinkIDs([]);
+      setIsCombo(false);
     }
     setIsModalOpen(true);
   };
@@ -78,7 +103,9 @@ export default function PromotionsPage() {
         Type: type,
         Value: Number(value),
         MinQuantity: Number(minQuantity),
-        IsActive: true
+        TargetDrinkIDs: targetDrinkIDs.length > 0 ? targetDrinkIDs : null,
+        IsActive: true,
+        IsCombo: isCombo
       };
 
       if (editingPromotion) {
@@ -233,6 +260,26 @@ export default function PromotionsPage() {
             />
           </div>
 
+          <div className="space-y-1.5">
+            <label className="text-sm font-bold text-foreground">Áp dụng cho các món (bỏ trống để áp dụng toàn bộ menu)</label>
+            <select 
+              multiple
+              className="w-full flex min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              value={targetDrinkIDs.map(String)}
+              onChange={(e) => { 
+                const opts = Array.from(e.target.selectedOptions); 
+                setTargetDrinkIDs(opts.map(o => Number(o.value))); 
+              }}
+            >
+              {drinkSizes.map(ds => (
+                <option key={ds.DrinkSizeID} value={ds.DrinkSizeID} className="p-1">
+                  {ds.Drink?.DrinkName} ({ds.Size?.SizeName}) - {ds.UnitPrice.toLocaleString('vi-VN')} đ
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">Giữ phím Ctrl (hoặc Cmd) để chọn/bỏ chọn nhiều món.</p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-bold text-foreground">Số lượng ly tối thiểu (Combo)</label>
@@ -268,6 +315,19 @@ export default function PromotionsPage() {
               value={value}
               onChange={(e) => setValue(Number(e.target.value))}
             />
+          </div>
+
+          <div className="flex items-center space-x-2 pt-2">
+            <input 
+              type="checkbox" 
+              id="isComboCheckbox" 
+              checked={isCombo}
+              onChange={(e) => setIsCombo(e.target.checked)}
+              className="w-4 h-4 text-primary rounded focus:ring-primary border-gray-300"
+            />
+            <label htmlFor="isComboCheckbox" className="text-sm font-bold text-foreground cursor-pointer select-none">
+              Hiển thị Khuyến Mãi này lên Chatbox của Khách Hàng (Dưới dạng Combo AI Gợi ý)
+            </label>
           </div>
 
           <div className="pt-4 flex justify-end gap-3 border-t border-border">

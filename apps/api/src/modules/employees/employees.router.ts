@@ -23,7 +23,7 @@ const employeeSchema = z.object({
 router.use(verifyJWT);
 
 // GET / - List employees with optional pagination & role filtering
-router.get('/', async (req, res, next) => {
+router.get('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const { page, limit, search, sortBy, sortDir, skip } = parsePagination(req.query);
     const roleIdQuery = req.query.roleId ? parseInt(req.query.roleId as string) : undefined;
@@ -73,7 +73,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // GET /:id - Single employee detail
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const empId = parseInt(req.params.id || '');
     if (isNaN(empId)) throw new AppError(400, 'Invalid ID format.');
@@ -93,7 +93,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a new employee (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const bodyData = employeeSchema.parse(req.body);
     if (!bodyData.password) {
@@ -134,7 +134,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PUT /:id - Update an employee (Manager/Admin only)
-router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const empId = parseInt(req.params.id || '');
     if (isNaN(empId)) throw new AppError(400, 'Invalid ID format.');
@@ -173,7 +173,7 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
 });
 
 // DELETE /:id - Delete an employee (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const empId = parseInt(req.params.id || '');
     if (isNaN(empId)) throw new AppError(400, 'Invalid ID format.');

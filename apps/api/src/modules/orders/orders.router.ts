@@ -7,7 +7,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { upgradeCustomerLevel } from '../customers/customers.router';
 import { payos } from '../payment/payment.controller';
 
-async function processOrderIngredients(tx: any, items: { DrinkSizeID: number, Quantity: number }[], mode: 'deduct' | 'refund') {
+export async function processOrderIngredients(tx: any, items: { DrinkSizeID: number, Quantity: number }[], mode: 'deduct' | 'refund') {
   for (const item of items) {
     const ds = await tx.drinkSize.findUnique({
       where: { DrinkSizeID: item.DrinkSizeID },
@@ -125,47 +125,92 @@ router.post('/customer-combos', async (req, res, next) => {
       return sendResponse(res, 200, true, 'No combos', []);
     }
 
-    const ordersWithItems = await prisma.orderDetail.findMany({
-      where: { DrinkSizeID: { in: drinkSizeIds } },
-      select: { OrderID: true }
-    });
+    try {
+      // Fetch recent 500 orders containing these items to prevent SQL Server parameter limits (>2100)
+      const ordersWithItems = await prisma.orderDetail.findMany({
+        where: { DrinkSizeID: { in: drinkSizeIds } },
+        select: { OrderID: true },
+        orderBy: { OrderID: 'desc' },
+        take: 500,
+      });
 
-    if (ordersWithItems.length === 0) {
-      return sendResponse(res, 200, true, 'No combos', []);
-    }
-
-    const orderIds = Array.from(new Set(ordersWithItems.map(o => o.OrderID)));
-
-    const otherItems = await prisma.orderDetail.findMany({
-      where: {
-        OrderID: { in: orderIds },
-        DrinkSizeID: { notIn: drinkSizeIds }
-      },
-      include: {
-        DrinkSize: { include: { Drink: true, Size: true } }
+      if (ordersWithItems.length === 0) {
+        return sendResponse(res, 200, true, 'No combos', []);
       }
-    });
 
-    const freqMap = new Map<number, { count: number, item: any }>();
-    for (const item of otherItems) {
-      if (!freqMap.has(item.DrinkSizeID)) {
-        freqMap.set(item.DrinkSizeID, { count: 0, item });
+      const orderIds = Array.from(new Set(ordersWithItems.map(o => o.OrderID)));
+
+      const otherItems = await prisma.orderDetail.findMany({
+        where: {
+          OrderID: { in: orderIds },
+          DrinkSizeID: { notIn: drinkSizeIds }
+        },
+        include: {
+          DrinkSize: { include: { Drink: true, Size: true } }
+        }
+      });
+
+      const freqMap = new Map<number, { count: number, item: any }>();
+      for (const item of otherItems) {
+        if (!freqMap.has(item.DrinkSizeID)) {
+          freqMap.set(item.DrinkSizeID, { count: 0, item });
+        }
+        freqMap.get(item.DrinkSizeID)!.count++;
       }
-      freqMap.get(item.DrinkSizeID)!.count++;
+
+      const sorted = Array.from(freqMap.values()).sort((a, b) => b.count - a.count).slice(0, 3);
+      
+      const result = sorted.map(s => ({
+        DrinkSizeID: s.item.DrinkSizeID,
+        DrinkName: s.item.DrinkSize.Drink.DrinkName,
+        SizeName: s.item.DrinkSize.Size.SizeName,
+        UnitPrice: s.item.DrinkSize.UnitPrice,
+        DrinkImageURL: s.item.DrinkSize.Drink.DrinkImageURL,
+        FrequencyCount: s.count
+      }));
+
+      return sendResponse(res, 200, true, 'Combo suggestions', result);
+    } catch {
+      let orderIds = new Set<number>();
+      for (const order of serverMockOrders) {
+        if (order.OrderDetails) {
+          for (const item of order.OrderDetails) {
+            if (drinkSizeIds.includes(item.DrinkSizeID)) {
+              orderIds.add(order.OrderID);
+              break;
+            }
+          }
+        }
+      }
+
+      if (orderIds.size === 0) return sendResponse(res, 200, true, 'No combos (Offline)', []);
+
+      const freqMap = new Map<number, { count: number, item: any }>();
+      for (const order of serverMockOrders) {
+        if (orderIds.has(order.OrderID) && order.OrderDetails) {
+          for (const item of order.OrderDetails) {
+             if (!drinkSizeIds.includes(item.DrinkSizeID)) {
+                if (!freqMap.has(item.DrinkSizeID)) {
+                  freqMap.set(item.DrinkSizeID, { count: 0, item });
+                }
+                freqMap.get(item.DrinkSizeID)!.count++;
+             }
+          }
+        }
+      }
+
+      const sorted = Array.from(freqMap.values()).sort((a, b) => b.count - a.count).slice(0, 3);
+      const result = sorted.map(s => ({
+        DrinkSizeID: s.item.DrinkSizeID,
+        DrinkName: s.item.DrinkSize?.Drink?.DrinkName || mockDrinkSizesMap[s.item.DrinkSizeID]?.DrinkName || 'N/A',
+        SizeName: s.item.DrinkSize?.Size?.SizeName || mockDrinkSizesMap[s.item.DrinkSizeID]?.SizeName || 'M',
+        UnitPrice: s.item.UnitPrice,
+        DrinkImageURL: null,
+        FrequencyCount: s.count
+      }));
+
+      return sendResponse(res, 200, true, 'Combo suggestions (Offline Mode)', result);
     }
-
-    const sorted = Array.from(freqMap.values()).sort((a, b) => b.count - a.count).slice(0, 3);
-    
-    const result = sorted.map(s => ({
-      DrinkSizeID: s.item.DrinkSizeID,
-      DrinkName: s.item.DrinkSize.Drink.DrinkName,
-      SizeName: s.item.DrinkSize.Size.SizeName,
-      UnitPrice: s.item.DrinkSize.UnitPrice,
-      DrinkImageURL: s.item.DrinkSize.Drink.DrinkImageURL,
-      FrequencyCount: s.count
-    }));
-
-    return sendResponse(res, 200, true, 'Combo suggestions', result);
   } catch (err) {
     next(err);
   }
@@ -178,77 +223,129 @@ router.get('/customer-frequent/:customerId', async (req, res, next) => {
       return sendResponse(res, 200, true, 'No frequent items', []);
     }
 
-    // Lấy tất cả OrderDetails của khách hàng này từ các đơn hoàn thành
-    const details = await prisma.orderDetail.findMany({
-      where: {
-        Orders: {
-          CustomerID: customerId,
-          OrderStatus: { in: ['COMPLETED', 'PENDING', 'PREPARING', 'READY'] },
+    try {
+      // Lấy tất cả OrderDetails của khách hàng này từ các đơn hoàn thành
+      const details = await prisma.orderDetail.findMany({
+        where: {
+          Orders: {
+            CustomerID: customerId,
+            OrderStatus: { in: ['COMPLETED', 'PENDING', 'PREPARING', 'READY'] },
+          },
         },
-      },
-      include: {
-        DrinkSize: {
-          include: { Drink: true, Size: true },
+        include: {
+          DrinkSize: {
+            include: { Drink: true, Size: true },
+          },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200, // Look at recent 200 items to avoid perf issue
-    });
+        orderBy: { createdAt: 'desc' },
+        take: 200, // Look at recent 200 items to avoid perf issue
+      });
 
-    if (details.length === 0) {
-      return sendResponse(res, 200, true, 'No frequent items', []);
-    }
-
-    // Gom nhóm theo DrinkSizeID
-    const frequencyMap = new Map<number, { count: number, item: any, configs: any[] }>();
-    
-    for (const d of details) {
-      if (!frequencyMap.has(d.DrinkSizeID)) {
-        frequencyMap.set(d.DrinkSizeID, { count: 0, item: d, configs: [] });
+      if (details.length === 0) {
+        return sendResponse(res, 200, true, 'No frequent items', []);
       }
-      const entry = frequencyMap.get(d.DrinkSizeID)!;
-      entry.count += 1;
-      entry.configs.push({ Sugar: d.Sugar, Ice: d.Ice, Toppings: d.Toppings || '' });
-    }
 
-    // Sort by count
-    const sorted = Array.from(frequencyMap.values()).sort((a, b) => b.count - a.count).slice(0, 5); // Lấy Top 5
+      // Gom nhóm theo DrinkSizeID
+      const frequencyMap = new Map<number, { count: number, item: any, configs: any[] }>();
+      
+      for (const d of details) {
+        if (!frequencyMap.has(d.DrinkSizeID)) {
+          frequencyMap.set(d.DrinkSizeID, { count: 0, item: d, configs: [] });
+        }
+        const entry = frequencyMap.get(d.DrinkSizeID)!;
+        entry.count += 1;
+        entry.configs.push({ Sugar: d.Sugar, Ice: d.Ice, Toppings: d.Toppings || '' });
+      }
 
-    // Build final response with most common config for each
-    const result = sorted.map(s => {
-      // Find most common config
-      const configCount = new Map<string, number>();
-      for (const cfg of s.configs) {
-        const key = `${cfg.Sugar}|${cfg.Ice}|${cfg.Toppings}`;
-        configCount.set(key, (configCount.get(key) || 0) + 1);
+      // Sort by count
+      const sorted = Array.from(frequencyMap.values()).sort((a, b) => b.count - a.count).slice(0, 5); // Lấy Top 5
+
+      // Build final response with most common config for each
+      const result = sorted.map(s => {
+        // Find most common config
+        const configCount = new Map<string, number>();
+        for (const cfg of s.configs) {
+          const key = `${cfg.Sugar}|${cfg.Ice}|${cfg.Toppings}`;
+          configCount.set(key, (configCount.get(key) || 0) + 1);
+        }
+        
+        let bestConfigStr = '';
+        let maxCfg = 0;
+        for (const [key, count] of configCount.entries()) {
+          if (count > maxCfg) {
+            maxCfg = count;
+            bestConfigStr = key;
+          }
+        }
+        const [sugar, ice, toppings] = bestConfigStr.split('|');
+
+        return {
+          DrinkSizeID: s.item.DrinkSizeID,
+          DrinkName: s.item.DrinkSize.Drink.DrinkName,
+          SizeName: s.item.DrinkSize.Size.SizeName,
+          UnitPrice: s.item.DrinkSize.UnitPrice,
+          DrinkImageURL: s.item.DrinkSize.Drink.DrinkImageURL,
+          FrequencyCount: s.count,
+          PreferredConfig: {
+            Sugar: sugar,
+            Ice: ice,
+            Toppings: toppings
+          }
+        };
+      });
+
+      return sendResponse(res, 200, true, 'Lấy danh sách món tủ thành công', result);
+    } catch {
+      const details: any[] = [];
+      for (const order of serverMockOrders) {
+        if (order.CustomerID === customerId && ['COMPLETED', 'PENDING', 'PREPARING', 'READY'].includes(order.OrderStatus)) {
+           if (order.OrderDetails) {
+             details.push(...order.OrderDetails);
+           }
+        }
       }
       
-      let bestConfigStr = '';
-      let maxCfg = 0;
-      for (const [key, count] of configCount.entries()) {
-        if (count > maxCfg) {
-          maxCfg = count;
-          bestConfigStr = key;
+      if (details.length === 0) return sendResponse(res, 200, true, 'No frequent items (Offline)', []);
+
+      const frequencyMap = new Map<number, { count: number, item: any, configs: any[] }>();
+      for (const d of details) {
+        if (!frequencyMap.has(d.DrinkSizeID)) {
+          frequencyMap.set(d.DrinkSizeID, { count: 0, item: d, configs: [] });
         }
+        const entry = frequencyMap.get(d.DrinkSizeID)!;
+        entry.count += 1;
+        entry.configs.push({ Sugar: d.Sugar || '100%', Ice: d.Ice || '100%', Toppings: d.Toppings || '' });
       }
-      const [sugar, ice, toppings] = bestConfigStr.split('|');
 
-      return {
-        DrinkSizeID: s.item.DrinkSizeID,
-        DrinkName: s.item.DrinkSize.Drink.DrinkName,
-        SizeName: s.item.DrinkSize.Size.SizeName,
-        UnitPrice: s.item.DrinkSize.UnitPrice,
-        DrinkImageURL: s.item.DrinkSize.Drink.DrinkImageURL,
-        FrequencyCount: s.count,
-        PreferredConfig: {
-          Sugar: sugar,
-          Ice: ice,
-          Toppings: toppings
+      const sorted = Array.from(frequencyMap.values()).sort((a, b) => b.count - a.count).slice(0, 5);
+      const result = sorted.map(s => {
+        const configCount = new Map<string, number>();
+        for (const cfg of s.configs) {
+          const key = `${cfg.Sugar}|${cfg.Ice}|${cfg.Toppings}`;
+          configCount.set(key, (configCount.get(key) || 0) + 1);
         }
-      };
-    });
+        let bestConfigStr = '';
+        let maxCfg = 0;
+        for (const [key, count] of configCount.entries()) {
+          if (count > maxCfg) {
+            maxCfg = count;
+            bestConfigStr = key;
+          }
+        }
+        const [sugar, ice, toppings] = bestConfigStr.split('|');
+        return {
+          DrinkSizeID: s.item.DrinkSizeID,
+          DrinkName: s.item.DrinkSize?.Drink?.DrinkName || mockDrinkSizesMap[s.item.DrinkSizeID]?.DrinkName || 'N/A',
+          SizeName: s.item.DrinkSize?.Size?.SizeName || mockDrinkSizesMap[s.item.DrinkSizeID]?.SizeName || 'M',
+          UnitPrice: s.item.UnitPrice,
+          DrinkImageURL: null,
+          FrequencyCount: s.count,
+          PreferredConfig: { Sugar: sugar, Ice: ice, Toppings: toppings }
+        };
+      });
 
-    return sendResponse(res, 200, true, 'Lấy danh sách món tủ thành công', result);
+      return sendResponse(res, 200, true, 'Lấy danh sách món tủ thành công (Offline Mode)', result);
+    }
   } catch (err) {
     next(err);
   }
@@ -343,11 +440,77 @@ router.post('/customer-place', async (req, res, next) => {
         }
       }
 
-      // Compute base total pricing
+      // Compute base total pricing securely
       let baseTotal = 0;
       validatedData.Items.forEach((item) => {
+        const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
+        if (catalogItem) {
+           item.UnitPrice = catalogItem.UnitPrice.toNumber();
+        }
         baseTotal += item.UnitPrice * item.Quantity;
       });
+
+      // Calculate Promotion Discount (Best applicable promo)
+      let promotionDiscountAmount = 0;
+      const now = new Date();
+      const activePromos = await prisma.promotion.findMany({
+        where: { 
+          IsActive: true,
+          OR: [
+            { StartDate: null, EndDate: null },
+            { StartDate: { lte: now }, EndDate: { gte: now } },
+            { StartDate: { lte: now }, EndDate: null },
+            { StartDate: null, EndDate: { gte: now } }
+          ]
+        }
+      });
+
+      for (const promo of activePromos) {
+        let applicableItemsTotal = 0;
+        let applicableQuantity = 0;
+        
+        let targetIds: number[] | null = null;
+        if (promo.TargetDrinkIDs) {
+          try {
+            targetIds = JSON.parse(promo.TargetDrinkIDs);
+          } catch {}
+        }
+        
+        for (const item of validatedData.Items) {
+          if (!targetIds || targetIds.includes(item.DrinkSizeID)) {
+            applicableItemsTotal += item.UnitPrice * item.Quantity;
+            applicableQuantity += item.Quantity;
+          }
+        }
+
+        if (applicableQuantity >= promo.MinQuantity) {
+          let currentPromoDiscount = 0;
+          if (promo.Type === 'PERCENT') {
+            currentPromoDiscount = applicableItemsTotal * (promo.Value / 100);
+          } else if (promo.Type === 'AMOUNT') {
+            currentPromoDiscount = promo.Value;
+          } else if (promo.Type === 'FREE_ITEM') {
+            const applicableSorted = validatedData.Items
+              .filter(i => !targetIds || targetIds.includes(i.DrinkSizeID))
+              .sort((a, b) => a.UnitPrice - b.UnitPrice);
+            
+            let freeItemsToGive = promo.Value;
+            for (const item of applicableSorted) {
+              if (freeItemsToGive <= 0) break;
+              const qtyToFree = Math.min(item.Quantity, freeItemsToGive);
+              currentPromoDiscount += qtyToFree * item.UnitPrice;
+              freeItemsToGive -= qtyToFree;
+            }
+          }
+          
+          if (currentPromoDiscount > promotionDiscountAmount) {
+            promotionDiscountAmount = currentPromoDiscount;
+          }
+        }
+      }
+
+      // Ratio of remaining price after promo to original price
+      const promoRatio = baseTotal > 0 ? (baseTotal - promotionDiscountAmount) / baseTotal : 1;
 
       // Calculate Customer Discount
       let discountRate = 0;
@@ -372,7 +535,7 @@ router.post('/customer-place', async (req, res, next) => {
         if (!voucher) throw new AppError(404, 'Mã giảm giá không tồn tại');
         if (voucher.IsUsed) throw new AppError(400, 'Mã giảm giá đã được sử dụng');
         if (voucher.ValidUntil && new Date(voucher.ValidUntil) < new Date()) throw new AppError(400, 'Mã giảm giá đã hết hạn');
-        if (voucher.OwnerID && customerId && voucher.OwnerID !== customerId) throw new AppError(403, 'Mã giảm giá không dành cho tài khoản này');
+        if (voucher.OwnerID && voucher.OwnerID !== customerId) throw new AppError(403, 'Mã giảm giá không dành cho tài khoản này');
 
         // Apply voucher
         let targetItemTotal = 0;
@@ -397,6 +560,10 @@ router.post('/customer-place', async (req, res, next) => {
            otherItemsTotal = 0;
         }
 
+        // Scale down totals to calculate voucher on the remaining amount after promotion
+        targetItemTotal = targetItemTotal * promoRatio;
+        otherItemsTotal = otherItemsTotal * promoRatio;
+
         // Calculate voucher discount on targetItemTotal
         if (voucher.DiscountType === 'PERCENT') {
            voucherDiscountAmount = targetItemTotal * (voucher.DiscountValue / 100);
@@ -410,12 +577,12 @@ router.post('/customer-place', async (req, res, next) => {
         usedVoucherId = voucher.VoucherID;
         
       } else {
-        // Normal membership discount on whole bill
-        membershipDiscount = baseTotal * (discountRate / 100);
+        // Normal membership discount on whole bill (after promotion)
+        membershipDiscount = (baseTotal * promoRatio) * (discountRate / 100);
       }
 
-      const totalDiscount = voucherDiscountAmount + membershipDiscount;
-      let finalPrice = baseTotal - totalDiscount;
+      const totalDiscount = promotionDiscountAmount + voucherDiscountAmount + membershipDiscount;
+      let finalPrice = Math.max(0, baseTotal - totalDiscount);
       let computedDistance = null;
       let shippingFee = 0;
 
@@ -480,8 +647,6 @@ router.post('/customer-place', async (req, res, next) => {
             };
           }),
         });
-
-        await processOrderIngredients(tx, validatedData.Items, 'deduct');
 
         if (usedVoucherId) {
           // @ts-ignore
@@ -666,13 +831,6 @@ router.patch('/customer-cancel/:id', async (req, res, next) => {
           data: { OrderStatus: 'CANCELLED' }
         });
 
-        // Refund inventory
-        const itemsToRefund = order.OrderDetails.map((od) => ({
-          DrinkSizeID: od.DrinkSizeID,
-          Quantity: od.Quantity,
-        }));
-        await processOrderIngredients(tx, itemsToRefund, 'refund');
-
         return updated;
       });
 
@@ -855,6 +1013,9 @@ router.post('/', async (req, res, next) => {
     // 1. Gather all DrinkSize ids
     const drinkSizeIds = validatedData.Items.map((i) => i.DrinkSizeID);
     
+    let shippingFee = 0;
+    let computedDistance: number | null = null;
+
     // We try to save to database using Prisma first
     try {
       const catalogItems = await prisma.drinkSize.findMany({
@@ -879,11 +1040,79 @@ router.post('/', async (req, res, next) => {
         }
       }
 
-      // 3. Compute base total pricing
+      // 3. Compute base total pricing securely
       let baseTotal = 0;
       validatedData.Items.forEach((item) => {
+        const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
+        if (catalogItem) {
+           item.UnitPrice = catalogItem.UnitPrice.toNumber();
+        }
         baseTotal += item.UnitPrice * item.Quantity;
       });
+
+      // Calculate Promotion Discount (Best applicable promo)
+      let promotionDiscountAmount = 0;
+      const now = new Date();
+      const activePromos = await prisma.promotion.findMany({
+        where: { 
+          IsActive: true,
+          OR: [
+            { StartDate: null, EndDate: null },
+            { StartDate: { lte: now }, EndDate: { gte: now } },
+            { StartDate: { lte: now }, EndDate: null },
+            { StartDate: null, EndDate: { gte: now } }
+          ]
+        }
+      });
+
+      for (const promo of activePromos) {
+        let applicableItemsTotal = 0;
+        let applicableQuantity = 0;
+        
+        let targetIds: number[] | null = null;
+        if (promo.TargetDrinkIDs) {
+          try {
+            targetIds = JSON.parse(promo.TargetDrinkIDs);
+          } catch {}
+        }
+        
+        for (const item of validatedData.Items) {
+          if (!targetIds || targetIds.includes(item.DrinkSizeID)) {
+            applicableItemsTotal += item.UnitPrice * item.Quantity;
+            applicableQuantity += item.Quantity;
+          }
+        }
+
+        if (applicableQuantity >= promo.MinQuantity) {
+          let currentPromoDiscount = 0;
+          if (promo.Type === 'PERCENT') {
+            currentPromoDiscount = applicableItemsTotal * (promo.Value / 100);
+          } else if (promo.Type === 'AMOUNT') {
+            currentPromoDiscount = promo.Value;
+          } else if (promo.Type === 'FREE_ITEM') {
+            const applicableSorted = validatedData.Items
+              .filter(i => !targetIds || targetIds.includes(i.DrinkSizeID))
+              .sort((a, b) => a.UnitPrice - b.UnitPrice);
+            
+            const multiplier = Math.floor(applicableQuantity / promo.MinQuantity);
+            let freeItemsToGive = promo.Value * multiplier;
+            
+            for (const item of applicableSorted) {
+              if (freeItemsToGive <= 0) break;
+              const qtyToFree = Math.min(item.Quantity, freeItemsToGive);
+              currentPromoDiscount += qtyToFree * item.UnitPrice;
+              freeItemsToGive -= qtyToFree;
+            }
+          }
+          
+          if (currentPromoDiscount > promotionDiscountAmount) {
+            promotionDiscountAmount = currentPromoDiscount;
+          }
+        }
+      }
+
+      // Ratio of remaining price after promo to original price
+      const promoRatio = baseTotal > 0 ? (baseTotal - promotionDiscountAmount) / baseTotal : 1;
 
       // 4. Calculate Customer Discount
       let discountRate = 0;
@@ -909,7 +1138,7 @@ router.post('/', async (req, res, next) => {
         if (!voucher) throw new AppError(404, 'Mã giảm giá không tồn tại');
         if (voucher.IsUsed) throw new AppError(400, 'Mã giảm giá đã được sử dụng');
         if (voucher.ValidUntil && new Date(voucher.ValidUntil) < new Date()) throw new AppError(400, 'Mã giảm giá đã hết hạn');
-        if (voucher.OwnerID && customerId && voucher.OwnerID !== customerId) throw new AppError(403, 'Mã giảm giá không dành cho tài khoản này');
+        if (voucher.OwnerID && voucher.OwnerID !== customerId) throw new AppError(403, 'Mã giảm giá không dành cho tài khoản này');
 
         // Apply voucher
         let targetItemTotal = 0;
@@ -933,6 +1162,10 @@ router.post('/', async (req, res, next) => {
            otherItemsTotal = 0;
         }
 
+        // Scale down totals to calculate voucher on the remaining amount after promotion
+        targetItemTotal = targetItemTotal * promoRatio;
+        otherItemsTotal = otherItemsTotal * promoRatio;
+
         if (voucher.DiscountType === 'PERCENT') {
            voucherDiscountAmount = targetItemTotal * (voucher.DiscountValue / 100);
         } else {
@@ -943,11 +1176,27 @@ router.post('/', async (req, res, next) => {
         membershipDiscount = otherItemsTotal * (discountRate / 100);
         usedVoucherId = voucher.VoucherID;
       } else {
-        membershipDiscount = baseTotal * (discountRate / 100);
+        membershipDiscount = (baseTotal * promoRatio) * (discountRate / 100);
       }
 
-      const totalDiscount = voucherDiscountAmount + membershipDiscount;
-      const finalPrice = baseTotal - totalDiscount;
+      const totalDiscount = promotionDiscountAmount + voucherDiscountAmount + membershipDiscount;
+      let finalPrice = Math.max(0, baseTotal - totalDiscount);
+
+      if (validatedData.OrderType === 'DELIVERY' && validatedData.Latitude && validatedData.Longitude) {
+         // Default shop location (Ho Chi Minh City center)
+         const shopLat = 10.762622;
+         const shopLng = 106.660172;
+         computedDistance = calculateDistance(shopLat, shopLng, validatedData.Latitude, validatedData.Longitude);
+         
+         if (finalPrice >= 300000) {
+            shippingFee = 0; // Free ship > 300k
+         } else if (computedDistance <= 3) {
+            shippingFee = 15000;
+         } else {
+            shippingFee = 15000 + Math.ceil(computedDistance - 3) * 5000;
+         }
+         finalPrice += shippingFee;
+      }
 
       // Validate ShopTableID
       let validShopTableId = validatedData.ShopTableID || null;
@@ -970,6 +1219,14 @@ router.post('/', async (req, res, next) => {
             OrderStatus: 'PENDING',
             TotalPrice: finalPrice,
             OrderNote: validatedData.OrderNote || null,
+            OrderType: validatedData.OrderType || (validShopTableId ? 'DINE_IN' : 'TAKEAWAY'),
+            ShippingAddress: validatedData.ShippingAddress || null,
+            Latitude: validatedData.Latitude || null,
+            Longitude: validatedData.Longitude || null,
+            Distance: computedDistance,
+            ReceiverName: validatedData.ReceiverName || validatedData.CustomerName || null,
+            ReceiverPhone: validatedData.ReceiverPhone || validatedData.CustomerPhoneNumber || null,
+            ShippingFee: shippingFee,
           },
         });
 
@@ -986,8 +1243,6 @@ router.post('/', async (req, res, next) => {
             };
           }),
         });
-
-        await processOrderIngredients(tx, validatedData.Items, 'deduct');
 
         if (usedVoucherId) {
           // @ts-ignore
@@ -1022,7 +1277,13 @@ router.post('/', async (req, res, next) => {
         TotalPrice: validatedData.Items.reduce((acc, item) => {
           const matched = mockDrinkSizesMap[item.DrinkSizeID] || { UnitPrice: 50000 };
           return acc + matched.UnitPrice * item.Quantity;
-        }, 0),
+        }, 0) + shippingFee,
+        OrderType: validatedData.OrderType || (validatedData.ShopTableID ? 'DINE_IN' : 'TAKEAWAY'),
+        ShippingAddress: validatedData.ShippingAddress || null,
+        Latitude: validatedData.Latitude || null,
+        Longitude: validatedData.Longitude || null,
+        ReceiverName: validatedData.ReceiverName || validatedData.CustomerName || null,
+        ReceiverPhone: validatedData.ReceiverPhone || validatedData.CustomerPhoneNumber || null,
         OrderNote: validatedData.OrderNote || null,
         OrderDetails: validatedData.Items.map((item) => {
           const matched = mockDrinkSizesMap[item.DrinkSizeID] || { DrinkName: 'Trà Phêla', SizeName: 'M', UnitPrice: 50000 };
@@ -1092,18 +1353,18 @@ router.patch('/:id/status', async (req, res, next) => {
           await upgradeCustomerLevel(order.CustomerID, tx);
         }
 
-        // 4. Hoàn trả nguyên liệu nếu đơn hàng bị HỦY và trước đó chưa pha chế
-        if (validatedData.OrderStatus === 'CANCELLED' && order.OrderStatus === 'PENDING') {
+        // 4. Trừ nguyên liệu khi đơn hàng hoàn thành (COMPLETED)
+        if (validatedData.OrderStatus === 'COMPLETED' && order.OrderStatus !== 'COMPLETED') {
           const orderDetails = await tx.orderDetail.findMany({
             where: { OrderID: orderId },
           });
           
-          const itemsToRefund = orderDetails.map((od: any) => ({
+          const itemsToDeduct = orderDetails.map((od: any) => ({
             DrinkSizeID: od.DrinkSizeID,
             Quantity: od.Quantity
           }));
           
-          await processOrderIngredients(tx, itemsToRefund, 'refund');
+          await processOrderIngredients(tx, itemsToDeduct, 'deduct');
         }
 
         return updated;

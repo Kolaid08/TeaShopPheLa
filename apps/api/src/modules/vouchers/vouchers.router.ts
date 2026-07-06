@@ -34,6 +34,11 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, 
       return sendResponse(res, 400, false, 'Mã voucher đã tồn tại');
     }
 
+    const type = DiscountType || 'PERCENT';
+    if (type === 'PERCENT' && Number(DiscountValue) > 100) {
+      return sendResponse(res, 400, false, 'Mức giảm giá theo phần trăm không được vượt quá 100%');
+    }
+
     const voucher = await prisma.voucher.create({
       data: {
         Code,
@@ -79,7 +84,7 @@ router.post('/check', async (req, res, next) => {
       return sendResponse(res, 400, false, 'Mã giảm giá đã hết hạn');
     }
 
-    if (voucher.OwnerID && CustomerID && voucher.OwnerID !== CustomerID) {
+    if (voucher.OwnerID && voucher.OwnerID !== CustomerID) {
       return sendResponse(res, 403, false, 'Mã giảm giá không dành cho tài khoản này');
     }
 

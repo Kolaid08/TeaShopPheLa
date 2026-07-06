@@ -14,10 +14,21 @@ export const payos = new PayOS({
 
 export const createPayOSOrder = async (req: Request, res: Response) => {
   try {
-    const { orderId, amount, description, cancelUrl, returnUrl } = req.body;
+    const { orderId, description, cancelUrl, returnUrl } = req.body;
     
     // In PayOS, orderCode must be a number <= 9007199254740991
     const orderCode = Number(orderId);
+
+    // BẢO MẬT: Phải lấy giá từ Database, tuyệt đối KHÔNG lấy từ Client
+    const orderExists = await prisma.orders.findUnique({
+      where: { OrderID: orderCode }
+    });
+
+    if (!orderExists) {
+      return res.status(404).json({ success: false, message: 'Đơn hàng không tồn tại' });
+    }
+
+    const amount = orderExists.TotalPrice.toNumber();
     
     // Check if offline/mock is needed. If keys are dummy, just return static mock
     if (!process.env.PAYOS_CLIENT_ID || process.env.PAYOS_CLIENT_ID === 'dummy_client_id') {
@@ -32,7 +43,7 @@ export const createPayOSOrder = async (req: Request, res: Response) => {
 
     const orderBody = {
       orderCode,
-      amount: Number(amount),
+      amount: amount,
       description: description || `PHELA${orderCode}`,
       cancelUrl: cancelUrl || 'http://localhost:3000/history',
       returnUrl: returnUrl || 'http://localhost:3000/history',
@@ -71,15 +82,20 @@ export const payOSWebhook = async (req: Request, res: Response) => {
       });
       
       if (orderExists) {
-        // Update PaymentStatus = 'PAID'
-        await prisma.orders.update({
-          where: { OrderID: Number(orderCode) },
-          data: { 
-              PaymentStatus: 'PAID',
-              PaymentMethod: 'QR_CODE'
-          }
-        });
-        console.log(`[PayOS Webhook] Payment confirmed for OrderID: ${orderCode}`);
+        // BẢO MẬT: Kiểm tra số tiền khách thanh toán có đủ không
+        if (webhookData.amount >= orderExists.TotalPrice.toNumber()) {
+          // Update PaymentStatus = 'PAID'
+          await prisma.orders.update({
+            where: { OrderID: Number(orderCode) },
+            data: { 
+                PaymentStatus: 'PAID',
+                PaymentMethod: 'QR_CODE'
+            }
+          });
+          console.log(`[PayOS Webhook] Payment confirmed for OrderID: ${orderCode}`);
+        } else {
+          console.warn(`[PayOS Webhook] BẢO MẬT: Đơn hàng ${orderCode} thanh toán THIẾU TIỀN! Yêu cầu: ${orderExists.TotalPrice}, Thực trả: ${webhookData.amount}`);
+        }
       } else {
         console.log(`[PayOS Webhook] Dummy ping or OrderID ${orderCode} not found.`);
       }

@@ -247,6 +247,13 @@ router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res
 
       // Update Recipes if provided
       if (validatedData.RecipeDetails && validatedData.RecipeDetails.length > 0) {
+        // Remove existing recipes to maintain 1-to-1 mapping
+        const existingRecipes = await tx.recipe.findMany({ where: { DrinkID: drinkId } });
+        for (const er of existingRecipes) {
+           await tx.recipeDetail.deleteMany({ where: { RecipeID: er.RecipeID } });
+        }
+        await tx.recipe.deleteMany({ where: { DrinkID: drinkId } });
+
         await tx.recipe.create({
           data: {
             DrinkID: drinkId,
@@ -306,7 +313,7 @@ router.post(
 );
 
 // DELETE /:id - Delete a drink (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const drinkId = parseInt(req.params.id || '');
     if (isNaN(drinkId)) throw new AppError(400, 'Invalid ID format.');

@@ -57,16 +57,26 @@ export const syncCart = async (req: Request, res: Response) => {
     });
 
     if (Items && Items.length > 0) {
+      // BẢO MẬT: Lấy giá niêm yết từ DB thay vì tin tưởng giá Client gửi lên
+      const drinkSizeIds = Items.map((i: any) => i.DrinkSizeID);
+      const catalogItems = await prisma.drinkSize.findMany({
+        where: { DrinkSizeID: { in: drinkSizeIds } }
+      });
+
       await prisma.cartItem.createMany({
-        data: Items.map((item: any) => ({
-          CartID: cart!.CartID,
-          DrinkSizeID: item.DrinkSizeID,
-          Quantity: item.Quantity,
-          Sugar: item.Sugar || '100%',
-          Ice: item.Ice || '100%',
-          Toppings: JSON.stringify(item.Toppings || []),
-          UnitPrice: item.UnitPrice
-        }))
+        data: Items.map((item: any) => {
+          const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
+          if (!catalogItem) throw new Error(`DrinkSizeID ${item.DrinkSizeID} not found`);
+          return {
+            CartID: cart!.CartID,
+            DrinkSizeID: item.DrinkSizeID,
+            Quantity: item.Quantity,
+            Sugar: item.Sugar || '100%',
+            Ice: item.Ice || '100%',
+            Toppings: JSON.stringify(item.Toppings || []),
+            UnitPrice: catalogItem.UnitPrice
+          };
+        })
       });
     }
 

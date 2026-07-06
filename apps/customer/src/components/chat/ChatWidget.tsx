@@ -63,11 +63,45 @@ export function ChatWidget() {
       newSocket.emit('join_session', { sessionId, customerId });
     });
 
-    newSocket.on('session_joined', (session) => {
+    newSocket.on('session_joined', async (session) => {
       setSessionStatus(session.Status);
-      if (session.Messages) {
-        setMessages(session.Messages);
+      let loadedMessages = session.Messages || [];
+      
+      try {
+        const lastComboSession = localStorage.getItem('last_combo_shown_session');
+        
+        if (lastComboSession !== sessionId) {
+          const combos = await api.getChatboxCombos();
+          if (combos && combos.length > 0) {
+            const comboMsgs = combos.map((p: any) => {
+              let btn = '[XEM MENU](/menu)'; // This will be parsed by UI if needed, or just text
+              if (p.TargetDrinkIDs) {
+                try {
+                  const arr = JSON.parse(p.TargetDrinkIDs);
+                  if (arr.length > 0) {
+                    btn = `[ADD_COMBO:${arr.join(',')}]`;
+                  }
+                } catch(e){}
+              }
+              const condition = p.MinQuantity > 0 ? ` (Mua từ ${p.MinQuantity} ly)` : '';
+              const val = p.Type === 'PERCENT' ? `giảm ${p.Value}%` : p.Type === 'AMOUNT' ? `giảm ${p.Value.toLocaleString()}đ` : `tặng ${p.Value} ly`;
+              
+              return {
+                SenderType: 'AI',
+                Content: `✨ **Gợi Ý Khuyến Mãi:**\n\nChương trình **${p.Name}** đang diễn ra: ${val}${condition}.\n\n👉 ${btn}`,
+                MessageID: `ephemeral-combo-${p.PromotionID}`,
+                createdAt: new Date().toISOString()
+              };
+            });
+            loadedMessages = [...loadedMessages, ...comboMsgs];
+            localStorage.setItem('last_combo_shown_session', sessionId);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi lấy combo chatbox:', err);
       }
+      
+      setMessages(loadedMessages);
     });
 
     newSocket.on('ai_reply', (msg) => {
@@ -191,19 +225,48 @@ export function ChatWidget() {
                         {(() => {
                           const content = msg.Content || '';
                           const buyNowRegex = /\[BUY_NOW:([A-Za-z0-9-]+):(\d+)\]/g;
+                          const addComboRegex = /\[ADD_COMBO:([0-9,]+)\]/g;
+                          
                           const parts = [];
                           let lastIndex = 0;
-                          let match;
                           
-                          while ((match = buyNowRegex.exec(content)) !== null) {
-                            if (match.index > lastIndex) {
-                              parts.push(<ReactMarkdown key={lastIndex}>{content.slice(lastIndex, match.index)}</ReactMarkdown>);
+                          // First, replace ADD_COMBO
+                          let matchAddCombo;
+                          while ((matchAddCombo = addComboRegex.exec(content)) !== null) {
+                            if (matchAddCombo.index > lastIndex) {
+                              parts.push(<ReactMarkdown key={`text-${lastIndex}`}>{content.slice(lastIndex, matchAddCombo.index)}</ReactMarkdown>);
                             }
-                            const code = match[1];
-                            const drinkSizeId = match[2];
+                            const drinkSizeIdsStr = matchAddCombo[1];
                             
                             parts.push(
-                              <div key={match.index} className="mt-2 mb-1">
+                              <div key={`combo-${matchAddCombo.index}`} className="mt-2 mb-1">
+                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 max-w-[220px]">
+                                  <p className="text-emerald-800 text-xs font-bold mb-2 leading-tight">Thêm Combo Này Vào Giỏ Hàng?</p>
+                                  <button 
+                                     onClick={() => {
+                                       window.dispatchEvent(new CustomEvent('ai_add_combo', { detail: { drinkSizeIds: drinkSizeIdsStr.split(',').map(Number) } }));
+                                     }}
+                                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-xs transition-colors shadow-sm"
+                                  >
+                                     Thêm Vào Giỏ
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                            lastIndex = matchAddCombo.index + matchAddCombo[0].length;
+                          }
+
+                          // Then, replace BUY_NOW (for vouchers)
+                          let matchBuyNow;
+                          while ((matchBuyNow = buyNowRegex.exec(content)) !== null) {
+                            if (matchBuyNow.index > lastIndex) {
+                              parts.push(<ReactMarkdown key={`text2-${lastIndex}`}>{content.slice(lastIndex, matchBuyNow.index)}</ReactMarkdown>);
+                            }
+                            const code = matchBuyNow[1];
+                            const drinkSizeId = matchBuyNow[2];
+                            
+                            parts.push(
+                              <div key={`buynow-${matchBuyNow.index}`} className="mt-2 mb-1">
                                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 max-w-[220px]">
                                   <p className="text-emerald-800 text-xs font-bold mb-2 leading-tight">Mã ưu đãi 10%: <span className="bg-emerald-200/60 px-1 py-0.5 rounded font-mono block mt-1">{code}</span></p>
                                   <button 
@@ -217,11 +280,11 @@ export function ChatWidget() {
                                 </div>
                               </div>
                             );
-                            lastIndex = buyNowRegex.lastIndex;
+                            lastIndex = matchBuyNow.index + matchBuyNow[0].length;
                           }
-                          
+
                           if (lastIndex < content.length) {
-                            parts.push(<ReactMarkdown key={lastIndex}>{content.slice(lastIndex)}</ReactMarkdown>);
+                            parts.push(<ReactMarkdown key={`text3-${lastIndex}`}>{content.slice(lastIndex)}</ReactMarkdown>);
                           }
                           
                           return parts.length > 0 ? parts : <ReactMarkdown>{content}</ReactMarkdown>;

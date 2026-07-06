@@ -1,13 +1,20 @@
 import { prisma } from '../../utils/prisma';
 
 export const createSession = async (sessionId: string, customerId?: number) => {
-  return await prisma.chatSession.create({
-    data: {
-      SessionID: sessionId,
-      CustomerID: customerId || null,
-      Status: 'AI_HANDLING',
-    },
-  });
+  try {
+    return await prisma.chatSession.create({
+      data: {
+        SessionID: sessionId,
+        CustomerID: customerId || null,
+        Status: 'AI_HANDLING',
+      },
+    });
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return null;
+    }
+    throw error;
+  }
 };
 
 export const getSessionById = async (sessionId: string) => {

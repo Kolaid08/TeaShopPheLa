@@ -32,7 +32,7 @@ export const getPromotionById = async (req: Request, res: Response) => {
 
 export const createPromotion = async (req: Request, res: Response) => {
   try {
-    const { Name, Description, Type, Value, MinQuantity, TargetDrinkIDs, IsActive, StartDate, EndDate } = req.body;
+    const { Name, Description, Type, Value, MinQuantity, TargetDrinkIDs, IsActive, IsCombo, StartDate, EndDate } = req.body;
     const promotion = await prisma.promotion.create({
       data: {
         Name,
@@ -42,6 +42,7 @@ export const createPromotion = async (req: Request, res: Response) => {
         MinQuantity,
         TargetDrinkIDs: TargetDrinkIDs ? JSON.stringify(TargetDrinkIDs) : null,
         IsActive,
+        IsCombo,
         StartDate: StartDate ? new Date(StartDate) : null,
         EndDate: EndDate ? new Date(EndDate) : null,
       }
@@ -55,7 +56,7 @@ export const createPromotion = async (req: Request, res: Response) => {
 export const updatePromotion = async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id || '');
-    const { Name, Description, Type, Value, MinQuantity, TargetDrinkIDs, IsActive, StartDate, EndDate } = req.body;
+    const { Name, Description, Type, Value, MinQuantity, TargetDrinkIDs, IsActive, IsCombo, StartDate, EndDate } = req.body;
     
     const promotion = await prisma.promotion.update({
       where: { PromotionID: id },
@@ -67,6 +68,7 @@ export const updatePromotion = async (req: Request, res: Response) => {
         MinQuantity,
         TargetDrinkIDs: TargetDrinkIDs ? JSON.stringify(TargetDrinkIDs) : null,
         IsActive,
+        IsCombo,
         StartDate: StartDate ? new Date(StartDate) : null,
         EndDate: EndDate ? new Date(EndDate) : null,
       }
@@ -84,6 +86,21 @@ export const deletePromotion = async (req: Request, res: Response) => {
       where: { PromotionID: id }
     });
     sendResponse(res, 200, true, 'Xóa combo thành công');
+  } catch (error) {
+    sendResponse(res, 500, false, 'Lỗi máy chủ', error);
+  }
+};
+
+export const getChatboxCombos = async (req: Request, res: Response) => {
+  try {
+    const promotions = await prisma.promotion.findMany({
+      where: {
+        IsActive: true,
+        IsCombo: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    sendResponse(res, 200, true, 'Lấy danh sách combo chatbox thành công', promotions);
   } catch (error) {
     sendResponse(res, 500, false, 'Lỗi máy chủ', error);
   }

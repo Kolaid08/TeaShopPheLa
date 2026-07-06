@@ -5,6 +5,7 @@ import { sendResponse } from '../../utils/response';
 import { verifyJWT, requireRole } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import { upgradeCustomerLevel } from '../customers/customers.router';
+import { processOrderIngredients } from '../orders/orders.router';
 
 const router = Router();
 
@@ -122,14 +123,21 @@ router.get('/my-orders', verifyJWT, async (req: any, res, next) => {
 });
 
 // Update Order Status (For Shipper or Admin)
-router.post('/update-status', verifyJWT, async (req: any, res, next) => {
+router.post('/update-status', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'SHIPPER']), async (req: any, res, next) => {
   try {
     const { OrderID, OrderStatus } = updateStatusSchema.parse(req.body);
 
     const order = await prisma.orders.findUnique({
       where: { OrderID },
+      include: { OrderDetails: true },
     });
     if (!order) throw new AppError(404, 'Đơn hàng không tồn tại.');
+    
+    // Authorization check: Only Admin/Manager can update any order. Shippers can only update their assigned orders.
+    const userRole = req.user.Role?.RoleName;
+    if (userRole === 'SHIPPER' && order.ShipperID !== req.user.EmployeeID) {
+      throw new AppError(403, 'Bạn không có quyền cập nhật đơn hàng của tài xế khác.');
+    }
     if (order.OrderStatus === 'COMPLETED') throw new AppError(400, 'Cannot change the status of an already completed order.');
     if (order.OrderStatus === 'CANCELLED') throw new AppError(400, 'Cannot change the status of an already cancelled order.');
 
@@ -139,16 +147,24 @@ router.post('/update-status', verifyJWT, async (req: any, res, next) => {
         data: { OrderStatus },
       });
 
-      if (OrderStatus === 'COMPLETED' && order.CustomerID) {
-        await tx.customer.update({
-          where: { CustomerID: order.CustomerID },
-          data: {
-            TotalMoneySpending: {
-              increment: order.TotalPrice,
+      if (OrderStatus === 'COMPLETED') {
+        const itemsToDeduct = order.OrderDetails.map((detail) => ({
+          DrinkSizeID: detail.DrinkSizeID,
+          Quantity: detail.Quantity,
+        }));
+        await processOrderIngredients(tx, itemsToDeduct, 'deduct');
+
+        if (order.CustomerID) {
+          await tx.customer.update({
+            where: { CustomerID: order.CustomerID },
+            data: {
+              TotalMoneySpending: {
+                increment: order.TotalPrice,
+              },
             },
-          },
-        });
-        await upgradeCustomerLevel(order.CustomerID, tx);
+          });
+          await upgradeCustomerLevel(order.CustomerID, tx);
+        }
       }
       
       return updated;

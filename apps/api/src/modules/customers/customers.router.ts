@@ -60,6 +60,7 @@ router.post('/public/login', async (req, res, next) => {
 
 // Protect routes
 router.use(verifyJWT);
+router.use(requireRole(['ADMIN', 'MANAGER', 'STAFF']));
 
 // Helper function to upgrade membership level based on current spending
 export const upgradeCustomerLevel = async (customerId: number, tx: any) => {
@@ -243,7 +244,7 @@ router.put('/:id', async (req, res, next) => {
 });
 
 // DELETE /:id - Delete customer details (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const custId = parseInt(req.params.id || '');
     if (isNaN(custId)) throw new AppError(400, 'Invalid ID format.');

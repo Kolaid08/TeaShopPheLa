@@ -94,7 +94,6 @@ export default function CustomerHome() {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [receiverName, setReceiverName] = useState('');
   const [receiverPhone, setReceiverPhone] = useState('');
-  const [calculatedShippingFee, setCalculatedShippingFee] = useState<number>(0);
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   
   // PayOS states
@@ -192,8 +191,64 @@ export default function CustomerHome() {
       }
     };
     
+    const handleAIAddCombo = async (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { drinkSizeIds } = customEvent.detail;
+      
+      try {
+        const sizes = await api.getDrinkSizes();
+        const allDrinks = await api.getDrinks();
+        
+        let currentCartStr = localStorage.getItem('phela_customer_cart');
+        let currentCart = currentCartStr ? JSON.parse(currentCartStr) : [];
+        let addedCount = 0;
+        
+        for (const dId of drinkSizeIds) {
+          const dSize = sizes.find((ds: any) => ds.DrinkSizeID === dId && ds.DrinkSizeStatus !== 'UNAVAILABLE');
+          if (!dSize) continue;
+          
+          const drinkInfo = allDrinks.find((d: any) => d.DrinkID === dSize.DrinkID);
+          if (!drinkInfo) continue;
+          
+          const itemKey = `${dSize.DrinkSizeID}-100%-100%-`;
+          const existingIdx = currentCart.findIndex((item: any) => item.id === itemKey);
+          
+          if (existingIdx !== -1) {
+            currentCart[existingIdx].Quantity += 1;
+          } else {
+            currentCart.push({
+              id: itemKey,
+              DrinkSizeID: dSize.DrinkSizeID,
+              DrinkName: drinkInfo.DrinkName,
+              SizeName: dSize.Size?.SizeName || 'M',
+              UnitPrice: dSize.UnitPrice,
+              Quantity: 1,
+              Sugar: '100%',
+              Ice: '100%',
+              Toppings: [],
+            });
+          }
+          addedCount++;
+        }
+        
+        if (addedCount > 0) {
+          setCart(currentCart);
+          localStorage.setItem('phela_customer_cart', JSON.stringify(currentCart));
+          toast.success(`Đã thêm ${addedCount} ly nước của Combo vào giỏ hàng!`);
+        } else {
+          toast.error('Các sản phẩm trong Combo này hiện đang hết hàng.');
+        }
+      } catch(err) {
+         toast.error('Lỗi khi thêm Combo vào giỏ hàng.');
+      }
+    };
+    
     window.addEventListener('ai_buy_now', handleAIBuyNow);
-    return () => window.removeEventListener('ai_buy_now', handleAIBuyNow);
+    window.addEventListener('ai_add_combo', handleAIAddCombo);
+    return () => {
+      window.removeEventListener('ai_buy_now', handleAIBuyNow);
+      window.removeEventListener('ai_add_combo', handleAIAddCombo);
+    };
   }, [router]);
 
   const saveCartState = (updatedCart: CartItem[]) => {
@@ -410,18 +465,41 @@ export default function CustomerHome() {
     }
 
     const membershipDiscountAmount = otherItemsTotal * (membershipDiscountRate / 100);
-    const finalTotal = subtotal - Math.floor(voucherDiscount) - Math.floor(promotionDiscount) - Math.floor(membershipDiscountAmount) + (orderType === 'DELIVERY' ? calculatedShippingFee : 0);
+    const baseFinal = subtotal - Math.floor(voucherDiscount) - Math.floor(promotionDiscount) - Math.floor(membershipDiscountAmount);
+    
+    let shippingFee = 0;
+    if (orderType === 'DELIVERY' && latitude && longitude) {
+      const shopLat = 10.762622;
+      const shopLng = 106.660172;
+      const R = 6371;
+      const dLat = (latitude - shopLat) * (Math.PI / 180);
+      const dLon = (longitude - shopLng) * (Math.PI / 180);
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(shopLat * (Math.PI / 180)) * Math.cos(latitude * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+      
+      if (baseFinal >= 300000) {
+         shippingFee = 0;
+      } else if (distance <= 3) {
+         shippingFee = 15000;
+      } else {
+         shippingFee = 15000 + Math.ceil(distance - 3) * 5000;
+      }
+    }
+    
+    const finalTotal = baseFinal + shippingFee;
     
     return {
       subtotal,
       voucherDiscount: Math.floor(voucherDiscount),
       promotionDiscount: Math.floor(promotionDiscount),
       membershipDiscount: Math.floor(membershipDiscountAmount),
+      shippingFee,
       total: Math.floor(finalTotal > 0 ? finalTotal : 0)
     };
   };
 
-  const { subtotal, voucherDiscount, promotionDiscount, membershipDiscount, total } = getCalculations();
+  const { subtotal, voucherDiscount, promotionDiscount, membershipDiscount, shippingFee, total } = getCalculations();
   const getTotalPrice = () => total;
 
   const handleApplyVoucher = async () => {
@@ -1033,6 +1111,12 @@ export default function CustomerHome() {
                       <span className="font-mono">-{membershipDiscount.toLocaleString('vi-VN')} đ</span>
                     </div>
                   )}
+                  {orderType === 'DELIVERY' && (
+                    <div className="flex justify-between text-xs text-primary font-semibold">
+                      <span>Phí giao hàng</span>
+                      <span className="font-mono">{shippingFee > 0 ? `+ ${shippingFee.toLocaleString('vi-VN')} đ` : 'Miễn phí'}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-base font-bold text-foreground pt-1 border-t border-border/30">
                     <span>Tổng thanh toán</span>
                     <span className="font-mono text-primary">{total.toLocaleString('vi-VN')} đ</span>
@@ -1073,8 +1157,6 @@ export default function CustomerHome() {
                             setDeliveryAddress(address);
                             setLatitude(lat);
                             setLongitude(lng);
-                            // calculate random fee
-                            setCalculatedShippingFee(Math.floor(Math.random() * 20 + 15) * 1000);
                           }}
                           onOpenMap={() => setIsMapModalOpen(true)}
                         />
@@ -1397,12 +1479,12 @@ export default function CustomerHome() {
       >
         <div className="space-y-4">
           <MapPicker 
+            defaultLat={latitude || 10.762622}
+            defaultLng={longitude || 106.660172}
             onLocationSelect={(lat, lng) => {
               setLatitude(lat);
               setLongitude(lng);
-            }} 
-            defaultLat={latitude || 10.762622}
-            defaultLng={longitude || 106.660172}
+            }}
           />
           <div className="space-y-2">
             <label className="text-xs font-bold text-muted-foreground">Chi tiết số nhà, đường (Tùy chọn ghi thêm):</label>
@@ -1419,7 +1501,6 @@ export default function CustomerHome() {
                 toast.error('Vui lòng chọn vị trí trên bản đồ');
                 return;
               }
-              setCalculatedShippingFee(Math.floor(Math.random() * 20 + 15) * 1000);
               setIsMapModalOpen(false);
             }}
           >

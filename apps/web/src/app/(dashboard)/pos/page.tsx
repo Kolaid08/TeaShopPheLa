@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button, Input, Card, Badge, Dialog } from '@/components/ui/core';
-import { api, Drink, Size, DrinkSize, Customer, ShopTable } from '@/lib/api';
+import { api, Drink, Size, DrinkSize, Customer, ShopTable, Promotion } from '@/lib/api';
 import { toast } from 'sonner';
 
 interface CartItem {
@@ -39,6 +39,7 @@ export default function PosTerminal() {
   const [sizes, setSizes] = useState<Size[]>([]);
   const [drinkSizes, setDrinkSizes] = useState<DrinkSize[]>([]);
   const [tables, setTables] = useState<ShopTable[]>([]);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -68,16 +69,27 @@ export default function PosTerminal() {
   useEffect(() => {
     const loadCatalog = async () => {
       try {
-        const [dList, sList, dsList, tList] = await Promise.all([
+        const [dList, sList, dsList, tList, pList] = await Promise.all([
           api.getDrinks(),
           api.getSizes(),
           api.getDrinkSizes(),
           api.getTables(),
+          api.getPromotions(),
         ]);
         setDrinks(dList);
         setSizes(sList);
         setDrinkSizes(dsList);
         setTables(tList);
+        
+        // Filter active promos
+        const now = new Date();
+        const active = pList.filter((p: Promotion) => {
+          if (!p.IsActive) return false;
+          if (p.StartDate && new Date(p.StartDate) > now) return false;
+          if (p.EndDate && new Date(p.EndDate) < now) return false;
+          return true;
+        });
+        setPromotions(active);
       } catch {}
       setIsLoading(false);
     };
@@ -268,6 +280,12 @@ export default function PosTerminal() {
 
       toast.success(`Hóa đơn #${order.OrderID} đã thanh toán & hoàn thành thành công!`);
 
+      // Calculate true total discount from backend response to cover promotions not calculated by frontend
+      const trueTotalDiscount = baseTotal - order.TotalPrice;
+      let finalVoucher = Math.floor(voucherDiscount);
+      let finalMembership = Math.floor(membershipDiscountAmount);
+      let promotionDiff = trueTotalDiscount - finalVoucher - finalMembership;
+
       // Store the paid order details for printing
       setPaidOrder({
         OrderID: order.OrderID,
@@ -276,10 +294,11 @@ export default function PosTerminal() {
         Items: [...cart],
         BaseTotal: baseTotal,
         DiscountRate: discountRate,
-        MembershipDiscountAmount: Math.floor(membershipDiscountAmount),
-        VoucherDiscountAmount: Math.floor(voucherDiscount),
+        MembershipDiscountAmount: finalMembership,
+        VoucherDiscountAmount: finalVoucher,
+        PromotionDiscountAmount: promotionDiff > 0 ? promotionDiff : 0,
         AppliedVoucherCode: appliedVoucher ? appliedVoucher.Code : null,
-        GrandTotal: grandTotal,
+        GrandTotal: order.TotalPrice,
         Date: new Date().toISOString(),
       });
 
@@ -382,6 +401,14 @@ export default function PosTerminal() {
                 </div>`
                 : ''
             }
+            ${
+              paidOrder.PromotionDiscountAmount > 0
+                ? `<div class="flex">
+                  <span>CT Khuyến Mãi:</span>
+                  <span>-${paidOrder.PromotionDiscountAmount.toLocaleString('vi-VN')}đ</span>
+                </div>`
+                : ''
+            }
             <div class="dashed"></div>
             <div class="flex">
               <span class="bold">THÀNH TIỀN:</span>
@@ -440,6 +467,30 @@ export default function PosTerminal() {
             ))}
           </div>
         </div>
+
+        {/* Promotional Banner */}
+        {promotions.length > 0 && (
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-md p-4 flex items-center justify-between animate-fade-in-up mt-1 mb-1">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-full">
+                <Sparkles className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white flex items-center gap-2">
+                  Khuyến Mãi Đang Diễn Ra
+                  <Badge variant="warning" className="bg-white text-amber-600 px-2 py-0">LIVE</Badge>
+                </h3>
+                <p className="text-white/90 text-sm">
+                  {promotions.map(p => {
+                     const condition = p.MinQuantity > 0 ? ` (Mua từ ${p.MinQuantity} ly)` : '';
+                     const val = p.Type === 'PERCENT' ? `giảm ${p.Value}%` : p.Type === 'AMOUNT' ? `giảm ${p.Value.toLocaleString()}đ` : `tặng ${p.Value} ly`;
+                     return `${p.Name}: ${val}${condition}`;
+                  }).join(' | ')}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Menu Cards List */}
         <div className="flex-1 overflow-y-auto pr-2 grid grid-cols-1 sm:grid-cols-2 gap-4">

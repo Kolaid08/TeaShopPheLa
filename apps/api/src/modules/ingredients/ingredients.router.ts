@@ -15,6 +15,7 @@ const ingredientSchema = z.object({
 
 // Protect routes
 router.use(verifyJWT);
+router.use(requireRole(['ADMIN', 'MANAGER', 'STAFF']));
 
 // GET /low-stock - List ingredients below the custom threshold (default 10)
 router.get('/low-stock', async (req, res, next) => {
@@ -102,7 +103,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create an ingredient (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = ingredientSchema.parse(req.body);
 
@@ -120,7 +121,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PUT /:id - Update an ingredient (Manager/Admin only)
-router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const ingId = parseInt(req.params.id || '');
     if (isNaN(ingId)) throw new AppError(400, 'Invalid ID format.');
@@ -142,7 +143,7 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
 });
 
 // DELETE /:id - Delete an ingredient (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const ingId = parseInt(req.params.id || '');
     if (isNaN(ingId)) throw new AppError(400, 'Invalid ID format.');
