@@ -27,14 +27,24 @@ export async function processOrderIngredients(tx: any, items: { DrinkSizeID: num
         const baseQuantity = detail.Quantity.toNumber();
         const quantityToAdjust = baseQuantity * multiplier * item.Quantity;
 
-        await tx.ingredient.update({
-          where: { IngredientID: detail.IngredientID },
-          data: {
-            QuantityStock: mode === 'deduct'
-              ? { decrement: quantityToAdjust }
-              : { increment: quantityToAdjust },
-          },
+        const ingredient = await tx.ingredient.findUnique({
+          where: { IngredientID: detail.IngredientID }
         });
+        
+        if (ingredient) {
+          if (mode === 'deduct' && ingredient.QuantityStock.toNumber() < quantityToAdjust) {
+            throw new AppError(400, `Nguyên liệu ${ingredient.IngredientName} không đủ tồn kho để thực hiện đơn hàng (Còn lại: ${ingredient.QuantityStock.toNumber()}, Cần: ${quantityToAdjust}).`);
+          }
+
+          await tx.ingredient.update({
+            where: { IngredientID: detail.IngredientID },
+            data: {
+              QuantityStock: mode === 'deduct'
+                ? { decrement: quantityToAdjust }
+                : { increment: quantityToAdjust },
+            },
+          });
+        }
       }
     }
   }
@@ -690,6 +700,22 @@ router.post('/customer-place', async (req, res, next) => {
       
       // Fallback: Save to serverMockOrders in memory
       const newOId = serverMockOrders.length + 1000 + 1; // start mock IDs from 1001
+      let offlineBaseTotal = 0;
+      const orderDetailsOffline = validatedData.Items.map((item) => {
+        const matched = mockDrinkSizesMap[item.DrinkSizeID] || { DrinkName: 'Trà Phêla', SizeName: 'M', UnitPrice: 50000 };
+        offlineBaseTotal += matched.UnitPrice * item.Quantity;
+        return {
+          OrderID: newOId,
+          DrinkSizeID: item.DrinkSizeID,
+          Quantity: item.Quantity,
+          UnitPrice: matched.UnitPrice,
+          DrinkSize: {
+            Drink: { DrinkName: matched.DrinkName },
+            Size: { SizeName: matched.SizeName },
+          },
+        };
+      });
+
       const newO = {
         OrderID: newOId,
         CustomerID: validatedData.CustomerID || 1,
@@ -701,7 +727,7 @@ router.post('/customer-place', async (req, res, next) => {
         EmployeeID: 1,
         CreatedTime: new Date().toISOString(),
         OrderStatus: 'PENDING',
-        TotalPrice: req.body.TotalPrice || 55000,
+        TotalPrice: offlineBaseTotal,
         OrderType: validatedData.OrderType || (validatedData.ShopTableID ? 'DINE_IN' : 'TAKEAWAY'),
         ShippingAddress: validatedData.ShippingAddress || null,
         Latitude: validatedData.Latitude || null,
@@ -709,19 +735,7 @@ router.post('/customer-place', async (req, res, next) => {
         ReceiverName: validatedData.ReceiverName || validatedData.CustomerName || null,
         ReceiverPhone: validatedData.ReceiverPhone || validatedData.CustomerPhoneNumber || null,
         OrderNote: validatedData.OrderNote || null,
-        OrderDetails: validatedData.Items.map((item) => {
-          const matched = mockDrinkSizesMap[item.DrinkSizeID] || { DrinkName: 'Trà Phêla', SizeName: 'M', UnitPrice: 50000 };
-          return {
-            OrderID: newOId,
-            DrinkSizeID: item.DrinkSizeID,
-            Quantity: item.Quantity,
-            UnitPrice: matched.UnitPrice,
-            DrinkSize: {
-              Drink: { DrinkName: matched.DrinkName },
-              Size: { SizeName: matched.SizeName },
-            },
-          };
-        }),
+        OrderDetails: orderDetailsOffline,
       };
 
       serverMockOrders.push(newO);

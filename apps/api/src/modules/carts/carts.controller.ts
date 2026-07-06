@@ -52,35 +52,87 @@ export const syncCart = async (req: Request, res: Response) => {
       });
     }
 
+    // Retrieve existing items before deleting
+    const existingItems = await prisma.cartItem.findMany({
+      where: { CartID: cart.CartID }
+    });
+
     await prisma.cartItem.deleteMany({
       where: { CartID: cart.CartID }
     });
 
+    // Merge existing DB items with request Items
+    const mergedItemsMap = new Map<string, any>();
+    
+    // Helper to generate a unique key for a cart item
+    const getItemKey = (item: any) => `${item.DrinkSizeID}-${item.Sugar || '100%'}-${item.Ice || '100%'}-${item.Toppings || '[]'}`;
+
+    // Add existing DB items to map
+    for (const item of existingItems) {
+      const key = getItemKey(item);
+      mergedItemsMap.set(key, { ...item, Quantity: item.Quantity });
+    }
+
+    // Add/Update request Items to map
     if (Items && Items.length > 0) {
-      // BẢO MẬT: Lấy giá niêm yết từ DB thay vì tin tưởng giá Client gửi lên
       const drinkSizeIds = Items.map((i: any) => i.DrinkSizeID);
       const catalogItems = await prisma.drinkSize.findMany({
         where: { DrinkSizeID: { in: drinkSizeIds } }
       });
 
-      await prisma.cartItem.createMany({
-        data: Items.map((item: any) => {
-          const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
-          if (!catalogItem) throw new Error(`DrinkSizeID ${item.DrinkSizeID} not found`);
-          return {
-            CartID: cart!.CartID,
+      for (const item of Items) {
+        const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
+        if (catalogItem) {
+          const toppingsStr = typeof item.Toppings === 'string' ? item.Toppings : JSON.stringify(item.Toppings || []);
+          const normalizedItem = {
             DrinkSizeID: item.DrinkSizeID,
             Quantity: item.Quantity,
             Sugar: item.Sugar || '100%',
             Ice: item.Ice || '100%',
-            Toppings: JSON.stringify(item.Toppings || []),
+            Toppings: toppingsStr,
             UnitPrice: catalogItem.UnitPrice
           };
-        })
+          const key = getItemKey(normalizedItem);
+          if (mergedItemsMap.has(key)) {
+            mergedItemsMap.get(key).Quantity += normalizedItem.Quantity;
+          } else {
+            mergedItemsMap.set(key, normalizedItem);
+          }
+        }
+      }
+    }
+
+    const finalItemsToInsert = Array.from(mergedItemsMap.values());
+
+    if (finalItemsToInsert.length > 0) {
+      await prisma.cartItem.createMany({
+        data: finalItemsToInsert.map(item => ({
+          CartID: cart!.CartID,
+          DrinkSizeID: item.DrinkSizeID,
+          Quantity: item.Quantity,
+          Sugar: item.Sugar,
+          Ice: item.Ice,
+          Toppings: item.Toppings,
+          UnitPrice: item.UnitPrice
+        }))
       });
     }
 
-    res.status(200).json({ success: true, data: cart });
+    // Fetch the updated cart to return
+    const updatedCart = await prisma.cart.findUnique({
+      where: { CartID: cart.CartID },
+      include: {
+        CartItems: {
+          include: {
+            DrinkSize: {
+              include: { Drink: true, Size: true }
+            }
+          }
+        }
+      }
+    });
+
+    res.status(200).json({ success: true, data: updatedCart });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error' });

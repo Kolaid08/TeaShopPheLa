@@ -110,7 +110,10 @@ router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, 
     });
 
     return sendResponse(res, 200, true, 'Size deleted successfully');
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'P2003') {
+      return next(new AppError(400, 'Không thể xóa Kích cỡ này vì đang được sử dụng bởi các đồ uống.'));
+    }
     next(err);
   }
 });

@@ -81,6 +81,15 @@ export default function IngredientReceipts() {
 
   const handleAddItemToReceipt = () => {
     if (!addItemId) return;
+    
+    if (addQty <= 0) {
+      toast.error('Số lượng nhập phải lớn hơn 0.');
+      return;
+    }
+    if (addCost < 0) {
+      toast.error('Giá vốn nhập không được là số âm.');
+      return;
+    }
     const exists = items.findIndex((i) => i.IngredientID === addItemId);
     if (exists !== -1) {
       toast.error('Nguyên liệu này đã có trong danh sách nhập kho.');
@@ -341,6 +350,7 @@ export default function IngredientReceipts() {
                 </label>
                 <Input
                   type="number"
+                  min="1"
                   value={addQty}
                   onChange={(e) => setAddQty(parseFloat(e.target.value))}
                   className="p-2 h-9 text-xs font-mono bg-background/40"
@@ -352,6 +362,7 @@ export default function IngredientReceipts() {
                 </label>
                 <Input
                   type="number"
+                  min="0"
                   value={addCost}
                   onChange={(e) => setAddCost(parseFloat(e.target.value))}
                   className="p-2 h-9 text-xs font-mono bg-background/40"

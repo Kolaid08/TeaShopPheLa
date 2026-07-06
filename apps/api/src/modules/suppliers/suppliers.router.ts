@@ -183,7 +183,10 @@ router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, 
     });
 
     return sendResponse(res, 200, true, 'Supplier deleted successfully');
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'P2003') {
+      return next(new AppError(400, 'Không thể xóa Nhà Cung Cấp này vì họ đã có lịch sử nhập kho.'));
+    }
     next(err);
   }
 });

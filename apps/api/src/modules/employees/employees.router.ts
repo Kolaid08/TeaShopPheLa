@@ -146,6 +146,18 @@ router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res
     });
     if (!targetEmployee) throw new AppError(404, 'Employee not found.');
 
+    // Check unique emails or PINCodes for other employees
+    const conflict = await prisma.employee.findFirst({
+      where: {
+        EmployeeID: { not: empId },
+        OR: [{ Email: bodyData.Email }, { PINCode: bodyData.PINCode }],
+      },
+    });
+
+    if (conflict) {
+      throw new AppError(409, 'Another employee with this Email or PIN Code already exists.');
+    }
+
     const updatePayload: any = {
       FullName: bodyData.FullName,
       PhoneNumber: bodyData.PhoneNumber,
@@ -178,11 +190,20 @@ router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, 
     const empId = parseInt(req.params.id || '');
     if (isNaN(empId)) throw new AppError(400, 'Invalid ID format.');
 
-    await prisma.employee.delete({
-      where: { EmployeeID: empId },
-    });
-
-    return sendResponse(res, 200, true, 'Employee deleted successfully');
+    try {
+      await prisma.employee.delete({
+        where: { EmployeeID: empId },
+      });
+      return sendResponse(res, 200, true, 'Employee deleted successfully');
+    } catch (dbErr: any) {
+      if (dbErr.code === 'P2003') {
+        throw new AppError(
+          400,
+          'Không thể xóa nhân viên này vì có liên kết với dữ liệu Đơn hàng/Biên lai cũ. Hãy đổi mật khẩu và xóa thông tin nhạy cảm thay vì xóa tài khoản.'
+        );
+      }
+      throw dbErr;
+    }
   } catch (err) {
     next(err);
   }

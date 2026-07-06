@@ -231,7 +231,7 @@ model Orders {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   OrderDetails    OrderDetail[]
-  Customer        Customer?     @relation(fields: [CustomerID], references: [CustomerID], map: "FK_Orders_Customer")
+  Customer        Customer?     @relation(fields: [CustomerID], references: [CustomerID], onDelete: SetNull, map: "FK_Orders_Customer")
   Employee        Employee      @relation("OrderCreator", fields: [EmployeeID], references: [EmployeeID], map: "FK_Orders_Employee")
   Shipper         Employee?     @relation("OrderShipper", fields: [ShipperID], references: [EmployeeID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Orders_Shipper")
   ShopTable       ShopTable?    @relation(fields: [ShopTableID], references: [ShopTableID], map: "FK_Orders_ShopTable")
@@ -411,7 +411,7 @@ model Voucher {
   VoucherID       Int         @id @default(autoincrement())
   Code            String      @unique @db.VarChar(50)
   DiscountType    String      @default("PERCENT") @db.VarChar(20)
-  DiscountValue   Float
+  DiscountValue   Decimal     @db.Decimal(15, 2)
   TargetProductID Int?
   OwnerID         Int?
   Creator         String      @default("ADMIN") @db.VarChar(20)
@@ -431,7 +431,7 @@ model Promotion {
   Name           String      @db.NVarChar(255)
   Description    String?     @db.NVarChar(500)
   Type           String      @default("PERCENT") @db.VarChar(20)
-  Value          Float
+  Value          Decimal     @db.Decimal(15, 2)
   MinQuantity    Int         @default(2)
   TargetDrinkIDs String?     @db.NVarChar(500)
   IsActive       Boolean     @default(true)

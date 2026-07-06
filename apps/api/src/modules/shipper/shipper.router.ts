@@ -81,6 +81,12 @@ router.post('/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAF
       throw new AppError(404, 'Nhân viên giao hàng không tồn tại.');
     }
 
+    const order = await prisma.orders.findUnique({ where: { OrderID } });
+    if (!order) throw new AppError(404, 'Đơn hàng không tồn tại.');
+    if (order.OrderStatus === 'COMPLETED' || order.OrderStatus === 'CANCELLED') {
+      throw new AppError(400, 'Không thể gán Shipper cho đơn hàng đã Hoàn thành hoặc Đã hủy.');
+    }
+
     const updatedOrder = await prisma.orders.update({
       where: { OrderID },
       data: {
@@ -220,6 +226,10 @@ router.post('/update-receipt-status', verifyJWT, async (req: any, res, next) => 
     if (!receipt) throw new AppError(404, 'Receipt not found.');
     if (receipt.IngredientReceiptStatus === 'CONFIRMED') {
       throw new AppError(400, 'This receipt is already confirmed.');
+    }
+    
+    if (req.user.EmployeeID !== receipt.ShipperID) {
+      throw new AppError(403, 'Bạn không được phép xác nhận phiếu nhập kho của người khác.');
     }
 
     const updatedReceipt = await prisma.$transaction(async (tx) => {

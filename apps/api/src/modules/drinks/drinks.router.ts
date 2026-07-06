@@ -323,7 +323,10 @@ router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, 
     });
 
     return sendResponse(res, 200, true, 'Drink deleted successfully');
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'P2003') {
+      return next(new AppError(400, 'Không thể xóa Đồ uống này vì đã có dữ liệu liên quan (công thức, kích cỡ hoặc đơn đặt hàng). Vui lòng chuyển trạng thái sang Ngừng Bán.'));
+    }
     next(err);
   }
 });

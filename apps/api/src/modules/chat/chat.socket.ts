@@ -21,15 +21,27 @@ export const initSocketIo = (server: HttpServer) => {
     console.log(`New socket connection: ${socket.id}`);
 
     // Customer joins their own session room
-    socket.on('join_session', async ({ sessionId, customerId }: { sessionId: string, customerId?: number }) => {
+    socket.on('join_session', async ({ sessionId, customerId, token }: { sessionId: string, customerId?: number, token?: string }) => {
+      if (customerId) {
+        if (!token) return; // Unauthorized
+        try {
+          const decoded = jwt.verify(token, config.jwt.accessSecret) as UserPayload;
+          if (decoded.CustomerID !== customerId) return; // Forbid joining someone else's chat
+        } catch { return; }
+      }
+
       let session = await getSessionById(sessionId);
       
       if (!session) {
         await createSession(sessionId, customerId);
         session = await getSessionById(sessionId);
       } else if (customerId && session.CustomerID !== customerId) {
+        // Link anonymous session to logged-in customer
         await updateSessionCustomer(sessionId, customerId);
         session = await getSessionById(sessionId);
+      } else if (session.CustomerID && session.CustomerID !== customerId) {
+        // Prevent anonymous users from joining a logged-in user's session
+        return;
       }
       
       if (!session) return;
@@ -101,7 +113,7 @@ export const initSocketIo = (server: HttpServer) => {
       const token = payload?.token;
       if (!token) return;
       try {
-        if (token.startsWith('mock_token_')) {
+        if (token.startsWith('mock_token_') && process.env.NODE_ENV === 'development') {
           socket.data.user = { RoleName: 'ADMIN' } as UserPayload;
           socket.join('admins');
           console.log(`Socket ${socket.id} joined admins room (mock)`);

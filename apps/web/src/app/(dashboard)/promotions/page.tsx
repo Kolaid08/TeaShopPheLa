@@ -36,6 +36,8 @@ export default function PromotionsPage() {
   const [drinkSizes, setDrinkSizes] = useState<any[]>([]);
   const [targetDrinkIDs, setTargetDrinkIDs] = useState<number[]>([]);
   const [isCombo, setIsCombo] = useState<boolean>(false);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   const loadOptions = async () => {
     try {
@@ -80,6 +82,8 @@ export default function PromotionsPage() {
       } else {
         setTargetDrinkIDs([]);
       }
+      setStartDate(promo.StartDate ? promo.StartDate.split('T')[0] : '');
+      setEndDate(promo.EndDate ? promo.EndDate.split('T')[0] : '');
     } else {
       setEditingPromotion(null);
       setName('');
@@ -89,6 +93,8 @@ export default function PromotionsPage() {
       setMinQuantity(2);
       setTargetDrinkIDs([]);
       setIsCombo(false);
+      setStartDate('');
+      setEndDate('');
     }
     setIsModalOpen(true);
   };
@@ -105,7 +111,9 @@ export default function PromotionsPage() {
         MinQuantity: Number(minQuantity),
         TargetDrinkIDs: targetDrinkIDs.length > 0 ? targetDrinkIDs : null,
         IsActive: true,
-        IsCombo: isCombo
+        IsCombo: isCombo,
+        StartDate: startDate ? new Date(startDate).toISOString() : null,
+        EndDate: endDate ? new Date(endDate).toISOString() : null,
       };
 
       if (editingPromotion) {
@@ -310,11 +318,30 @@ export default function PromotionsPage() {
             <label className="text-sm font-bold text-foreground">Giá trị ({type === 'PERCENT' ? '%' : type === 'AMOUNT' ? 'VNĐ' : 'Số món tặng'})</label>
             <Input 
               type="number"
-              min={0}
+              min={1}
               required
               value={value}
               onChange={(e) => setValue(Number(e.target.value))}
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-bold text-foreground">Ngày Bắt Đầu (Tùy chọn)</label>
+              <Input 
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-bold text-foreground">Ngày Kết Thúc (Tùy chọn)</label>
+              <Input 
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="flex items-center space-x-2 pt-2">

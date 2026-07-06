@@ -114,7 +114,10 @@ router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, 
     });
 
     return sendResponse(res, 200, true, 'Role deleted successfully');
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'P2003') {
+      return next(new AppError(400, 'Không thể xóa Chức vụ này vì đang có Nhân viên giữ chức vụ này.'));
+    }
     next(err);
   }
 });

@@ -10,7 +10,7 @@ const router = Router();
 const receiptDetailSchema = z.object({
   IngredientID: z.number().int(),
   Quantity: z.number().positive(),
-  CostPrice: z.number().positive(),
+  CostPrice: z.number().nonnegative(),
 });
 
 const receiptSchema = z.object({

@@ -35,8 +35,14 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, 
     }
 
     const type = DiscountType || 'PERCENT';
+    if (DiscountValue <= 0) {
+      return sendResponse(res, 400, false, 'Mức giảm giá phải lớn hơn 0');
+    }
     if (type === 'PERCENT' && Number(DiscountValue) > 100) {
       return sendResponse(res, 400, false, 'Mức giảm giá theo phần trăm không được vượt quá 100%');
+    }
+    if (ValidUntil && new Date(ValidUntil) <= new Date()) {
+      return sendResponse(res, 400, false, 'Thời hạn Voucher phải là một ngày trong tương lai');
     }
 
     const voucher = await prisma.voucher.create({

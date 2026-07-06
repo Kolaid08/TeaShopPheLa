@@ -103,7 +103,11 @@ export default function EmployeesList() {
         await api.updateEmployee(selectedEmp.EmployeeID, payload);
         toast.success('Cập nhật nhân viên thành công!');
       } else {
-        payload.password = password || 'password123'; // fallback
+        if (!password) {
+          toast.error('Vui lòng nhập mật khẩu cho nhân sự mới.');
+          return;
+        }
+        payload.password = password;
         await api.createEmployee(payload);
         toast.success('Đăng ký nhân sự Barista mới thành công!');
       }
@@ -319,12 +323,13 @@ export default function EmployeesList() {
           </div>
           <div>
             <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">
-              Mật khẩu phụ (Để trống nếu giữ nguyên)
+              Mật khẩu {selectedEmp ? 'phụ (Để trống nếu giữ nguyên)' : '*'}
             </label>
             <Input
               type="password"
-              placeholder="Nhập mật khẩu truy cập hệ thống quản trị"
+              placeholder={selectedEmp ? "Nhập mật khẩu mới nếu muốn đổi" : "Nhập mật khẩu (Bắt buộc)"}
               value={password}
+              required={!selectedEmp}
               onChange={(e) => setPassword(e.target.value)}
               className="bg-background/40"
             />

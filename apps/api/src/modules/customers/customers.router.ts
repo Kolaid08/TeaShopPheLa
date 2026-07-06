@@ -4,6 +4,8 @@ import { prisma } from '../../utils/prisma';
 import { sendResponse, parsePagination } from '../../utils/response';
 import { verifyJWT, requireRole } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
+import jwt from 'jsonwebtoken';
+import { config } from '../../config/index';
 
 const router = Router();
 
@@ -52,7 +54,17 @@ router.post('/public/login', async (req, res, next) => {
         include: { MemberShipLevel: true },
       });
     }
-    return sendResponse(res, 200, true, 'Customer logged in successfully', customer);
+
+    const token = jwt.sign(
+      { CustomerID: customer.CustomerID, RoleName: 'CUSTOMER' },
+      config.jwt.accessSecret,
+      { expiresIn: config.jwt.accessExpiration }
+    );
+
+    return sendResponse(res, 200, true, 'Customer logged in successfully', {
+      customer,
+      token,
+    });
   } catch (err) {
     next(err);
   }

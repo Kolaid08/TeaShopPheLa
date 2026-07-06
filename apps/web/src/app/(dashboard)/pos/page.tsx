@@ -190,6 +190,54 @@ export default function PosTerminal() {
   const baseTotal = cart.reduce((sum, item) => sum + item.UnitPrice * item.Quantity, 0);
   const discountRate = activeCustomer?.MemberShipLevel?.DiscountRate || 0; // e.g. 10 (%)
   
+  // Calculate Promotion Discount (Best applicable promo)
+  let promotionDiscountAmount = 0;
+  for (const promo of promotions) {
+    let applicableItemsTotal = 0;
+    let applicableQuantity = 0;
+    
+    let targetIds: number[] | null = null;
+    if (promo.TargetDrinkIDs) {
+      try {
+        targetIds = JSON.parse(promo.TargetDrinkIDs);
+      } catch {}
+    }
+    
+    for (const item of cart) {
+      if (!targetIds || targetIds.includes(item.DrinkSizeID)) {
+        applicableItemsTotal += item.UnitPrice * item.Quantity;
+        applicableQuantity += item.Quantity;
+      }
+    }
+
+    if (applicableQuantity >= promo.MinQuantity) {
+      let currentPromoDiscount = 0;
+      if (promo.Type === 'PERCENT') {
+        currentPromoDiscount = applicableItemsTotal * (promo.Value / 100);
+      } else if (promo.Type === 'AMOUNT') {
+        currentPromoDiscount = promo.Value;
+      } else if (promo.Type === 'FREE_ITEM') {
+        const applicableSorted = cart
+          .filter(i => !targetIds || targetIds.includes(i.DrinkSizeID))
+          .sort((a, b) => a.UnitPrice - b.UnitPrice);
+        
+        let freeItemsToGive = promo.Value;
+        for (const item of applicableSorted) {
+          if (freeItemsToGive <= 0) break;
+          const qtyToFree = Math.min(item.Quantity, freeItemsToGive);
+          currentPromoDiscount += qtyToFree * item.UnitPrice;
+          freeItemsToGive -= qtyToFree;
+        }
+      }
+      
+      if (currentPromoDiscount > promotionDiscountAmount) {
+        promotionDiscountAmount = currentPromoDiscount;
+      }
+    }
+  }
+
+  const promoRatio = baseTotal > 0 ? Math.max(0, (baseTotal - promotionDiscountAmount) / baseTotal) : 1;
+
   let voucherDiscount = 0;
   let targetItemTotal = 0;
   let otherItemsTotal = 0;
@@ -211,6 +259,9 @@ export default function PosTerminal() {
        otherItemsTotal = 0;
     }
 
+    targetItemTotal = targetItemTotal * promoRatio;
+    otherItemsTotal = otherItemsTotal * promoRatio;
+
     if (appliedVoucher.DiscountType === 'PERCENT') {
       voucherDiscount = targetItemTotal * (appliedVoucher.DiscountValue / 100);
     } else {
@@ -218,12 +269,12 @@ export default function PosTerminal() {
       if (voucherDiscount > targetItemTotal) voucherDiscount = targetItemTotal;
     }
   } else {
-    otherItemsTotal = baseTotal;
+    otherItemsTotal = baseTotal * promoRatio;
   }
 
   const membershipDiscountAmount = otherItemsTotal * (discountRate / 100);
-  const totalDiscount = Math.floor(voucherDiscount) + Math.floor(membershipDiscountAmount);
-  const grandTotal = baseTotal - totalDiscount;
+  const totalDiscount = Math.floor(promotionDiscountAmount) + Math.floor(voucherDiscount) + Math.floor(membershipDiscountAmount);
+  const grandTotal = Math.max(0, baseTotal - totalDiscount);
 
   const handleApplyVoucher = async () => {
     if (!voucherInput.trim()) return;

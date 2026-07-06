@@ -128,7 +128,10 @@ router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, 
     });
 
     return sendResponse(res, 200, true, 'Shift deleted successfully');
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'P2003') {
+      return next(new AppError(400, 'Không thể xóa Ca làm này vì đã có dữ liệu điểm danh của nhân viên.'));
+    }
     next(err);
   }
 });

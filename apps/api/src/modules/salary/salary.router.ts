@@ -12,6 +12,7 @@ const generateSalarySchema = z.object({
   Year: z.number().int().min(2000).max(2100),
   BonusDefault: z.number().nonnegative().optional(),
   DeductionDefault: z.number().nonnegative().optional(),
+  LatePenaltyDefault: z.number().nonnegative().optional().default(50000),
 });
 
 const paySalarySchema = z.object({
@@ -137,6 +138,7 @@ router.post('/generate', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (re
     const { Month, Year } = validatedData;
     const bonusDefault = validatedData.BonusDefault || 0;
     const deductionDefault = validatedData.DeductionDefault || 0;
+    const latePenaltyDefault = validatedData.LatePenaltyDefault || 50000;
 
     // 1. Fetch all active employees
     const employees = await prisma.employee.findMany({
@@ -187,7 +189,7 @@ router.post('/generate', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (re
 
         const hourlyWage = employee.Role.DefaultBaseSalary.toNumber(); // Lương theo giờ
         const totalWage = totalHours * hourlyWage;
-        const latePenalty = lateCount * 50000; // Phạt 50,000đ mỗi lần đi muộn
+        const latePenalty = lateCount * latePenaltyDefault; // Phạt cấu hình động (mặc định 50k)
         
         // Gộp phạt đi muộn vào deduction
         const finalDeduction = deductionDefault + latePenalty;

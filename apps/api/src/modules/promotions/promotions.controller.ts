@@ -33,6 +33,17 @@ export const getPromotionById = async (req: Request, res: Response) => {
 export const createPromotion = async (req: Request, res: Response) => {
   try {
     const { Name, Description, Type, Value, MinQuantity, TargetDrinkIDs, IsActive, IsCombo, StartDate, EndDate } = req.body;
+    
+    if (Value <= 0) {
+      return sendResponse(res, 400, false, 'Giá trị khuyến mãi phải lớn hơn 0');
+    }
+    if (Type === 'PERCENT' && Value > 100) {
+      return sendResponse(res, 400, false, 'Mức giảm giá theo phần trăm không được vượt quá 100%');
+    }
+    if (StartDate && EndDate && new Date(StartDate) >= new Date(EndDate)) {
+      return sendResponse(res, 400, false, 'Ngày kết thúc phải sau ngày bắt đầu');
+    }
+
     const promotion = await prisma.promotion.create({
       data: {
         Name,
@@ -58,6 +69,16 @@ export const updatePromotion = async (req: Request, res: Response) => {
     const id = parseInt(req.params.id || '');
     const { Name, Description, Type, Value, MinQuantity, TargetDrinkIDs, IsActive, IsCombo, StartDate, EndDate } = req.body;
     
+    if (Value <= 0) {
+      return sendResponse(res, 400, false, 'Giá trị khuyến mãi phải lớn hơn 0');
+    }
+    if (Type === 'PERCENT' && Value > 100) {
+      return sendResponse(res, 400, false, 'Mức giảm giá theo phần trăm không được vượt quá 100%');
+    }
+    if (StartDate && EndDate && new Date(StartDate) >= new Date(EndDate)) {
+      return sendResponse(res, 400, false, 'Ngày kết thúc phải sau ngày bắt đầu');
+    }
+
     const promotion = await prisma.promotion.update({
       where: { PromotionID: id },
       data: {
