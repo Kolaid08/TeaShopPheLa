@@ -418,6 +418,14 @@ export default function OrdersPage() {
                     </span>
                   </div>
                 ))}
+                {selectedOrder.OrderType === 'DELIVERY' && selectedOrder.ShippingFee !== null && (
+                  <div className="flex justify-between border-t border-dashed border-border pt-3 mt-2 text-xs font-bold text-muted-foreground">
+                    <span>Phí giao hàng:</span>
+                    <span className="font-mono">
+                      {Number(selectedOrder.ShippingFee).toLocaleString('vi-VN')} đ
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between border-t border-dashed border-border pt-3 text-sm font-black text-foreground">
                   <span>Tổng tiền thanh toán:</span>
                   <span className="text-primary font-mono">

@@ -1200,7 +1200,7 @@ export default function CustomerHome() {
                   {orderType === 'DELIVERY' && (
                     <div className="space-y-3 p-3 bg-muted/30 rounded-xl border border-border/50">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Gợi ý địa chỉ giao hàng *</label>
+                        <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Chi tiết Số nhà, Đường *</label>
                         <AddressAutocomplete 
                           initialValue={deliveryAddress}
                           onAddressSelect={(address: string, lat: number, lng: number) => {
@@ -1210,6 +1210,43 @@ export default function CustomerHome() {
                           }}
                           onOpenMap={() => setIsMapModalOpen(true)}
                         />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Tỉnh/Thành *</label>
+                          <select 
+                            value={selectedProvinceId} 
+                            onChange={(e) => setSelectedProvinceId(Number(e.target.value))}
+                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
+                          >
+                            <option value={0}>Chọn Tỉnh</option>
+                            {provinces.map(p => <option key={p.ProvinceID} value={p.ProvinceID}>{p.ProvinceName}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Quận/Huyện *</label>
+                          <select 
+                            value={selectedDistrictId} 
+                            onChange={(e) => setSelectedDistrictId(Number(e.target.value))}
+                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
+                            disabled={!selectedProvinceId}
+                          >
+                            <option value={0}>Chọn Quận</option>
+                            {districts.map(d => <option key={d.DistrictID} value={d.DistrictID}>{d.DistrictName}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Phường/Xã *</label>
+                          <select 
+                            value={selectedWardCode} 
+                            onChange={(e) => setSelectedWardCode(e.target.value)}
+                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
+                            disabled={!selectedDistrictId}
+                          >
+                            <option value="">Chọn Phường</option>
+                            {wards.map(w => <option key={w.WardCode} value={w.WardCode}>{w.WardName}</option>)}
+                          </select>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">

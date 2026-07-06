@@ -590,18 +590,30 @@ router.post('/customer-place', async (req, res, next) => {
       let computedDistance = null;
       let shippingFee = 0;
 
-      if (validatedData.OrderType === 'DELIVERY' && validatedData.Latitude && validatedData.Longitude) {
-         // Default shop location (Ho Chi Minh City center)
-         const shopLat = 10.762622;
-         const shopLng = 106.660172;
-         computedDistance = calculateDistance(shopLat, shopLng, validatedData.Latitude, validatedData.Longitude);
+      if (validatedData.OrderType === 'DELIVERY') {
+         if (!validatedData.DistrictID || !validatedData.WardCode) {
+            throw new AppError(400, 'Thiếu thông tin Quận/Huyện, Phường/Xã để giao hàng.');
+         }
+         if (validatedData.Latitude && validatedData.Longitude) {
+            computedDistance = calculateDistance(10.762622, 106.660172, validatedData.Latitude, validatedData.Longitude);
+         }
          
          if (finalPrice >= 300000) {
             shippingFee = 0; // Free ship > 300k
-         } else if (computedDistance <= 3) {
-            shippingFee = 15000;
          } else {
-            shippingFee = 15000 + Math.ceil(computedDistance - 3) * 5000;
+            try {
+               const weight = validatedData.Items.reduce((acc, curr) => acc + (500 * curr.Quantity), 0) || 500;
+               const feeRes = await GhnService.calculateFee({
+                  to_district_id: validatedData.DistrictID,
+                  to_ward_code: validatedData.WardCode,
+                  weight: weight,
+                  insurance_value: finalPrice
+               });
+               shippingFee = feeRes.total;
+            } catch (err) {
+               console.error("GHN Fee calc error:", err);
+               shippingFee = 15000;
+            }
          }
          finalPrice += shippingFee;
       }
@@ -1189,18 +1201,30 @@ router.post('/', async (req, res, next) => {
       const totalDiscount = promotionDiscountAmount + voucherDiscountAmount + membershipDiscount;
       let finalPrice = Math.max(0, baseTotal - totalDiscount);
 
-      if (validatedData.OrderType === 'DELIVERY' && validatedData.Latitude && validatedData.Longitude) {
-         // Default shop location (Ho Chi Minh City center)
-         const shopLat = 10.762622;
-         const shopLng = 106.660172;
-         computedDistance = calculateDistance(shopLat, shopLng, validatedData.Latitude, validatedData.Longitude);
+      if (validatedData.OrderType === 'DELIVERY') {
+         if (!validatedData.DistrictID || !validatedData.WardCode) {
+            throw new AppError(400, 'Thiếu thông tin Quận/Huyện, Phường/Xã để giao hàng.');
+         }
+         if (validatedData.Latitude && validatedData.Longitude) {
+            computedDistance = calculateDistance(10.762622, 106.660172, validatedData.Latitude, validatedData.Longitude);
+         }
          
          if (finalPrice >= 300000) {
             shippingFee = 0; // Free ship > 300k
-         } else if (computedDistance <= 3) {
-            shippingFee = 15000;
          } else {
-            shippingFee = 15000 + Math.ceil(computedDistance - 3) * 5000;
+            try {
+               const weight = validatedData.Items.reduce((acc, curr) => acc + (500 * curr.Quantity), 0) || 500;
+               const feeRes = await GhnService.calculateFee({
+                  to_district_id: validatedData.DistrictID,
+                  to_ward_code: validatedData.WardCode,
+                  weight: weight,
+                  insurance_value: finalPrice
+               });
+               shippingFee = feeRes.total;
+            } catch (err) {
+               console.error("GHN Fee calc error (Offline):", err);
+               shippingFee = 15000;
+            }
          }
          finalPrice += shippingFee;
       }
