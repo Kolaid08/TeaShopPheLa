@@ -1453,13 +1453,17 @@ router.patch('/:id/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER'])
         }));
         const totalWeight = items.reduce((acc, curr) => acc + curr.weight * curr.quantity, 0) || 500;
 
+        if (!order.DistrictID || !order.WardCode) {
+          throw new AppError(400, 'Đơn hàng thiếu thông tin Quận/Huyện hoặc Phường/Xã chuẩn để tạo đơn GHN. Vui lòng tự giao đơn hàng này.');
+        }
+
         const isCOD = (order.PaymentMethod === 'COD' || !order.PaymentMethod) && order.PaymentStatus !== 'PAID';
         ghnCode = await GhnService.createOrder({
           to_name: order.ReceiverName || 'Khách hàng',
           to_phone: order.ReceiverPhone || '0900000000',
           to_address: order.ShippingAddress || 'Không có địa chỉ',
-          to_ward_code: order.WardCode || '20102', // Fallback to a default ward if not present
-          to_district_id: order.DistrictID || 1442, // Fallback to a default district
+          to_ward_code: order.WardCode,
+          to_district_id: order.DistrictID,
           weight: totalWeight,
           insurance_value: order.TotalPrice.toNumber(),
           cod_amount: isCOD ? order.TotalPrice.toNumber() : 0,
