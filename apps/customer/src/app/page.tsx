@@ -558,6 +558,32 @@ export default function CustomerHome() {
 
     setIsSubmittingOrder(true);
     try {
+      let finalShippingAddress = deliveryAddress || undefined;
+
+      if (orderType === 'DELIVERY') {
+        if (!deliveryAddress || !selectedProvinceId || !selectedDistrictId || !selectedWardCode) {
+          toast.error('Vui lòng nhập đầy đủ thông tin địa chỉ giao hàng (Tỉnh/Thành, Quận/Huyện, Phường/Xã)!');
+          setIsSubmittingOrder(false);
+          return;
+        }
+        if (!receiverName || !receiverPhone) {
+          toast.error('Vui lòng nhập tên và số điện thoại người nhận!');
+          setIsSubmittingOrder(false);
+          return;
+        }
+        
+        // Cần nối đầy đủ địa chỉ để GHN và Admin có thể xem được chính xác
+        const pName = provinces.find(p => p.ProvinceID === selectedProvinceId)?.ProvinceName;
+        const dName = districts.find(d => d.DistrictID === selectedDistrictId)?.DistrictName;
+        const wName = wards.find(w => w.WardCode === selectedWardCode)?.WardName;
+        
+        let fullStr = deliveryAddress;
+        if (wName && !fullStr.includes(wName)) fullStr += `, ${wName}`;
+        if (dName && !fullStr.includes(dName)) fullStr += `, ${dName}`;
+        if (pName && !fullStr.includes(pName)) fullStr += `, ${pName}`;
+        finalShippingAddress = fullStr;
+      }
+
       const orderPayload = {
         Items: cart.map((item) => ({
           DrinkSizeID: item.DrinkSizeID,
@@ -571,7 +597,7 @@ export default function CustomerHome() {
         ShopTableID: tableId > 0 ? tableId : undefined,
         OrderNote: `${deliveryAddress ? `Giao hàng: ${deliveryAddress}` : ''}${orderNote ? ` | Ghi chú: ${orderNote}` : ''}`,
         OrderType: orderType,
-        ShippingAddress: deliveryAddress || undefined,
+        ShippingAddress: finalShippingAddress,
         ProvinceID: selectedProvinceId || undefined,
         DistrictID: selectedDistrictId || undefined,
         WardCode: selectedWardCode || undefined,
