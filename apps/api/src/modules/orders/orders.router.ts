@@ -1426,6 +1426,7 @@ router.patch('/:id/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER'])
     const order = await prisma.orders.findUnique({
       where: { OrderID: orderId },
       include: {
+        Customer: true,
         OrderDetails: {
           include: { DrinkSize: { include: { Size: true, Drink: true } } }
         }
