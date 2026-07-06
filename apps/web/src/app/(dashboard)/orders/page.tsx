@@ -374,6 +374,14 @@ export default function OrdersPage() {
                       </span>
                     </div>
                   )}
+                  {selectedOrder.GHN_OrderCode && (
+                    <div className="flex justify-between mt-2 pt-2 border-t border-dashed border-border/50">
+                      <span className="text-muted-foreground font-bold">Mã GHN:</span>
+                      <a href={`https://donhang.ghn.vn/?order_code=${selectedOrder.GHN_OrderCode}`} target="_blank" rel="noreferrer" className="font-mono text-amber-600 font-bold text-xs underline hover:text-amber-700">
+                        {selectedOrder.GHN_OrderCode}
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -443,7 +451,7 @@ export default function OrdersPage() {
                       </div>
                       <div className="text-center text-[10px] text-muted-foreground">- HOẶC -</div>
                       <Button variant="outline" className="w-full text-xs" onClick={handleBookThirdParty} disabled={isAssigning}>
-                        Gọi Grab/Ahamove
+                        Giao qua Giao Hàng Nhanh (GHN)
                       </Button>
                     </div>
                   )}

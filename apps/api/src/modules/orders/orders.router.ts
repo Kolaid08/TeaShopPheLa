@@ -6,6 +6,7 @@ import { verifyJWT, requireRole } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import { upgradeCustomerLevel } from '../customers/customers.router';
 import { payos } from '../payment/payment.controller';
+import { GhnService } from '../shipping/ghn.service';
 
 export async function processOrderIngredients(tx: any, items: { DrinkSizeID: number, Quantity: number }[], mode: 'deduct' | 'refund') {
   for (const item of items) {
@@ -61,6 +62,9 @@ const createOrderSchema = z.object({
   TotalPrice: z.number().positive().optional(),
   OrderType: z.enum(['DINE_IN', 'TAKEAWAY', 'DELIVERY']).optional(),
   ShippingAddress: z.string().optional().nullable(),
+  ProvinceID: z.number().optional().nullable(),
+  DistrictID: z.number().optional().nullable(),
+  WardCode: z.string().optional().nullable(),
   Latitude: z.number().optional().nullable(),
   Longitude: z.number().optional().nullable(),
   ReceiverName: z.string().optional().nullable(),
@@ -625,6 +629,9 @@ router.post('/customer-place', async (req, res, next) => {
             OrderNote: validatedData.OrderNote || null,
             OrderType: validatedData.OrderType || (validShopTableId ? 'DINE_IN' : 'TAKEAWAY'),
             ShippingAddress: validatedData.ShippingAddress || null,
+            ProvinceID: validatedData.ProvinceID || null,
+            DistrictID: validatedData.DistrictID || null,
+            WardCode: validatedData.WardCode || null,
             Latitude: validatedData.Latitude || null,
             Longitude: validatedData.Longitude || null,
             Distance: computedDistance,
@@ -1418,6 +1425,11 @@ router.patch('/:id/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER'])
 
     const order = await prisma.orders.findUnique({
       where: { OrderID: orderId },
+      include: {
+        OrderDetails: {
+          include: { DrinkSize: { include: { Size: true, Drink: true } } }
+        }
+      }
     });
 
     if (!order) throw new AppError(404, 'Order not found.');
@@ -1430,15 +1442,45 @@ router.patch('/:id/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER'])
       throw new AppError(400, 'Chỉ có thể gán tài xế khi đơn đang ở trạng thái Chờ xác nhận hoặc Đang pha chế.');
     }
 
+    let ghnCode = null;
+    if (validatedData.DeliveryMethod === 'THIRD_PARTY') {
+      try {
+        const items = order.OrderDetails.map((d) => ({
+          name: d.DrinkSize.Drink.DrinkName,
+          quantity: d.Quantity,
+          price: d.UnitPrice.toNumber(),
+          weight: d.DrinkSize.Size.WeightGram || 500,
+        }));
+        const totalWeight = items.reduce((acc, curr) => acc + curr.weight * curr.quantity, 0) || 500;
+
+        const isCOD = (order.PaymentMethod === 'COD' || !order.PaymentMethod) && order.PaymentStatus !== 'PAID';
+        ghnCode = await GhnService.createOrder({
+          to_name: order.ReceiverName || 'Khách hàng',
+          to_phone: order.ReceiverPhone || '0900000000',
+          to_address: order.ShippingAddress || 'Không có địa chỉ',
+          to_ward_code: order.WardCode || '20102', // Fallback to a default ward if not present
+          to_district_id: order.DistrictID || 1442, // Fallback to a default district
+          weight: totalWeight,
+          insurance_value: order.TotalPrice.toNumber(),
+          cod_amount: isCOD ? order.TotalPrice.toNumber() : 0,
+          content: `Đơn hàng Phê La #${order.OrderID}`,
+          items,
+        });
+      } catch (error: any) {
+        throw new AppError(500, `Lỗi tạo đơn bên GHN: ${error.message}`);
+      }
+    }
+
     const updatedOrder = await prisma.orders.update({
       where: { OrderID: orderId },
       data: {
         OrderStatus: 'SHIPPING',
         DeliveryMethod: validatedData.DeliveryMethod,
         ShipperID: validatedData.DeliveryMethod === 'INTERNAL' ? validatedData.ShipperID : null,
-        ThirdPartyShipperName: validatedData.DeliveryMethod === 'THIRD_PARTY' ? validatedData.ThirdPartyShipperName : null,
-        ThirdPartyShipperPhone: validatedData.DeliveryMethod === 'THIRD_PARTY' ? validatedData.ThirdPartyShipperPhone : null,
-        TrackingURL: validatedData.DeliveryMethod === 'THIRD_PARTY' ? validatedData.TrackingURL : null,
+        ThirdPartyShipperName: validatedData.DeliveryMethod === 'THIRD_PARTY' ? 'Giao Hàng Nhanh' : null,
+        ThirdPartyShipperPhone: null, // GHN handles phone
+        TrackingURL: ghnCode ? `https://donhang.ghn.vn/?order_code=${ghnCode}` : null,
+        GHN_OrderCode: ghnCode,
       },
     });
 
@@ -1449,6 +1491,40 @@ router.patch('/:id/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER'])
       'Đã gán tài xế và chuyển trạng thái đơn hàng sang Đang giao (SHIPPING).',
       updatedOrder,
     );
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /ghn-webhook - Handle status updates from GHN (Bỏ qua verifyJWT vì GHN gọi)
+router.post('/ghn-webhook', async (req, res, next) => {
+  try {
+    const { OrderCode, Status } = req.body;
+    // Status từ GHN: 'ready_to_pick', 'picking', 'delivering', 'delivered', 'cancel', 'return'...
+    if (OrderCode && Status) {
+      const order = await prisma.orders.findFirst({ where: { GHN_OrderCode: OrderCode } });
+      if (order) {
+        let newStatus = order.OrderStatus;
+        if (Status === 'delivering' || Status === 'picking') newStatus = 'SHIPPING';
+        if (Status === 'delivered') {
+           newStatus = 'COMPLETED';
+           // Tích điểm & Nâng hạng thẻ khi giao thành công
+           if (order.CustomerID) {
+              await upgradeCustomerLevel(order.CustomerID, order.TotalPrice.toNumber());
+           }
+        }
+        if (Status === 'cancel' || Status === 'return' || Status === 'returned') newStatus = 'DELIVERY_FAILED';
+
+        if (newStatus !== order.OrderStatus) {
+          await prisma.orders.update({
+            where: { OrderID: order.OrderID },
+            data: { OrderStatus: newStatus }
+          });
+          console.log(`[GHN Webhook] Order ${order.OrderID} status updated to ${newStatus}`);
+        }
+      }
+    }
+    return sendResponse(res, 200, true, 'Webhook received', null);
   } catch (err) {
     next(err);
   }

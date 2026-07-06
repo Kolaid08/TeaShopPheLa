@@ -597,6 +597,69 @@ export const api = {
     }
   },
 
+  calculateVoucher: async (voucherCode: string, items: { DrinkSizeID: number; Quantity: number }[]): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/vouchers/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ VoucherCode: voucherCode, Items: items })
+      });
+      const payload = await res.json();
+      if (res.ok && payload.success) return payload.data;
+      throw new Error(payload.message || 'Lỗi áp dụng mã');
+    } catch (e: any) {
+      throw new Error(e?.message || 'Lỗi máy chủ');
+    }
+  },
+
+  getProvinces: async (): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/provinces`);
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  getDistricts: async (provinceId: number): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/districts/${provinceId}`);
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  getWards: async (districtId: number): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/wards/${districtId}`);
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  calculateFee: async (data: { to_district_id: number; to_ward_code: string; items: { DrinkSizeID: number; Quantity: number; }[] }): Promise<{ fee: number, totalWeight: number }> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/calculate-fee`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return { fee: 15000, totalWeight: 500 };
+    } catch {
+      return { fee: 15000, totalWeight: 500 };
+    }
+  },
+
   getFrequentOrders: async (customerId: number): Promise<any[]> => {
     try {
       const res = await fetch(`${API_BASE}/orders/customer-frequent/${customerId}`, { cache: 'no-store' });

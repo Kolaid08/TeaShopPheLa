@@ -96,6 +96,15 @@ export default function CustomerHome() {
   const [receiverPhone, setReceiverPhone] = useState('');
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   
+  // Shipping states
+  const [shippingFee, setShippingFee] = useState<number>(0);
+  const [provinces, setProvinces] = useState<any[]>([]);
+  const [districts, setDistricts] = useState<any[]>([]);
+  const [wards, setWards] = useState<any[]>([]);
+  const [selectedProvinceId, setSelectedProvinceId] = useState<number>(0);
+  const [selectedDistrictId, setSelectedDistrictId] = useState<number>(0);
+  const [selectedWardCode, setSelectedWardCode] = useState<string>('');
+  
   // PayOS states
   const [payOsQrCode, setPayOsQrCode] = useState<string>('');
   const [payOsDetails, setPayOsDetails] = useState<{ accountNumber?: string; description?: string; bin?: string; amount?: number } | null>(null);
@@ -118,7 +127,38 @@ export default function CustomerHome() {
 
   useEffect(() => {
     api.getActivePromotions().then(setActivePromotions);
+    api.getProvinces().then(setProvinces);
   }, []);
+
+  useEffect(() => {
+    if (selectedProvinceId) {
+      api.getDistricts(selectedProvinceId).then(setDistricts);
+      setSelectedDistrictId(0);
+      setSelectedWardCode('');
+      setWards([]);
+      setShippingFee(0);
+    }
+  }, [selectedProvinceId]);
+
+  useEffect(() => {
+    if (selectedDistrictId) {
+      api.getWards(selectedDistrictId).then(setWards);
+      setSelectedWardCode('');
+      setShippingFee(0);
+    }
+  }, [selectedDistrictId]);
+
+  useEffect(() => {
+    if (selectedDistrictId && selectedWardCode && cart.length > 0) {
+      api.calculateFee({
+        to_district_id: selectedDistrictId,
+        to_ward_code: selectedWardCode,
+        items: cart.map(c => ({ DrinkSizeID: c.DrinkSizeID, Quantity: c.Quantity }))
+      }).then(res => setShippingFee(res.fee));
+    } else {
+      setShippingFee(0);
+    }
+  }, [selectedDistrictId, selectedWardCode, cart]);
 
   useEffect(() => {
     if (cart.length > 0) {
@@ -467,34 +507,15 @@ export default function CustomerHome() {
     const membershipDiscountAmount = otherItemsTotal * (membershipDiscountRate / 100);
     const baseFinal = subtotal - Math.floor(voucherDiscount) - Math.floor(promotionDiscount) - Math.floor(membershipDiscountAmount);
     
-    let shippingFee = 0;
-    if (orderType === 'DELIVERY' && latitude && longitude) {
-      const shopLat = 10.762622;
-      const shopLng = 106.660172;
-      const R = 6371;
-      const dLat = (latitude - shopLat) * (Math.PI / 180);
-      const dLon = (longitude - shopLng) * (Math.PI / 180);
-      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(shopLat * (Math.PI / 180)) * Math.cos(latitude * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      const distance = R * c;
-      
-      if (baseFinal >= 300000) {
-         shippingFee = 0;
-      } else if (distance <= 3) {
-         shippingFee = 15000;
-      } else {
-         shippingFee = 15000 + Math.ceil(distance - 3) * 5000;
-      }
-    }
-    
-    const finalTotal = baseFinal + shippingFee;
+    // shippingFee is now correctly handled by state `shippingFee` instead of manual distance calc
+    const finalTotal = baseFinal + (orderType === 'DELIVERY' ? shippingFee : 0);
     
     return {
       subtotal,
       voucherDiscount: Math.floor(voucherDiscount),
       promotionDiscount: Math.floor(promotionDiscount),
       membershipDiscount: Math.floor(membershipDiscountAmount),
-      shippingFee,
+      shippingFee: orderType === 'DELIVERY' ? shippingFee : 0,
       total: Math.floor(finalTotal > 0 ? finalTotal : 0)
     };
   };
@@ -551,6 +572,9 @@ export default function CustomerHome() {
         OrderNote: `${deliveryAddress ? `Giao hàng: ${deliveryAddress}` : ''}${orderNote ? ` | Ghi chú: ${orderNote}` : ''}`,
         OrderType: orderType,
         ShippingAddress: deliveryAddress || undefined,
+        ProvinceID: selectedProvinceId || undefined,
+        DistrictID: selectedDistrictId || undefined,
+        WardCode: selectedWardCode || undefined,
         Latitude: latitude || undefined,
         Longitude: longitude || undefined,
         ReceiverName: receiverName || undefined,
@@ -1202,8 +1226,8 @@ export default function CustomerHome() {
                       router.push('/login');
                       return;
                     }
-                    if (orderType === 'DELIVERY' && !deliveryAddress) {
-                      toast.error('Vui lòng cung cấp địa chỉ giao hàng.');
+                    if (orderType === 'DELIVERY' && (!deliveryAddress || !selectedProvinceId || !selectedDistrictId || !selectedWardCode)) {
+                      toast.error('Vui lòng cung cấp đầy đủ thông tin địa chỉ giao hàng (Tỉnh/Thành, Quận/Huyện, Phường/Xã và Chi tiết).');
                       return;
                     }
                     if (orderType === 'DINE_IN' && tableId === 0) {

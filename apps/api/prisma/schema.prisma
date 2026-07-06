@@ -28,6 +28,7 @@ model Size {
   SizeName    String      @db.VarChar(50)
   Description String?     @db.NVarChar(255)
   VolumeML    Int
+  WeightGram  Int         @default(500) // Trọng lượng ước tính (gram) dùng cho GHN
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   DrinkSizes  DrinkSize[]
@@ -209,6 +210,9 @@ model Orders {
   ShipperID       Int?
   OrderType       String        @default("DINE_IN") @db.VarChar(50)
   ShippingAddress String?       @db.NVarChar(255)
+  ProvinceID     Int?
+  DistrictID     Int?
+  WardCode       String?       @db.VarChar(50)
   Latitude        Float?
   Longitude       Float?
   Distance        Float?
@@ -219,6 +223,8 @@ model Orders {
   ThirdPartyShipperName String? @db.NVarChar(255)
   ThirdPartyShipperPhone String? @db.VarChar(20)
   TrackingURL     String?       @db.VarChar(500)
+  // GHN Shipping Info
+  GHN_OrderCode   String?       @db.VarChar(100)
   CreatedTime     DateTime      @default(now())
   OrderStatus     String        @default("PENDING") @db.VarChar(50)
   TotalPrice      Decimal       @db.Decimal(10, 2)

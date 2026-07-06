@@ -140,6 +140,7 @@ export interface Order {
   ThirdPartyShipperName?: string;
   ThirdPartyShipperPhone?: string;
   TrackingURL?: string;
+  GHN_OrderCode?: string;
   Customer?: { CustomerName: string; PhoneNumber: string };
   ShopTable?: { ShopTableNumber: number };
   Employee?: { FullName: string };
