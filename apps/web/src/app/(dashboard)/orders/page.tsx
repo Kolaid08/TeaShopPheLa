@@ -374,14 +374,6 @@ export default function OrdersPage() {
                       </span>
                     </div>
                   )}
-                  {selectedOrder.GHN_OrderCode && (
-                    <div className="flex justify-between mt-2 pt-2 border-t border-dashed border-border/50">
-                      <span className="text-muted-foreground font-bold">Mã GHN:</span>
-                      <a href={`https://donhang.ghn.vn/?order_code=${selectedOrder.GHN_OrderCode}`} target="_blank" rel="noreferrer" className="font-mono text-amber-600 font-bold text-xs underline hover:text-amber-700">
-                        {selectedOrder.GHN_OrderCode}
-                      </a>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -418,14 +410,6 @@ export default function OrdersPage() {
                     </span>
                   </div>
                 ))}
-                {selectedOrder.OrderType === 'DELIVERY' && selectedOrder.ShippingFee !== null && (
-                  <div className="flex justify-between border-t border-dashed border-border pt-3 mt-2 text-xs font-bold text-muted-foreground">
-                    <span>Phí giao hàng:</span>
-                    <span className="font-mono">
-                      {Number(selectedOrder.ShippingFee).toLocaleString('vi-VN')} đ
-                    </span>
-                  </div>
-                )}
                 <div className="flex justify-between border-t border-dashed border-border pt-3 text-sm font-black text-foreground">
                   <span>Tổng tiền thanh toán:</span>
                   <span className="text-primary font-mono">
@@ -459,7 +443,7 @@ export default function OrdersPage() {
                       </div>
                       <div className="text-center text-[10px] text-muted-foreground">- HOẶC -</div>
                       <Button variant="outline" className="w-full text-xs" onClick={handleBookThirdParty} disabled={isAssigning}>
-                        Giao qua Giao Hàng Nhanh (GHN)
+                        Gọi Grab/Ahamove
                       </Button>
                     </div>
                   )}

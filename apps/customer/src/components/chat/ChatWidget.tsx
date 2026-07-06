@@ -244,8 +244,7 @@ export function ChatWidget() {
                                   <p className="text-emerald-800 text-xs font-bold mb-2 leading-tight">Thêm Combo Này Vào Giỏ Hàng?</p>
                                   <button 
                                      onClick={() => {
-                                       const idsString = drinkSizeIdsStr || '';
-                                       window.dispatchEvent(new CustomEvent('ai_add_combo', { detail: { drinkSizeIds: idsString.split(',').filter(Boolean).map(Number) } }));
+                                       window.dispatchEvent(new CustomEvent('ai_add_combo', { detail: { drinkSizeIds: drinkSizeIdsStr.split(',').map(Number) } }));
                                      }}
                                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-xs transition-colors shadow-sm"
                                   >

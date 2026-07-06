@@ -96,15 +96,6 @@ export default function CustomerHome() {
   const [receiverPhone, setReceiverPhone] = useState('');
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   
-  // Shipping states
-  const [shippingFee, setShippingFee] = useState<number>(0);
-  const [provinces, setProvinces] = useState<any[]>([]);
-  const [districts, setDistricts] = useState<any[]>([]);
-  const [wards, setWards] = useState<any[]>([]);
-  const [selectedProvinceId, setSelectedProvinceId] = useState<number>(0);
-  const [selectedDistrictId, setSelectedDistrictId] = useState<number>(0);
-  const [selectedWardCode, setSelectedWardCode] = useState<string>('');
-  
   // PayOS states
   const [payOsQrCode, setPayOsQrCode] = useState<string>('');
   const [payOsDetails, setPayOsDetails] = useState<{ accountNumber?: string; description?: string; bin?: string; amount?: number } | null>(null);
@@ -127,38 +118,7 @@ export default function CustomerHome() {
 
   useEffect(() => {
     api.getActivePromotions().then(setActivePromotions);
-    api.getProvinces().then(setProvinces);
   }, []);
-
-  useEffect(() => {
-    if (selectedProvinceId) {
-      api.getDistricts(selectedProvinceId).then(setDistricts);
-      setSelectedDistrictId(0);
-      setSelectedWardCode('');
-      setWards([]);
-      setShippingFee(0);
-    }
-  }, [selectedProvinceId]);
-
-  useEffect(() => {
-    if (selectedDistrictId) {
-      api.getWards(selectedDistrictId).then(setWards);
-      setSelectedWardCode('');
-      setShippingFee(0);
-    }
-  }, [selectedDistrictId]);
-
-  useEffect(() => {
-    if (selectedDistrictId && selectedWardCode && cart.length > 0) {
-      api.calculateFee({
-        to_district_id: selectedDistrictId,
-        to_ward_code: selectedWardCode,
-        items: cart.map(c => ({ DrinkSizeID: c.DrinkSizeID, Quantity: c.Quantity }))
-      }).then(res => setShippingFee(res.fee));
-    } else {
-      setShippingFee(0);
-    }
-  }, [selectedDistrictId, selectedWardCode, cart]);
 
   useEffect(() => {
     if (cart.length > 0) {
@@ -507,20 +467,39 @@ export default function CustomerHome() {
     const membershipDiscountAmount = otherItemsTotal * (membershipDiscountRate / 100);
     const baseFinal = subtotal - Math.floor(voucherDiscount) - Math.floor(promotionDiscount) - Math.floor(membershipDiscountAmount);
     
-    // shippingFee is now correctly handled by state `shippingFee` instead of manual distance calc
-    const finalTotal = baseFinal + (orderType === 'DELIVERY' ? shippingFee : 0);
+    let shippingFee = 0;
+    if (orderType === 'DELIVERY' && latitude && longitude) {
+      const shopLat = 10.762622;
+      const shopLng = 106.660172;
+      const R = 6371;
+      const dLat = (latitude - shopLat) * (Math.PI / 180);
+      const dLon = (longitude - shopLng) * (Math.PI / 180);
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(shopLat * (Math.PI / 180)) * Math.cos(latitude * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+      
+      if (baseFinal >= 300000) {
+         shippingFee = 0;
+      } else if (distance <= 3) {
+         shippingFee = 15000;
+      } else {
+         shippingFee = 15000 + Math.ceil(distance - 3) * 5000;
+      }
+    }
+    
+    const finalTotal = baseFinal + shippingFee;
     
     return {
       subtotal,
       voucherDiscount: Math.floor(voucherDiscount),
       promotionDiscount: Math.floor(promotionDiscount),
       membershipDiscount: Math.floor(membershipDiscountAmount),
-      shippingFee: orderType === 'DELIVERY' ? shippingFee : 0,
+      shippingFee,
       total: Math.floor(finalTotal > 0 ? finalTotal : 0)
     };
   };
 
-  const { subtotal, voucherDiscount, promotionDiscount, membershipDiscount, total } = getCalculations();
+  const { subtotal, voucherDiscount, promotionDiscount, membershipDiscount, shippingFee, total } = getCalculations();
   const getTotalPrice = () => total;
 
   const handleApplyVoucher = async () => {
@@ -558,32 +537,6 @@ export default function CustomerHome() {
 
     setIsSubmittingOrder(true);
     try {
-      let finalShippingAddress = deliveryAddress || undefined;
-
-      if (orderType === 'DELIVERY') {
-        if (!deliveryAddress || !selectedProvinceId || !selectedDistrictId || !selectedWardCode) {
-          toast.error('Vui lòng nhập đầy đủ thông tin địa chỉ giao hàng (Tỉnh/Thành, Quận/Huyện, Phường/Xã)!');
-          setIsSubmittingOrder(false);
-          return;
-        }
-        if (!receiverName || !receiverPhone) {
-          toast.error('Vui lòng nhập tên và số điện thoại người nhận!');
-          setIsSubmittingOrder(false);
-          return;
-        }
-        
-        // Cần nối đầy đủ địa chỉ để GHN và Admin có thể xem được chính xác
-        const pName = provinces.find(p => p.ProvinceID === selectedProvinceId)?.ProvinceName;
-        const dName = districts.find(d => d.DistrictID === selectedDistrictId)?.DistrictName;
-        const wName = wards.find(w => w.WardCode === selectedWardCode)?.WardName;
-        
-        let fullStr = deliveryAddress;
-        if (wName && !fullStr.includes(wName)) fullStr += `, ${wName}`;
-        if (dName && !fullStr.includes(dName)) fullStr += `, ${dName}`;
-        if (pName && !fullStr.includes(pName)) fullStr += `, ${pName}`;
-        finalShippingAddress = fullStr;
-      }
-
       const orderPayload = {
         Items: cart.map((item) => ({
           DrinkSizeID: item.DrinkSizeID,
@@ -597,10 +550,7 @@ export default function CustomerHome() {
         ShopTableID: tableId > 0 ? tableId : undefined,
         OrderNote: `${deliveryAddress ? `Giao hàng: ${deliveryAddress}` : ''}${orderNote ? ` | Ghi chú: ${orderNote}` : ''}`,
         OrderType: orderType,
-        ShippingAddress: finalShippingAddress,
-        ProvinceID: selectedProvinceId || undefined,
-        DistrictID: selectedDistrictId || undefined,
-        WardCode: selectedWardCode || undefined,
+        ShippingAddress: deliveryAddress || undefined,
         Latitude: latitude || undefined,
         Longitude: longitude || undefined,
         ReceiverName: receiverName || undefined,
@@ -1200,7 +1150,7 @@ export default function CustomerHome() {
                   {orderType === 'DELIVERY' && (
                     <div className="space-y-3 p-3 bg-muted/30 rounded-xl border border-border/50">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Chi tiết Số nhà, Đường *</label>
+                        <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Gợi ý địa chỉ giao hàng *</label>
                         <AddressAutocomplete 
                           initialValue={deliveryAddress}
                           onAddressSelect={(address: string, lat: number, lng: number) => {
@@ -1210,43 +1160,6 @@ export default function CustomerHome() {
                           }}
                           onOpenMap={() => setIsMapModalOpen(true)}
                         />
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Tỉnh/Thành *</label>
-                          <select 
-                            value={selectedProvinceId} 
-                            onChange={(e) => setSelectedProvinceId(Number(e.target.value))}
-                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
-                          >
-                            <option value={0}>Chọn Tỉnh</option>
-                            {provinces.map(p => <option key={p.ProvinceID} value={p.ProvinceID}>{p.ProvinceName}</option>)}
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Quận/Huyện *</label>
-                          <select 
-                            value={selectedDistrictId} 
-                            onChange={(e) => setSelectedDistrictId(Number(e.target.value))}
-                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
-                            disabled={!selectedProvinceId}
-                          >
-                            <option value={0}>Chọn Quận</option>
-                            {districts.map(d => <option key={d.DistrictID} value={d.DistrictID}>{d.DistrictName}</option>)}
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Phường/Xã *</label>
-                          <select 
-                            value={selectedWardCode} 
-                            onChange={(e) => setSelectedWardCode(e.target.value)}
-                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
-                            disabled={!selectedDistrictId}
-                          >
-                            <option value="">Chọn Phường</option>
-                            {wards.map(w => <option key={w.WardCode} value={w.WardCode}>{w.WardName}</option>)}
-                          </select>
-                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
@@ -1289,8 +1202,8 @@ export default function CustomerHome() {
                       router.push('/login');
                       return;
                     }
-                    if (orderType === 'DELIVERY' && (!deliveryAddress || !selectedProvinceId || !selectedDistrictId || !selectedWardCode)) {
-                      toast.error('Vui lòng cung cấp đầy đủ thông tin địa chỉ giao hàng (Tỉnh/Thành, Quận/Huyện, Phường/Xã và Chi tiết).');
+                    if (orderType === 'DELIVERY' && !deliveryAddress) {
+                      toast.error('Vui lòng cung cấp địa chỉ giao hàng.');
                       return;
                     }
                     if (orderType === 'DINE_IN' && tableId === 0) {
