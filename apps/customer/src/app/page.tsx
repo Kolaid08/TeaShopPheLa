@@ -520,7 +520,7 @@ export default function CustomerHome() {
     };
   };
 
-  const { subtotal, voucherDiscount, promotionDiscount, membershipDiscount, shippingFee, total } = getCalculations();
+  const { subtotal, voucherDiscount, promotionDiscount, membershipDiscount, total } = getCalculations();
   const getTotalPrice = () => total;
 
   const handleApplyVoucher = async () => {
