@@ -64,6 +64,16 @@ async function main() {
       PINCode: '3333',
       password: hashedPassword,
       RoleID: shipperRole!.RoleID,
+    },
+    {
+      FullName: 'Nguyễn Văn Staff',
+      PhoneNumber: '0911223344',
+      Email: 'staff@phela.vn',
+      Birth: new Date('1999-05-15'),
+      Sex: 'Nữ',
+      PINCode: '4444',
+      password: hashedPassword,
+      RoleID: staffRole!.RoleID,
     }
   ];
 
@@ -175,20 +185,26 @@ async function main() {
   
   if (sizeM && sizeL) {
     for (const drink of allDrinks) {
+      let priceM = 45000;
+      let priceL = 55000;
+      if (drink.DrinkName.includes('Cà Phê') || drink.DrinkName.includes('Bạc Xỉu')) { priceM = 35000; priceL = 45000; }
+      else if (drink.DrinkName.includes('Đặc Sản') || drink.DrinkName === 'Phan Xi Păng') { priceM = 55000; priceL = 65000; }
+      else if (drink.DrinkName.includes('Matcha') || drink.DrinkName.includes('Sương Tôn Môn')) { priceM = 50000; priceL = 60000; }
+
       // Size M
       const existM = await prisma.drinkSize.findFirst({ where: { DrinkID: drink.DrinkID, SizeID: sizeM.SizeID } });
       if (!existM) {
-        await prisma.drinkSize.create({ data: { DrinkID: drink.DrinkID, SizeID: sizeM.SizeID, UnitPrice: 45000, DrinkSizeStatus: 'AVAILABLE' } });
+        await prisma.drinkSize.create({ data: { DrinkID: drink.DrinkID, SizeID: sizeM.SizeID, UnitPrice: priceM, DrinkSizeStatus: 'AVAILABLE' } });
       } else {
-        await prisma.drinkSize.update({ where: { DrinkSizeID: existM.DrinkSizeID }, data: { UnitPrice: 45000, DrinkSizeStatus: 'AVAILABLE' } });
+        await prisma.drinkSize.update({ where: { DrinkSizeID: existM.DrinkSizeID }, data: { UnitPrice: priceM, DrinkSizeStatus: 'AVAILABLE' } });
       }
 
       // Size L
       const existL = await prisma.drinkSize.findFirst({ where: { DrinkID: drink.DrinkID, SizeID: sizeL.SizeID } });
       if (!existL) {
-        await prisma.drinkSize.create({ data: { DrinkID: drink.DrinkID, SizeID: sizeL.SizeID, UnitPrice: 55000, DrinkSizeStatus: 'AVAILABLE' } });
+        await prisma.drinkSize.create({ data: { DrinkID: drink.DrinkID, SizeID: sizeL.SizeID, UnitPrice: priceL, DrinkSizeStatus: 'AVAILABLE' } });
       } else {
-        await prisma.drinkSize.update({ where: { DrinkSizeID: existL.DrinkSizeID }, data: { UnitPrice: 55000, DrinkSizeStatus: 'AVAILABLE' } });
+        await prisma.drinkSize.update({ where: { DrinkSizeID: existL.DrinkSizeID }, data: { UnitPrice: priceL, DrinkSizeStatus: 'AVAILABLE' } });
       }
     }
   }
@@ -216,6 +232,8 @@ async function main() {
   const customersData = [
     { CustomerName: 'Khách vãng lai', PhoneNumber: '0000000000', TotalMoneySpending: 0, LevelID: memberLvl!.LevelID },
     { CustomerName: 'Nguyễn Văn A', PhoneNumber: '0987654321', Email: 'nguyenvana@gmail.com', TotalMoneySpending: 150000, LevelID: memberLvl!.LevelID },
+    { CustomerName: 'Trần Thị B', PhoneNumber: '0912345678', Email: 'tranthib@gmail.com', TotalMoneySpending: 550000, LevelID: memberLvl!.LevelID },
+    { CustomerName: 'Lê Văn C', PhoneNumber: '0923456789', Email: 'levanc@gmail.com', TotalMoneySpending: 1200000, LevelID: memberLvl!.LevelID },
   ];
   for (const c of customersData) {
     const exists = await prisma.customer.findFirst({ where: { PhoneNumber: c.PhoneNumber } });
@@ -245,6 +263,14 @@ async function main() {
       await prisma.supplier.create({ data: sup });
     } else {
       await prisma.supplier.update({ where: { SupplierID: exists.SupplierID }, data: sup });
+    }
+  }
+
+  const allSuppliersDb = await prisma.supplier.findMany();
+  for (const sup of allSuppliersDb) {
+    const existsPhone = await prisma.supplierPhone.findFirst({ where: { SupplierID: sup.SupplierID } });
+    if (!existsPhone) {
+      await prisma.supplierPhone.create({ data: { SupplierID: sup.SupplierID, PhoneNumber: '0888' + Math.floor(100000 + Math.random() * 900000) } });
     }
   }
 
@@ -311,6 +337,21 @@ async function main() {
       ]
     }
   ];
+
+  // Auto-generate mock recipes for drinks that don't have one
+  for (const drink of allDrinksDb) {
+    const hasRecipe = recipesToAdd.find(r => r.drink === drink.DrinkName);
+    if (!hasRecipe) {
+      recipesToAdd.push({
+        drink: drink.DrinkName,
+        details: [
+          { name: 'Trà Ô Long Nhài', qty: 10 },
+          { name: 'Đường', qty: 15 },
+          { name: 'Sữa Tươi', qty: 50 }
+        ]
+      });
+    }
+  }
 
   for (const r of recipesToAdd) {
     const dId = getDrinkId(r.drink);
@@ -397,12 +438,12 @@ async function main() {
 
   // 15. Orders and OrderDetails
   console.log('Đang xử lý Orders...');
-  const employeeAdmin = await prisma.employee.findFirst({ where: { Email: 'admin@phela.vn' } });
+  const employeeStaff = await prisma.employee.findFirst({ where: { Email: 'staff@phela.vn' } });
   const allTables = await prisma.shopTable.findMany();
   const allDrinkSizes = await prisma.drinkSize.findMany();
   const allCustomers = await prisma.customer.findMany();
 
-  if (employeeAdmin && allTables.length > 0 && allDrinkSizes.length > 0 && allCustomers.length > 0) {
+  if (employeeStaff && allTables.length > 0 && allDrinkSizes.length > 0 && allCustomers.length > 0) {
     const orderCount = await prisma.orders.count();
     if (orderCount === 0) {
       console.log('Tạo dữ liệu đơn hàng ngẫu nhiên trong 6 tháng...');
@@ -431,7 +472,7 @@ async function main() {
           const order = await prisma.orders.create({
             data: {
               CustomerID: randomCustomer.CustomerID,
-              EmployeeID: employeeAdmin.EmployeeID,
+              EmployeeID: employeeStaff.EmployeeID,
               ShopTableID: orderType === 'DINE_IN' ? randomTable.ShopTableID : null,
               OrderStatus: 'COMPLETED',
               OrderType: orderType,
@@ -536,10 +577,12 @@ async function main() {
   console.log('Đang xử lý Salary & ShiftLog...');
   const shiftLogCount = await prisma.shiftLog.count();
   const allShifts = await prisma.shift.findMany();
-  if (shiftLogCount === 0 && employeeAdmin && allShifts.length > 0) {
+  const targetEmployeeForSalary = await prisma.employee.findFirst({ where: { Email: 'staff@phela.vn' } });
+
+  if (shiftLogCount === 0 && targetEmployeeForSalary && allShifts.length > 0) {
     await prisma.shiftLog.create({
       data: {
-        EmployeeID: employeeAdmin.EmployeeID,
+        EmployeeID: targetEmployeeForSalary.EmployeeID,
         ShiftID: allShifts[0]!.ShiftID,
         WorkDate: new Date(),
         CheckInTime: new Date(),
@@ -549,10 +592,10 @@ async function main() {
   }
 
   const salaryCount = await prisma.salary.count();
-  if (salaryCount === 0 && employeeAdmin) {
+  if (salaryCount === 0 && targetEmployeeForSalary) {
     await prisma.salary.create({
       data: {
-        EmployeeID: employeeAdmin.EmployeeID,
+        EmployeeID: targetEmployeeForSalary.EmployeeID,
         Month: new Date().getMonth() + 1,
         Year: new Date().getFullYear(),
         BaseSalary: 30000,

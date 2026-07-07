@@ -430,6 +430,37 @@ class LocalDatabase {
 
   shiftLogs: ShiftLog[] = [];
   ingredientReceipts: IngredientReceipt[] = [];
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      try {
+        const storedOrders = localStorage.getItem('phela_offline_orders');
+        if (storedOrders) this.orders = JSON.parse(storedOrders);
+
+        const storedCustomers = localStorage.getItem('phela_offline_customers');
+        if (storedCustomers) this.customers = JSON.parse(storedCustomers);
+
+        const storedTables = localStorage.getItem('phela_offline_tables');
+        if (storedTables) this.tables = JSON.parse(storedTables);
+      } catch (e) {
+        console.error('Failed to parse offline data', e);
+      }
+
+      // Persist periodically
+      setInterval(() => this.save(), 3000);
+      
+      // Persist on beforeunload
+      window.addEventListener('beforeunload', () => this.save());
+    }
+  }
+
+  save() {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('phela_offline_orders', JSON.stringify(this.orders));
+      localStorage.setItem('phela_offline_customers', JSON.stringify(this.customers));
+      localStorage.setItem('phela_offline_tables', JSON.stringify(this.tables));
+    }
+  }
 }
 
 const db = new LocalDatabase();
@@ -1597,4 +1628,50 @@ export const api = {
     const data = await res.json();
     return data;
   },
+
+  syncOfflineOrders: async () => {
+    if (typeof window === 'undefined') return;
+    if (db.orders.length === 0) return;
+
+    for (let i = db.orders.length - 1; i >= 0; i--) {
+      const o = db.orders[i];
+      try {
+        const payload = {
+          CustomerID: o.CustomerID,
+          ShopTableID: o.ShopTableID,
+          OrderNote: o.OrderNote,
+          TotalPrice: o.TotalPrice,
+          Items: o.OrderDetails?.map(od => ({
+            DrinkSizeID: od.DrinkSizeID,
+            Quantity: od.Quantity,
+            Sugar: od.Sugar,
+            Ice: od.Ice,
+            Toppings: od.Toppings,
+          })) || []
+        };
+        const createdOrder = await api.request('/orders', { method: 'POST', body: JSON.stringify(payload) });
+        
+        if (o.OrderStatus !== 'PENDING') {
+          await api.request(`/orders/${createdOrder.OrderID}/status`, { 
+            method: 'PATCH', 
+            body: JSON.stringify({ OrderStatus: o.OrderStatus }) 
+          });
+        }
+        
+        // Remove from offline DB
+        db.orders.splice(i, 1);
+        db.save();
+      } catch (err) {
+        // Stop syncing on first failure to maintain order and avoid hammering the offline server
+        break; 
+      }
+    }
+  }
 };
+
+// Start background job for syncing offline orders
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    api.syncOfflineOrders().catch(console.error);
+  }, 10000);
+}

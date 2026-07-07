@@ -52,84 +52,90 @@ export const syncCart = async (req: Request, res: Response) => {
       });
     }
 
-    // Retrieve existing items before deleting
-    const existingItems = await prisma.cartItem.findMany({
-      where: { CartID: cart.CartID }
-    });
-
-    await prisma.cartItem.deleteMany({
-      where: { CartID: cart.CartID }
-    });
-
-    // Merge existing DB items with request Items
-    const mergedItemsMap = new Map<string, any>();
-    
-    // Helper to generate a unique key for a cart item
-    const getItemKey = (item: any) => `${item.DrinkSizeID}-${item.Sugar || '100%'}-${item.Ice || '100%'}-${item.Toppings || '[]'}`;
-
-    // Add existing DB items to map
-    for (const item of existingItems) {
-      const key = getItemKey(item);
-      mergedItemsMap.set(key, { ...item, Quantity: item.Quantity });
-    }
-
-    // Add/Update request Items to map
+    const finalCartId = cart!.CartID;
+    let catalogItems: any[] = [];
     if (Items && Items.length > 0) {
       const drinkSizeIds = Items.map((i: any) => i.DrinkSizeID);
-      const catalogItems = await prisma.drinkSize.findMany({
+      catalogItems = await prisma.drinkSize.findMany({
         where: { DrinkSizeID: { in: drinkSizeIds } }
       });
-
-      for (const item of Items) {
-        const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
-        if (catalogItem) {
-          const toppingsStr = typeof item.Toppings === 'string' ? item.Toppings : JSON.stringify(item.Toppings || []);
-          const normalizedItem = {
-            DrinkSizeID: item.DrinkSizeID,
-            Quantity: item.Quantity,
-            Sugar: item.Sugar || '100%',
-            Ice: item.Ice || '100%',
-            Toppings: toppingsStr,
-            UnitPrice: catalogItem.UnitPrice
-          };
-          const key = getItemKey(normalizedItem);
-          if (mergedItemsMap.has(key)) {
-            mergedItemsMap.get(key).Quantity += normalizedItem.Quantity;
-          } else {
-            mergedItemsMap.set(key, normalizedItem);
-          }
-        }
-      }
     }
 
-    const finalItemsToInsert = Array.from(mergedItemsMap.values());
-
-    if (finalItemsToInsert.length > 0) {
-      await prisma.cartItem.createMany({
-        data: finalItemsToInsert.map(item => ({
-          CartID: cart!.CartID,
-          DrinkSizeID: item.DrinkSizeID,
-          Quantity: item.Quantity,
-          Sugar: item.Sugar,
-          Ice: item.Ice,
-          Toppings: item.Toppings,
-          UnitPrice: item.UnitPrice
-        }))
+    const updatedCart = await prisma.$transaction(async (tx) => {
+      // Retrieve existing items before deleting
+      const existingItems = await tx.cartItem.findMany({
+        where: { CartID: finalCartId }
       });
-    }
 
-    // Fetch the updated cart to return
-    const updatedCart = await prisma.cart.findUnique({
-      where: { CartID: cart.CartID },
-      include: {
-        CartItems: {
-          include: {
-            DrinkSize: {
-              include: { Drink: true, Size: true }
+      await tx.cartItem.deleteMany({
+        where: { CartID: finalCartId }
+      });
+
+      // Merge existing DB items with request Items
+      const mergedItemsMap = new Map<string, any>();
+      
+      // Helper to generate a unique key for a cart item
+      const getItemKey = (item: any) => `${item.DrinkSizeID}-${item.Sugar || '100%'}-${item.Ice || '100%'}-${item.Toppings || '[]'}`;
+
+      // Add existing DB items to map
+      for (const item of existingItems) {
+        const key = getItemKey(item);
+        mergedItemsMap.set(key, { ...item, Quantity: item.Quantity });
+      }
+
+      // Add/Update request Items to map
+      if (Items && Items.length > 0) {
+        for (const item of Items) {
+          const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
+          if (catalogItem) {
+            const toppingsStr = typeof item.Toppings === 'string' ? item.Toppings : JSON.stringify(item.Toppings || []);
+            const normalizedItem = {
+              DrinkSizeID: item.DrinkSizeID,
+              Quantity: item.Quantity,
+              Sugar: item.Sugar || '100%',
+              Ice: item.Ice || '100%',
+              Toppings: toppingsStr,
+              UnitPrice: catalogItem.UnitPrice
+            };
+            const key = getItemKey(normalizedItem);
+            if (mergedItemsMap.has(key)) {
+              mergedItemsMap.get(key).Quantity += normalizedItem.Quantity;
+            } else {
+              mergedItemsMap.set(key, normalizedItem);
             }
           }
         }
       }
+
+      const finalItemsToInsert = Array.from(mergedItemsMap.values());
+
+      if (finalItemsToInsert.length > 0) {
+        await tx.cartItem.createMany({
+          data: finalItemsToInsert.map(item => ({
+            CartID: finalCartId,
+            DrinkSizeID: item.DrinkSizeID,
+            Quantity: item.Quantity,
+            Sugar: item.Sugar,
+            Ice: item.Ice,
+            Toppings: item.Toppings,
+            UnitPrice: item.UnitPrice
+          }))
+        });
+      }
+
+      // Fetch the updated cart to return
+      return tx.cart.findUnique({
+        where: { CartID: finalCartId },
+        include: {
+          CartItems: {
+            include: {
+              DrinkSize: {
+                include: { Drink: true, Size: true }
+              }
+            }
+          }
+        }
+      });
     });
 
     res.status(200).json({ success: true, data: updatedCart });

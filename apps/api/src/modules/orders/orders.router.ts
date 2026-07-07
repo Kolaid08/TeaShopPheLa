@@ -103,29 +103,6 @@ const assignShipperSchema = z.object({
   TrackingURL: z.string().optional().nullable(),
 });
 
-// Static catalog mapping of DrinkSizeID to DrinkName/Size/Price details for offline mock database representation
-const mockDrinkSizesMap: Record<number, { DrinkName: string; SizeName: string; UnitPrice: number }> = {
-  1: { DrinkName: 'Trà Ô Long sữa Phêla', SizeName: 'S', UnitPrice: 45000 },
-  2: { DrinkName: 'Trà Ô Long sữa Phêla', SizeName: 'M', UnitPrice: 55000 },
-  3: { DrinkName: 'Trà Ô Long sữa Phêla', SizeName: 'L', UnitPrice: 65000 },
-  4: { DrinkName: 'Trà sữa Oolong Nhài', SizeName: 'M', UnitPrice: 52000 },
-  5: { DrinkName: 'Trà sữa Oolong Nhài', SizeName: 'L', UnitPrice: 62000 },
-  6: { DrinkName: 'Cà phê Cốt dừa Phêla', SizeName: 'S', UnitPrice: 48000 },
-  7: { DrinkName: 'Cà phê Cốt dừa Phêla', SizeName: 'M', UnitPrice: 58000 },
-  8: { DrinkName: 'Trà Ô Long trân châu', SizeName: 'M', UnitPrice: 55000 },
-  9: { DrinkName: 'Trà Ô Long trân châu', SizeName: 'L', UnitPrice: 65000 },
-  10: { DrinkName: 'Trà Ô Long Nhiệt Đới', SizeName: 'M', UnitPrice: 58000 },
-  11: { DrinkName: 'Trà Ô Long Nhiệt Đới', SizeName: 'L', UnitPrice: 68000 },
-  12: { DrinkName: 'Cà Phê Trứng Phêla', SizeName: 'S', UnitPrice: 55000 },
-  13: { DrinkName: 'Cà Phê Trứng Phêla', SizeName: 'M', UnitPrice: 65000 },
-  14: { DrinkName: 'Trà Sữa Matcha Ô Long', SizeName: 'M', UnitPrice: 55000 },
-  15: { DrinkName: 'Trà Sữa Matcha Ô Long', SizeName: 'L', UnitPrice: 65000 },
-  16: { DrinkName: 'Cà Phê Espresso Sữa Đặc', SizeName: 'S', UnitPrice: 39000 },
-  17: { DrinkName: 'Cà Phê Espresso Sữa Đặc', SizeName: 'M', UnitPrice: 49000 },
-};
-
-// Server-side mock order memory store for offline mode/sync across ports
-export const serverMockOrders: any[] = [];
 
 // Public customer storefront order endpoints (NO verifyJWT check required)
 router.post('/customer-combos', async (req, res, next) => {
@@ -135,7 +112,7 @@ router.post('/customer-combos', async (req, res, next) => {
       return sendResponse(res, 200, true, 'No combos', []);
     }
 
-    try {
+
       // Fetch recent 500 orders containing these items to prevent SQL Server parameter limits (>2100)
       const ordersWithItems = await prisma.orderDetail.findMany({
         where: { DrinkSizeID: { in: drinkSizeIds } },
@@ -168,59 +145,20 @@ router.post('/customer-combos', async (req, res, next) => {
         freqMap.get(item.DrinkSizeID)!.count++;
       }
 
-      const sorted = Array.from(freqMap.values()).sort((a, b) => b.count - a.count).slice(0, 3);
-      
-      const result = sorted.map(s => ({
-        DrinkSizeID: s.item.DrinkSizeID,
-        DrinkName: s.item.DrinkSize.Drink.DrinkName,
-        SizeName: s.item.DrinkSize.Size.SizeName,
-        UnitPrice: s.item.DrinkSize.UnitPrice,
-        DrinkImageURL: s.item.DrinkSize.Drink.DrinkImageURL,
-        FrequencyCount: s.count
-      }));
+    // duplicate block removed
 
-      return sendResponse(res, 200, true, 'Combo suggestions', result);
-    } catch {
-      let orderIds = new Set<number>();
-      for (const order of serverMockOrders) {
-        if (order.OrderDetails) {
-          for (const item of order.OrderDetails) {
-            if (drinkSizeIds.includes(item.DrinkSizeID)) {
-              orderIds.add(order.OrderID);
-              break;
-            }
-          }
-        }
-      }
+    const sorted = Array.from(freqMap.values()).sort((a, b) => b.count - a.count).slice(0, 3);
+    
+    const result = sorted.map(s => ({
+      DrinkSizeID: s.item.DrinkSizeID,
+      DrinkName: s.item.DrinkSize.Drink.DrinkName,
+      SizeName: s.item.DrinkSize.Size.SizeName,
+      UnitPrice: s.item.DrinkSize.UnitPrice,
+      DrinkImageURL: s.item.DrinkSize.Drink.DrinkImageURL,
+      FrequencyCount: s.count
+    }));
 
-      if (orderIds.size === 0) return sendResponse(res, 200, true, 'No combos (Offline)', []);
-
-      const freqMap = new Map<number, { count: number, item: any }>();
-      for (const order of serverMockOrders) {
-        if (orderIds.has(order.OrderID) && order.OrderDetails) {
-          for (const item of order.OrderDetails) {
-             if (!drinkSizeIds.includes(item.DrinkSizeID)) {
-                if (!freqMap.has(item.DrinkSizeID)) {
-                  freqMap.set(item.DrinkSizeID, { count: 0, item });
-                }
-                freqMap.get(item.DrinkSizeID)!.count++;
-             }
-          }
-        }
-      }
-
-      const sorted = Array.from(freqMap.values()).sort((a, b) => b.count - a.count).slice(0, 3);
-      const result = sorted.map(s => ({
-        DrinkSizeID: s.item.DrinkSizeID,
-        DrinkName: s.item.DrinkSize?.Drink?.DrinkName || mockDrinkSizesMap[s.item.DrinkSizeID]?.DrinkName || 'N/A',
-        SizeName: s.item.DrinkSize?.Size?.SizeName || mockDrinkSizesMap[s.item.DrinkSizeID]?.SizeName || 'M',
-        UnitPrice: s.item.UnitPrice,
-        DrinkImageURL: null,
-        FrequencyCount: s.count
-      }));
-
-      return sendResponse(res, 200, true, 'Combo suggestions (Offline Mode)', result);
-    }
+    return sendResponse(res, 200, true, 'Combo suggestions', result);
   } catch (err) {
     next(err);
   }
@@ -305,56 +243,8 @@ router.get('/customer-frequent/:customerId', async (req, res, next) => {
       });
 
       return sendResponse(res, 200, true, 'Lấy danh sách món tủ thành công', result);
-    } catch {
-      const details: any[] = [];
-      for (const order of serverMockOrders) {
-        if (order.CustomerID === customerId && ['COMPLETED', 'PENDING', 'PREPARING', 'READY'].includes(order.OrderStatus)) {
-           if (order.OrderDetails) {
-             details.push(...order.OrderDetails);
-           }
-        }
-      }
-      
-      if (details.length === 0) return sendResponse(res, 200, true, 'No frequent items (Offline)', []);
-
-      const frequencyMap = new Map<number, { count: number, item: any, configs: any[] }>();
-      for (const d of details) {
-        if (!frequencyMap.has(d.DrinkSizeID)) {
-          frequencyMap.set(d.DrinkSizeID, { count: 0, item: d, configs: [] });
-        }
-        const entry = frequencyMap.get(d.DrinkSizeID)!;
-        entry.count += 1;
-        entry.configs.push({ Sugar: d.Sugar || '100%', Ice: d.Ice || '100%', Toppings: d.Toppings || '' });
-      }
-
-      const sorted = Array.from(frequencyMap.values()).sort((a, b) => b.count - a.count).slice(0, 5);
-      const result = sorted.map(s => {
-        const configCount = new Map<string, number>();
-        for (const cfg of s.configs) {
-          const key = `${cfg.Sugar}|${cfg.Ice}|${cfg.Toppings}`;
-          configCount.set(key, (configCount.get(key) || 0) + 1);
-        }
-        let bestConfigStr = '';
-        let maxCfg = 0;
-        for (const [key, count] of configCount.entries()) {
-          if (count > maxCfg) {
-            maxCfg = count;
-            bestConfigStr = key;
-          }
-        }
-        const [sugar, ice, toppings] = bestConfigStr.split('|');
-        return {
-          DrinkSizeID: s.item.DrinkSizeID,
-          DrinkName: s.item.DrinkSize?.Drink?.DrinkName || mockDrinkSizesMap[s.item.DrinkSizeID]?.DrinkName || 'N/A',
-          SizeName: s.item.DrinkSize?.Size?.SizeName || mockDrinkSizesMap[s.item.DrinkSizeID]?.SizeName || 'M',
-          UnitPrice: s.item.UnitPrice,
-          DrinkImageURL: null,
-          FrequencyCount: s.count,
-          PreferredConfig: { Sugar: sugar, Ice: ice, Toppings: toppings }
-        };
-      });
-
-      return sendResponse(res, 200, true, 'Lấy danh sách món tủ thành công (Offline Mode)', result);
+    } catch (err) {
+      next(err);
     }
   } catch (err) {
     next(err);
@@ -496,15 +386,15 @@ router.post('/customer-place', async (req, res, next) => {
         if (applicableQuantity >= promo.MinQuantity) {
           let currentPromoDiscount = 0;
           if (promo.Type === 'PERCENT') {
-            currentPromoDiscount = applicableItemsTotal * (promo.Value / 100);
+            currentPromoDiscount = applicableItemsTotal * (Number(promo.Value) / 100);
           } else if (promo.Type === 'AMOUNT') {
-            currentPromoDiscount = promo.Value;
+            currentPromoDiscount = Number(promo.Value);
           } else if (promo.Type === 'FREE_ITEM') {
             const applicableSorted = validatedData.Items
               .filter(i => !targetIds || targetIds.includes(i.DrinkSizeID))
               .sort((a, b) => a.UnitPrice - b.UnitPrice);
             
-            let freeItemsToGive = promo.Value;
+            let freeItemsToGive = Number(promo.Value);
             for (const item of applicableSorted) {
               if (freeItemsToGive <= 0) break;
               const qtyToFree = Math.min(item.Quantity, freeItemsToGive);
@@ -576,9 +466,9 @@ router.post('/customer-place', async (req, res, next) => {
 
         // Calculate voucher discount on targetItemTotal
         if (voucher.DiscountType === 'PERCENT') {
-           voucherDiscountAmount = targetItemTotal * (voucher.DiscountValue / 100);
+           voucherDiscountAmount = targetItemTotal * (Number(voucher.DiscountValue) / 100);
         } else {
-           voucherDiscountAmount = voucher.DiscountValue;
+           voucherDiscountAmount = Number(voucher.DiscountValue);
            if (voucherDiscountAmount > targetItemTotal) voucherDiscountAmount = targetItemTotal;
         }
 
@@ -696,50 +586,7 @@ router.post('/customer-place', async (req, res, next) => {
 
       return sendResponse(res, 201, true, 'Đơn hàng đã được tạo thành công.', newOrder);
     } catch (dbErr: any) {
-      console.warn('Prisma DB error, falling back to server-side in-memory mock store:', dbErr.message);
-      
-      // Fallback: Save to serverMockOrders in memory
-      const newOId = serverMockOrders.length + 1000 + 1; // start mock IDs from 1001
-      let offlineBaseTotal = 0;
-      const orderDetailsOffline = validatedData.Items.map((item) => {
-        const matched = mockDrinkSizesMap[item.DrinkSizeID] || { DrinkName: 'Trà Phêla', SizeName: 'M', UnitPrice: 50000 };
-        offlineBaseTotal += matched.UnitPrice * item.Quantity;
-        return {
-          OrderID: newOId,
-          DrinkSizeID: item.DrinkSizeID,
-          Quantity: item.Quantity,
-          UnitPrice: matched.UnitPrice,
-          DrinkSize: {
-            Drink: { DrinkName: matched.DrinkName },
-            Size: { SizeName: matched.SizeName },
-          },
-        };
-      });
-
-      const newO = {
-        OrderID: newOId,
-        CustomerID: validatedData.CustomerID || 1,
-        Customer: {
-          CustomerName: validatedData.CustomerName || 'Hội viên Phêla',
-          PhoneNumber: validatedData.CustomerPhoneNumber || '0900000000',
-        },
-        ShopTableID: validatedData.ShopTableID || null,
-        EmployeeID: 1,
-        CreatedTime: new Date().toISOString(),
-        OrderStatus: 'PENDING',
-        TotalPrice: offlineBaseTotal,
-        OrderType: validatedData.OrderType || (validatedData.ShopTableID ? 'DINE_IN' : 'TAKEAWAY'),
-        ShippingAddress: validatedData.ShippingAddress || null,
-        Latitude: validatedData.Latitude || null,
-        Longitude: validatedData.Longitude || null,
-        ReceiverName: validatedData.ReceiverName || validatedData.CustomerName || null,
-        ReceiverPhone: validatedData.ReceiverPhone || validatedData.CustomerPhoneNumber || null,
-        OrderNote: validatedData.OrderNote || null,
-        OrderDetails: orderDetailsOffline,
-      };
-
-      serverMockOrders.push(newO);
-      return sendResponse(res, 201, true, 'Đơn hàng đã được tạo thành công trên bộ nhớ tạm server (Offline Mode).', newO);
+      next(dbErr);
     }
   } catch (err) {
     next(err);
@@ -775,12 +622,8 @@ router.get('/customer-history/:phoneNumber', async (req, res, next) => {
         },
       });
       return sendResponse(res, 200, true, 'Lịch sử đặt hàng hội viên', dbOrders);
-    } catch {
-      // Offline fallback: filter from serverMockOrders by phone number
-      const clientOrders = serverMockOrders
-        .filter((o) => o.Customer?.PhoneNumber === phoneNumber)
-        .sort((a, b) => b.OrderID - a.OrderID);
-      return sendResponse(res, 200, true, 'Lịch sử đặt hàng hội viên (Offline Mode)', clientOrders);
+    } catch (err) {
+      next(err);
     }
   } catch (err) {
     next(err);
@@ -812,10 +655,8 @@ router.get('/customer-status/:id', async (req, res, next) => {
         } catch {}
       }
       return sendResponse(res, 200, true, 'Status', order);
-    } catch {
-      const order = serverMockOrders.find(o => o.OrderID === orderId);
-      if (!order) throw new AppError(404, 'Order not found offline');
-      return sendResponse(res, 200, true, 'Status Offline', order);
+    } catch (err) {
+      next(err);
     }
   } catch(err) {
     next(err);
@@ -850,15 +691,7 @@ router.patch('/customer-cancel/:id', async (req, res, next) => {
 
       return sendResponse(res, 200, true, 'Đã hủy đơn hàng thành công.', updatedOrder);
     } catch (dbErr: any) {
-      if (dbErr.statusCode === 400 || dbErr.statusCode === 404) throw dbErr;
-      
-      const idx = serverMockOrders.findIndex((o) => o.OrderID === orderId);
-      if (idx === -1) throw new AppError(404, 'Order not found in server memory.');
-      if (serverMockOrders[idx].OrderStatus !== 'PENDING') {
-        throw new AppError(400, 'Chỉ có thể hủy đơn hàng khi đang ở trạng thái Chờ xử lý.');
-      }
-      serverMockOrders[idx].OrderStatus = 'CANCELLED';
-      return sendResponse(res, 200, true, 'Đã hủy đơn hàng thành công (Offline Mode).', serverMockOrders[idx]);
+      next(dbErr);
     }
   } catch(err) {
     next(err);
@@ -931,26 +764,8 @@ router.get('/', async (req, res, next) => {
         totalItems,
         totalPages,
       });
-    } catch {
-      // Offline fallback: filter from serverMockOrders
-      let filtered = [...serverMockOrders];
-      if (shopTableId) {
-        filtered = filtered.filter((o) => o.ShopTableID === shopTableId);
-      }
-      if (status) {
-        filtered = filtered.filter((o) => o.OrderStatus === status);
-      }
-
-      const totalItems = filtered.length;
-      const totalPages = Math.ceil(totalItems / limit);
-      const ordersSlice = filtered.slice(skip, skip + limit);
-
-      return sendResponse(res, 200, true, 'Orders list (Offline Mode)', ordersSlice, {
-        page,
-        limit,
-        totalItems,
-        totalPages,
-      });
+    } catch (err) {
+      next(err);
     }
   } catch (err) {
     next(err);
@@ -1004,10 +819,8 @@ router.get('/:id', async (req, res, next) => {
       }
 
       return sendResponse(res, 200, true, 'Order retrieved', order);
-    } catch {
-      const order = serverMockOrders.find((o) => o.OrderID === orderId);
-      if (!order) throw new AppError(404, 'Order not found in server memory.');
-      return sendResponse(res, 200, true, 'Order retrieved (Offline Mode)', order);
+    } catch (fallbackErr) {
+      throw new AppError(404, 'Order not found');
     }
   } catch (err) {
     next(err);
@@ -1100,16 +913,16 @@ router.post('/', async (req, res, next) => {
         if (applicableQuantity >= promo.MinQuantity) {
           let currentPromoDiscount = 0;
           if (promo.Type === 'PERCENT') {
-            currentPromoDiscount = applicableItemsTotal * (promo.Value / 100);
+            currentPromoDiscount = applicableItemsTotal * (Number(promo.Value) / 100);
           } else if (promo.Type === 'AMOUNT') {
-            currentPromoDiscount = promo.Value;
+            currentPromoDiscount = Number(promo.Value);
           } else if (promo.Type === 'FREE_ITEM') {
             const applicableSorted = validatedData.Items
               .filter(i => !targetIds || targetIds.includes(i.DrinkSizeID))
               .sort((a, b) => a.UnitPrice - b.UnitPrice);
             
             const multiplier = Math.floor(applicableQuantity / promo.MinQuantity);
-            let freeItemsToGive = promo.Value * multiplier;
+            let freeItemsToGive = Number(promo.Value) * multiplier;
             
             for (const item of applicableSorted) {
               if (freeItemsToGive <= 0) break;
@@ -1181,9 +994,9 @@ router.post('/', async (req, res, next) => {
         otherItemsTotal = otherItemsTotal * promoRatio;
 
         if (voucher.DiscountType === 'PERCENT') {
-           voucherDiscountAmount = targetItemTotal * (voucher.DiscountValue / 100);
+           voucherDiscountAmount = targetItemTotal * (Number(voucher.DiscountValue) / 100);
         } else {
-           voucherDiscountAmount = voucher.DiscountValue;
+           voucherDiscountAmount = Number(voucher.DiscountValue);
            if (voucherDiscountAmount > targetItemTotal) voucherDiscountAmount = targetItemTotal;
         }
 
@@ -1274,48 +1087,7 @@ router.post('/', async (req, res, next) => {
 
       return sendResponse(res, 201, true, 'Order created successfully', newOrder);
     } catch (dbErr: any) {
-      if (dbErr.statusCode === 400 || dbErr.statusCode === 404) {
-        throw dbErr;
-      }
-      console.warn('Prisma DB error, falling back to server-side in-memory mock store:', dbErr.message);
-
-      // Fallback: Save to serverMockOrders in memory
-      const newOId = serverMockOrders.length + 1000 + 1;
-      const newO = {
-        OrderID: newOId,
-        CustomerID: validatedData.CustomerID || null,
-        ShopTableID: validatedData.ShopTableID || null,
-        EmployeeID: employeeId,
-        CreatedTime: new Date().toISOString(),
-        OrderStatus: 'PENDING',
-        TotalPrice: validatedData.Items.reduce((acc, item) => {
-          const matched = mockDrinkSizesMap[item.DrinkSizeID] || { UnitPrice: 50000 };
-          return acc + matched.UnitPrice * item.Quantity;
-        }, 0) + shippingFee,
-        OrderType: validatedData.OrderType || (validatedData.ShopTableID ? 'DINE_IN' : 'TAKEAWAY'),
-        ShippingAddress: validatedData.ShippingAddress || null,
-        Latitude: validatedData.Latitude || null,
-        Longitude: validatedData.Longitude || null,
-        ReceiverName: validatedData.ReceiverName || validatedData.CustomerName || null,
-        ReceiverPhone: validatedData.ReceiverPhone || validatedData.CustomerPhoneNumber || null,
-        OrderNote: validatedData.OrderNote || null,
-        OrderDetails: validatedData.Items.map((item) => {
-          const matched = mockDrinkSizesMap[item.DrinkSizeID] || { DrinkName: 'Trà Phêla', SizeName: 'M', UnitPrice: 50000 };
-          return {
-            OrderID: newOId,
-            DrinkSizeID: item.DrinkSizeID,
-            Quantity: item.Quantity,
-            UnitPrice: matched.UnitPrice,
-            DrinkSize: {
-              Drink: { DrinkName: matched.DrinkName },
-              Size: { SizeName: matched.SizeName },
-            },
-          };
-        }),
-      };
-
-      serverMockOrders.push(newO);
-      return sendResponse(res, 201, true, 'Order created successfully in server memory (Offline Mode)', newO);
+      next(dbErr);
     }
   } catch (err) {
     next(err);
@@ -1392,30 +1164,7 @@ router.patch('/:id/status', async (req, res, next) => {
         updatedOrder,
       );
     } catch (dbErr: any) {
-      if (dbErr.statusCode === 400 || dbErr.statusCode === 404) {
-        throw dbErr;
-      }
-      console.warn('Prisma DB error, falling back to server-side in-memory mock store:', dbErr.message);
-
-      // Fallback: Update in serverMockOrders
-      const idx = serverMockOrders.findIndex((o) => o.OrderID === orderId);
-      if (idx === -1) throw new AppError(404, 'Order not found in server memory.');
-
-      if (serverMockOrders[idx].OrderStatus === 'COMPLETED') {
-        throw new AppError(400, 'Cannot change the status of an already completed order.');
-      }
-      if (serverMockOrders[idx].OrderStatus === 'CANCELLED') {
-        throw new AppError(400, 'Cannot change the status of an already cancelled order.');
-      }
-
-      serverMockOrders[idx].OrderStatus = validatedData.OrderStatus;
-      return sendResponse(
-        res,
-        200,
-        true,
-        `Order status updated to ${validatedData.OrderStatus} in server memory (Offline Mode)`,
-        serverMockOrders[idx],
-      );
+      next(dbErr);
     }
   } catch (err) {
     next(err);

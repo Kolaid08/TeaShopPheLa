@@ -289,9 +289,9 @@ export const api = {
         throw new Error(payload.message || 'Login failed');
       }
       
-      const cust = payload.data;
+      const cust = payload.data.customer || payload.data;
       if (typeof window !== 'undefined') {
-        localStorage.setItem('phela_customer_token', 'real_cust_token_' + Date.now());
+        localStorage.setItem('phela_customer_token', payload.data.token || 'real_cust_token_' + Date.now());
         localStorage.setItem('phela_customer_user', JSON.stringify(cust));
         localStorage.removeItem('chat_session_id'); // Xóa phiên chat cũ
         window.dispatchEvent(new Event('customer_auth_changed'));

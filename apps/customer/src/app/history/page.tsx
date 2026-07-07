@@ -109,6 +109,12 @@ export default function HistoryPage() {
 
       // Save updated cart
       localStorage.setItem('phela_customer_cart', JSON.stringify(currentCart));
+      
+      // Sync with backend
+      api.syncCart(currentCart).catch(err => {
+        console.error('Failed to sync cart to backend after reorder', err);
+      });
+
       toast.success('Đã thêm các món nước từ đơn hàng cũ vào giỏ hàng.');
       router.push('/'); // Navigate to shop menu
     } catch (err) {

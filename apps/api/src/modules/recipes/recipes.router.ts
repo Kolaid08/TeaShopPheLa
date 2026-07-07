@@ -128,16 +128,15 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, 
       });
 
       const groupedIngredients = validatedData.Ingredients.reduce((acc, curr) => {
-        if (!acc[curr.IngredientID]) acc[curr.IngredientID] = 0;
-        acc[curr.IngredientID] += curr.Quantity;
+        acc[curr.IngredientID] = (acc[curr.IngredientID] || 0) + curr.Quantity;
         return acc;
       }, {} as Record<number, number>);
 
       await tx.recipeDetail.createMany({
-        data: Object.keys(groupedIngredients).map((ingId) => ({
+        data: Object.entries(groupedIngredients).map(([ingId, qty]) => ({
           RecipeID: createdRecipe.RecipeID,
           IngredientID: parseInt(ingId),
-          Quantity: groupedIngredients[parseInt(ingId)],
+          Quantity: qty,
         })),
       });
 
@@ -194,16 +193,15 @@ router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res
       });
 
       const groupedIngredients = validatedData.Ingredients.reduce((acc, curr) => {
-        if (!acc[curr.IngredientID]) acc[curr.IngredientID] = 0;
-        acc[curr.IngredientID] += curr.Quantity;
+        acc[curr.IngredientID] = (acc[curr.IngredientID] || 0) + curr.Quantity;
         return acc;
       }, {} as Record<number, number>);
 
       await tx.recipeDetail.createMany({
-        data: Object.keys(groupedIngredients).map((ingId) => ({
+        data: Object.entries(groupedIngredients).map(([ingId, qty]) => ({
           RecipeID: recipeId,
           IngredientID: parseInt(ingId),
-          Quantity: groupedIngredients[parseInt(ingId)],
+          Quantity: qty,
         })),
       });
 

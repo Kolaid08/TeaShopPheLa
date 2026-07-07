@@ -23,7 +23,6 @@ const paySalarySchema = z.object({
 // Protect routes
 router.use(verifyJWT);
 
-// Helper to compute decimal hours between two time strings e.g. "08:00" and "16:30" => 8.5
 const calculateShiftHours = (start: string, end: string): number => {
   try {
     const [startH, startM] = start.split(':').map(Number);
@@ -38,6 +37,16 @@ const calculateShiftHours = (start: string, end: string): number => {
     return parseFloat((diff / 60).toFixed(2));
   } catch {
     return 8.0; // default standard shift hours fallback
+  }
+};
+
+const calculateActualHours = (checkIn: Date, checkOut: Date): number => {
+  try {
+    const diffMs = checkOut.getTime() - checkIn.getTime();
+    if (diffMs < 0) return 0;
+    return parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+  } catch {
+    return 0;
   }
 };
 
@@ -181,7 +190,11 @@ router.post('/generate', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (re
         let totalHours = 0;
         let lateCount = 0;
         logs.forEach((log) => {
-          totalHours += calculateShiftHours(log.Shift.StartTime, log.Shift.EndTime);
+          if (log.CheckInTime && log.CheckOutTime) {
+            totalHours += calculateActualHours(log.CheckInTime, log.CheckOutTime);
+          } else {
+            totalHours += calculateShiftHours(log.Shift.StartTime, log.Shift.EndTime);
+          }
           if (log.ShiftStatus === 'LATE') {
             lateCount++;
           }
