@@ -593,6 +593,40 @@ router.post('/customer-place', async (req, res, next) => {
   }
 });
 
+// POST /customer-cancel/:id - Customer cancels PENDING order
+router.post('/customer-cancel/:id', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id || '');
+    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
+
+    const order = await prisma.orders.findUnique({
+      where: { OrderID: orderId },
+    });
+
+    if (!order) throw new AppError(404, 'Order not found.');
+
+    if (order.OrderStatus !== 'PENDING') {
+      throw new AppError(400, 'Chỉ có thể huỷ đơn hàng khi đang ở trạng thái Chờ duyệt (PENDING).');
+    }
+
+    const isPaid = order.PaymentStatus === 'PAID';
+
+    const updated = await prisma.orders.update({
+      where: { OrderID: orderId },
+      data: {
+        OrderStatus: 'CANCELLED',
+        RefundStatus: isPaid ? 'REQUESTED' : 'NONE', // Nếu đã thanh toán, chuyển sang yêu cầu hoàn tiền
+        RefundAmount: isPaid ? order.TotalPrice : 0,
+        RefundReason: 'Khách hàng tự huỷ qua ứng dụng.',
+      },
+    });
+
+    return sendResponse(res, 200, true, 'Huỷ đơn hàng thành công', updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/customer-history/:phoneNumber', async (req, res, next) => {
   try {
     const phoneNumber = req.params.phoneNumber;
@@ -603,28 +637,123 @@ router.get('/customer-history/:phoneNumber', async (req, res, next) => {
         where: {
           Customer: { PhoneNumber: phoneNumber },
         },
-        orderBy: { OrderID: 'desc' },
         include: {
-          Customer: { select: { CustomerName: true, PhoneNumber: true } },
-          ShopTable: { select: { ShopTableNumber: true } },
-          Employee: { select: { FullName: true } },
-          Reviews: { select: { DrinkID: true, Rating: true } },
+          Customer: true,
+          ShopTable: true,
           OrderDetails: {
             include: {
               DrinkSize: {
-                include: {
-                  Drink: { select: { DrinkName: true } },
-                  Size: { select: { SizeName: true } },
-                },
+                include: { Drink: true, Size: true },
               },
             },
           },
         },
+        orderBy: { CreatedTime: 'desc' },
       });
       return sendResponse(res, 200, true, 'Lịch sử đặt hàng hội viên', dbOrders);
     } catch (err) {
       next(err);
     }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Helper to push order to GHN if it's a paid delivery order
+async function checkAndSyncGHN(order: any) {
+  if (order.DeliveryType === 'DELIVERY' && !order.GHN_OrderCode) {
+    try {
+      const orderDetails = await prisma.orderDetail.findMany({
+        where: { OrderID: order.OrderID },
+        include: { DrinkSize: { include: { Size: true, Drink: true } } },
+      });
+      const items = orderDetails.map((d) => ({
+        name: d.DrinkSize.Drink.DrinkName,
+        quantity: d.Quantity,
+        price: d.UnitPrice.toNumber(),
+        weight: d.DrinkSize.Size.WeightGram || 500,
+      }));
+      const totalWeight = items.reduce((acc, curr) => acc + curr.weight * curr.quantity, 0) || 500;
+
+      const isCOD = (order.PaymentMethod === 'COD' || !order.PaymentMethod) && order.PaymentStatus !== 'PAID';
+      const ghnCode = await GhnService.createOrder({
+        to_name: order.RecipientName || 'Khách hàng',
+        to_phone: order.RecipientPhone || '0900000000',
+        to_address: order.DeliveryAddress || 'Không có địa chỉ',
+        to_ward_code: order.WardCode || '',
+        to_district_id: order.DistrictID || 0,
+        weight: totalWeight,
+        insurance_value: order.TotalPrice.toNumber(),
+        cod_amount: isCOD ? order.TotalPrice.toNumber() : 0,
+        content: `Đơn hàng Phê La #${order.OrderID}`,
+        items,
+      });
+
+      await prisma.orders.update({
+        where: { OrderID: order.OrderID },
+        data: { GHN_OrderCode: ghnCode, OrderStatus: 'PREPARING' },
+      });
+      console.log(`[GHN Sync] Order ${order.OrderID} synced to GHN with code ${ghnCode}`);
+      return ghnCode;
+    } catch (e) {
+      console.error(`[GHN Sync] Failed for order ${order.OrderID}`, e);
+    }
+  }
+  return null;
+}
+
+// POST /:id/refund - Process Refund
+router.post('/:id/refund', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id || '');
+    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
+
+    const validatedData = refundSchema.parse(req.body);
+
+    const order = await prisma.orders.findUnique({
+      where: { OrderID: orderId },
+    });
+
+    if (!order) throw new AppError(404, 'Order not found.');
+
+    if (order.RefundStatus === 'FULL' || order.RefundStatus === 'PARTIAL') {
+      throw new AppError(400, 'Order has already been refunded.');
+    }
+
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      let refundStatus = 'FULL';
+      if (validatedData.RefundAmount < order.TotalPrice.toNumber()) {
+        refundStatus = 'PARTIAL';
+      }
+
+      const updated = await tx.orders.update({
+        where: { OrderID: orderId },
+        data: {
+          RefundStatus: refundStatus,
+          RefundAmount: validatedData.RefundAmount,
+          RefundReason: validatedData.RefundReason || null,
+          OrderStatus: 'CANCELLED',
+        },
+      });
+
+      // Bù trừ công nợ hội viên nếu đơn hàng đã COMPLETED trước đó
+      if (order.OrderStatus === 'COMPLETED' && order.CustomerID) {
+        await tx.customer.update({
+          where: { CustomerID: order.CustomerID },
+          data: {
+            TotalMoneySpending: {
+              decrement: validatedData.RefundAmount,
+            },
+          },
+        });
+        
+        await upgradeCustomerLevel(order.CustomerID, tx);
+      }
+
+      return updated;
+    });
+
+    return sendResponse(res, 200, true, 'Hoàn tiền thành công', updatedOrder);
   } catch (err) {
     next(err);
   }
@@ -651,6 +780,10 @@ router.get('/customer-status/:id', async (req, res, next) => {
               data: { PaymentStatus: 'PAID', PaymentMethod: 'QR_CODE' }
             });
             console.log(`[PayOS Polling] Auto-updated order ${order.OrderID} to PAID`);
+            
+            // Sync to GHN if it's a delivery order
+            const ghnCode = await checkAndSyncGHN(order);
+            if (ghnCode) order.GHN_OrderCode = ghnCode;
           }
         } catch {}
       }
@@ -812,6 +945,10 @@ router.get('/:id', async (req, res, next) => {
               data: { PaymentStatus: 'PAID', PaymentMethod: 'QR_CODE' },
             });
             console.log(`[PayOS Polling] Auto-updated order ${order.OrderID} to PAID`);
+
+            // Sync to GHN if it's a delivery order
+            const ghnCode = await checkAndSyncGHN(order);
+            if (ghnCode) order.GHN_OrderCode = ghnCode;
           }
         } catch (payosErr: any) {
           // Ignore errors if the payment link doesn't exist on PayOS yet or expired
@@ -1156,6 +1293,12 @@ router.patch('/:id/status', async (req, res, next) => {
         return updated;
       });
 
+      // 5. Sync to GHN if shop accepts the order (PREPARING)
+      if (validatedData.OrderStatus === 'PREPARING' && updatedOrder.DeliveryType === 'DELIVERY' && !updatedOrder.GHN_OrderCode) {
+        const ghnCode = await checkAndSyncGHN(updatedOrder);
+        if (ghnCode) updatedOrder.GHN_OrderCode = ghnCode;
+      }
+
       return sendResponse(
         res,
         200,
@@ -1212,6 +1355,40 @@ router.patch('/:id/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER'])
       'Đã gán tài xế và chuyển trạng thái đơn hàng sang Đang giao (SHIPPING).',
       updatedOrder,
     );
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /ghn-webhook - Handle status updates from GHN (Bỏ qua verifyJWT vì GHN gọi)
+router.post('/ghn-webhook', async (req, res, next) => {
+  try {
+    const { OrderCode, Status } = req.body;
+    // Status từ GHN: 'ready_to_pick', 'picking', 'delivering', 'delivered', 'cancel', 'return'...
+    if (OrderCode && Status) {
+      const order = await prisma.orders.findFirst({ where: { GHN_OrderCode: OrderCode } });
+      if (order) {
+        let newStatus = order.OrderStatus;
+        if (Status === 'delivering' || Status === 'picking') newStatus = 'SHIPPING';
+        if (Status === 'delivered') {
+           newStatus = 'COMPLETED';
+           // Tích điểm & Nâng hạng thẻ khi giao thành công
+           if (order.CustomerID) {
+              await upgradeCustomerLevel(order.CustomerID, order.TotalPrice.toNumber());
+           }
+        }
+        if (Status === 'cancel' || Status === 'return' || Status === 'returned') newStatus = 'DELIVERY_FAILED';
+
+        if (newStatus !== order.OrderStatus) {
+          await prisma.orders.update({
+            where: { OrderID: order.OrderID },
+            data: { OrderStatus: newStatus }
+          });
+          console.log(`[GHN Webhook] Order ${order.OrderID} status updated to ${newStatus}`);
+        }
+      }
+    }
+    return sendResponse(res, 200, true, 'Webhook received', null);
   } catch (err) {
     next(err);
   }

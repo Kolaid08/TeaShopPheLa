@@ -127,6 +127,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'POS bán hàng', path: '/pos', icon: Coffee, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
     { name: 'Hóa đơn & Đơn hàng', path: '/orders', icon: ShoppingBag, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
     { name: 'Đồ uống (Menu)', path: '/menu/drinks', icon: Layers, roles: ['ADMIN', 'MANAGER'] },
+    { name: 'Topping (Menu)', path: '/menu/toppings', icon: Layers, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Kho nguyên liệu', path: '/inventory/ingredients', icon: Clock, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
     { name: 'Hóa đơn nhập kho', path: '/inventory/receipts', icon: FileText, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Nhà cung cấp', path: '/inventory/suppliers', icon: Users, roles: ['ADMIN', 'MANAGER'] },
