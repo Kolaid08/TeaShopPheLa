@@ -52,8 +52,8 @@ export interface Unit {
 
 export interface Recipe {
   RecipeID: number;
-  DrinkID: number;
-  Drink?: { DrinkName: string };
+  DrinkSizeID: number;
+  DrinkSize?: { Drink?: { DrinkName: string }; Size?: { SizeName: string } };
   RecipeDetails?: RecipeDetail[];
 }
 
@@ -62,6 +62,20 @@ export interface RecipeDetail {
   IngredientID: number;
   Quantity: number;
   Ingredient?: { IngredientName: string; Unit?: { UnitName: string } };
+}
+
+export interface ToppingRecipeDetail {
+  ToppingID: number;
+  IngredientID: number;
+  Quantity: number;
+  Ingredient?: { IngredientName: string; Unit?: { UnitName: string } };
+}
+
+export interface Topping {
+  ToppingID: number;
+  ToppingName: string;
+  Price: number;
+  ToppingRecipeDetails?: ToppingRecipeDetail[];
 }
 
 export interface Supplier {
@@ -324,7 +338,7 @@ class LocalDatabase {
   recipes: Recipe[] = [
     {
       RecipeID: 1,
-      DrinkID: 1,
+      DrinkSizeID: 1,
       RecipeDetails: [
         { RecipeID: 1, IngredientID: 1, Quantity: 15 },
         { RecipeID: 1, IngredientID: 2, Quantity: 30 },
@@ -765,7 +779,7 @@ export const api = {
     } catch {
       return db.recipes.map((r) => ({
         ...r,
-        Drink: db.drinks.find((d) => d.DrinkID === r.DrinkID),
+        DrinkSize: undefined, // Mock ignores relation for now
         RecipeDetails: r.RecipeDetails?.map((rd) => ({
           ...rd,
           Ingredient: db.ingredients.find((ing) => ing.IngredientID === rd.IngredientID),
@@ -779,7 +793,7 @@ export const api = {
     } catch {
       const newR = {
         RecipeID: db.recipes.length + 1,
-        DrinkID: data.DrinkID,
+        DrinkSizeID: data.DrinkSizeID,
         RecipeDetails: data.Ingredients,
       };
       db.recipes.push(newR);
@@ -792,7 +806,7 @@ export const api = {
     } catch {
       const idx = db.recipes.findIndex((r) => r.RecipeID === id);
       if (idx === -1) throw new Error('Recipe not found');
-      db.recipes[idx] = { RecipeID: id, DrinkID: data.DrinkID, RecipeDetails: data.Ingredients };
+      db.recipes[idx] = { RecipeID: id, DrinkSizeID: data.DrinkSizeID, RecipeDetails: data.Ingredients };
       return db.recipes[idx]!;
     }
   },
@@ -802,6 +816,20 @@ export const api = {
     } catch {
       db.recipes = db.recipes.filter((r) => r.RecipeID !== id);
     }
+  },
+
+  // TOPPINGS
+  getToppings: async (): Promise<Topping[]> => {
+    return await api.request('/toppings');
+  },
+  createTopping: async (data: any): Promise<Topping> => {
+    return await api.request('/toppings', { method: 'POST', body: JSON.stringify(data) });
+  },
+  updateTopping: async (id: number, data: any): Promise<Topping> => {
+    return await api.request(`/toppings/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  },
+  deleteTopping: async (id: number): Promise<void> => {
+    return await api.request(`/toppings/${id}`, { method: 'DELETE' });
   },
 
   // SUPPLIERS
@@ -1037,10 +1065,13 @@ export const api = {
           const spend = db.customers[custIdx]!.TotalMoneySpending;
           const qual = db.levels
             .filter((l) => l.RequiredMoney <= spend)
-            .sort((a, b) => b.RequiredMoney - a.RequiredMoney);
-          if (qual[0]) db.customers[custIdx]!.LevelID = qual[0].LevelID;
+            .sort((a, b) => b.RequiredMoney - a.RequiredMoney)[0];
+          if (qual) {
+            db.customers[custIdx]!.LevelID = qual.LevelID;
+          }
         }
       }
+
       return db.orders[idx]!;
     }
   },
@@ -1130,6 +1161,17 @@ export const api = {
       if (idx === -1) throw err;
       db.ingredientReceipts[idx]!.IngredientReceiptStatus = status;
       return db.ingredientReceipts[idx]!;
+    }
+  },
+
+  refundOrder: async (id: number, amount: number, reason: string): Promise<Order> => {
+    try {
+      return await api.request(`/orders/${id}/refund`, {
+        method: 'POST',
+        body: JSON.stringify({ RefundAmount: amount, RefundReason: reason }),
+      });
+    } catch (err: any) {
+      throw new Error(err.message || 'Lỗi hệ thống khi hoàn tiền.');
     }
   },
 

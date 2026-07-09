@@ -430,6 +430,23 @@ export default function HistoryPage() {
                       );
                     })}
 
+                    {order.DiscountAmount && (
+                      <div className="flex justify-between items-center text-sm pt-2">
+                        <span className="font-bold text-foreground">Giảm giá hội viên</span>
+                        <span className="font-mono font-semibold text-emerald-500">
+                          -{Number(order.DiscountAmount).toLocaleString('vi-VN')} đ
+                        </span>
+                      </div>
+                    )}
+                    {order.ShippingFee && (
+                      <div className="flex justify-between items-center text-sm pt-2">
+                        <span className="font-bold text-foreground">Phí giao hàng (GHN)</span>
+                        <span className="font-mono font-semibold text-foreground">
+                          +{Number(order.ShippingFee).toLocaleString('vi-VN')} đ
+                        </span>
+                      </div>
+                    )}
+
                     {order.OrderNote && (
                       <div className="mt-3 p-3 bg-muted/40 rounded-xl border border-border/30 text-xs text-muted-foreground space-y-1">
                         <span className="font-bold text-[10px] uppercase text-foreground block">
