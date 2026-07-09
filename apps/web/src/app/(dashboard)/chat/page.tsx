@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Bot, Headset, User, Send, CheckCircle2, Clock } from 'lucide-react';
+import { Bot, Headset, User, Send, CheckCircle2, Clock, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
@@ -15,6 +15,10 @@ export default function LiveChatPage() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Combos
+  const [combos, setCombos] = useState<any[]>([]);
+  const [showComboMenu, setShowComboMenu] = useState(false);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -24,6 +28,16 @@ export default function LiveChatPage() {
   }, [messages]);
 
   useEffect(() => {
+    // Fetch combos once
+    fetch('http://localhost:3001/api/v1/promotions/chatbox-combos')
+      .then(res => res.json())
+      .then(data => {
+        if (data.data) {
+          setCombos(data.data);
+        }
+      })
+      .catch(err => console.error("Error fetching combos:", err));
+
     // 1. Fetch initial sessions
     fetch('http://localhost:3001/api/v1/chat/admin/sessions', {
       headers: {
@@ -82,12 +96,43 @@ export default function LiveChatPage() {
 
   const handleSelectSession = (sessionId: string) => {
     setActiveSessionId(sessionId);
+    const sessionData = sessions.find(s => s.SessionID === sessionId);
+    const customerId = sessionData?.Customer?.CustomerID || sessionData?.CustomerID || '';
+
     // Fetch full history for this session
     fetch(`http://localhost:3001/api/v1/chat/sessions/${sessionId}`)
       .then(res => res.json())
       .then(data => {
         if (data.data) {
-          setMessages(data.data.Messages);
+          const dbMessages = data.data.Messages || [];
+          
+          let comboEndpoint = 'http://localhost:3001/api/v1/promotions/chatbox-combos';
+          if (customerId) comboEndpoint += `?customerId=${customerId}`;
+          
+          fetch(comboEndpoint)
+            .then(res => res.json())
+            .then(promoData => {
+              let systemMsgs: any[] = [];
+              if (promoData.data && Array.isArray(promoData.data)) {
+                 systemMsgs = promoData.data.map((p: any) => {
+                    const isPercent = p.DiscountType === 'PERCENT';
+                    const val = isPercent ? `Giảm ${p.DiscountValue}%` : `Giảm ${Number(p.DiscountValue).toLocaleString('vi-VN')}đ`;
+                    const condition = p.MinOrderValue ? ` (Đơn từ ${Number(p.MinOrderValue).toLocaleString('vi-VN')}đ)` : '';
+                    const btn = p.TargetDrinkIDs ? `[ADD_COMBO:${JSON.parse(p.TargetDrinkIDs || '[]').join(',')}]` : 'Nhập mã để nhận';
+                    
+                    return {
+                      SenderType: 'SYSTEM',
+                      Content: `✨ **Gợi Ý Khuyến Mãi:**\n\nChương trình **${p.Name}** đang diễn ra: ${val}${condition}.\n\n👉 ${btn}`,
+                      MessageID: `ephemeral-combo-${p.PromotionID}`,
+                      createdAt: new Date().toISOString()
+                    };
+                 });
+              }
+              setMessages([...systemMsgs, ...dbMessages]);
+            })
+            .catch(() => {
+              setMessages(dbMessages);
+            });
         }
       });
   };
@@ -225,9 +270,74 @@ export default function LiveChatPage() {
                         isAdmin ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-background border rounded-tl-sm"
                       )}>
                         <div className="space-y-1 [&>p]:m-0 [&>ul]:list-disc [&>ul]:pl-4 [&>ul]:m-0 [&>ol]:list-decimal [&>ol]:pl-4 [&>ol]:m-0">
-                          <ReactMarkdown>
-                            {msg.Content}
-                          </ReactMarkdown>
+                          {(() => {
+                            const content = msg.Content || '';
+                            const buyNowRegex = /\[BUY_NOW:([A-Za-z0-9-]+):(\d+)\]/g;
+                            const addComboRegex = /\[ADD_COMBO:([0-9,]+)\]/g;
+                            
+                            const parts = [];
+                            let lastIndex = 0;
+                            
+                            let matchAddCombo;
+                            while ((matchAddCombo = addComboRegex.exec(content)) !== null) {
+                              if (matchAddCombo.index > lastIndex) {
+                                parts.push(<ReactMarkdown key={`text-${lastIndex}`}>{content.slice(lastIndex, matchAddCombo.index)}</ReactMarkdown>);
+                              }
+                              const drinkSizeIdsStr = matchAddCombo[1];
+                              
+                              parts.push(
+                                <div key={`combo-${matchAddCombo.index}`} className="mt-2 mb-2 p-3 bg-purple-100 border border-purple-200 rounded-lg shadow-sm">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xl">🎁</span>
+                                    <span className="font-bold text-purple-800 text-sm">Gợi ý Combo</span>
+                                  </div>
+                                  <div className="text-xs text-purple-700 font-medium">
+                                    Áp dụng cho các món: {drinkSizeIdsStr}
+                                  </div>
+                                </div>
+                              );
+                              lastIndex = addComboRegex.lastIndex;
+                            }
+                            
+                            let textAfterCombo = content.slice(lastIndex);
+                            lastIndex = 0;
+                            const finalParts = [];
+                            
+                            let matchBuyNow;
+                            while ((matchBuyNow = buyNowRegex.exec(textAfterCombo)) !== null) {
+                              if (matchBuyNow.index > lastIndex) {
+                                finalParts.push(<ReactMarkdown key={`text-buy-${lastIndex}`}>{textAfterCombo.slice(lastIndex, matchBuyNow.index)}</ReactMarkdown>);
+                              }
+                              const code = matchBuyNow[1];
+                              const drinkId = matchBuyNow[2];
+                              
+                              finalParts.push(
+                                <div key={`voucher-${matchBuyNow.index}`} className="mt-2 mb-2 p-3 bg-orange-100 border border-orange-200 rounded-lg shadow-sm">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xl">🎟️</span>
+                                    <span className="font-bold text-orange-800 text-sm">Voucher đã phát</span>
+                                  </div>
+                                  <div className="text-xs text-orange-700 font-bold mb-1">
+                                    Mã: {code}
+                                  </div>
+                                  <div className="text-[10px] text-orange-600">
+                                    Áp dụng cho món ID: {drinkId}
+                                  </div>
+                                </div>
+                              );
+                              lastIndex = buyNowRegex.lastIndex;
+                            }
+                            
+                            if (lastIndex < textAfterCombo.length) {
+                              finalParts.push(<ReactMarkdown key={`text-buy-${lastIndex}`}>{textAfterCombo.slice(lastIndex)}</ReactMarkdown>);
+                            }
+                            
+                            return parts.length === 0 && finalParts.length === 0 ? (
+                              <ReactMarkdown>{content}</ReactMarkdown>
+                            ) : (
+                              <>{parts}{finalParts}</>
+                            );
+                          })()}
                         </div>
                         <div className={cn("text-[10px] mt-1 opacity-70", isAdmin ? "text-right" : "text-left")}>
                           {new Date(msg.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
@@ -241,14 +351,57 @@ export default function LiveChatPage() {
             </div>
 
             {/* Input Form */}
-            <div className="p-4 bg-background border-t">
-              <form onSubmit={handleSend} className="flex gap-3">
+            <div className="p-4 bg-background border-t relative">
+              {showComboMenu && (
+                <div className="absolute bottom-full left-4 mb-2 w-72 bg-background border rounded-xl shadow-lg overflow-hidden z-10">
+                  <div className="p-3 bg-muted/50 border-b">
+                    <h4 className="font-bold text-sm">Gợi ý Combo</h4>
+                    <p className="text-xs text-muted-foreground mt-1">Chọn một combo để tự động điền vào ô chat</p>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    {combos.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">Không có combo nào khả dụng</div>
+                    ) : (
+                      combos.map((combo) => (
+                        <div 
+                          key={combo.PromotionID}
+                          className="p-3 border-b hover:bg-muted cursor-pointer transition-colors"
+                          onClick={() => {
+                            let targetIds: number[] = [];
+                            try {
+                              targetIds = JSON.parse(combo.TargetDrinkIDs || '[]');
+                            } catch (e) {}
+                            
+                            const comboText = `[ADD_COMBO:${targetIds.join(',')}]`;
+                            setInput(prev => prev ? `${prev} ${comboText}` : comboText);
+                            setShowComboMenu(false);
+                          }}
+                        >
+                          <div className="font-semibold text-sm text-primary">{combo.Name}</div>
+                          <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{combo.Description}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              <form onSubmit={handleSend} className="flex gap-3 relative">
+                <button
+                  type="button"
+                  onClick={() => setShowComboMenu(!showComboMenu)}
+                  className="bg-orange-100 text-orange-600 px-4 rounded-xl hover:bg-orange-200 transition-colors flex items-center justify-center"
+                  title="Gợi ý Combo"
+                >
+                  <Package size={20} />
+                </button>
                 <input
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Nhập câu trả lời của bạn..."
                   className="flex-1 px-4 py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  onClick={() => showComboMenu && setShowComboMenu(false)}
                 />
                 <button 
                   type="submit" 

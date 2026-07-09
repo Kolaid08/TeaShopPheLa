@@ -24,6 +24,7 @@ import chatRouter from '../modules/chat/chat.routes';
 import shipperRouter from '../modules/shipper/shipper.router';
 import vouchersRouter from '../modules/vouchers/vouchers.router';
 import promotionsRouter from '../modules/promotions/promotions.router';
+import shippingRouter from '../modules/shipping/shipping.router';
 
 const router = Router();
 
@@ -58,5 +59,6 @@ router.use('/chat', chatRouter);
 router.use('/shipper', shipperRouter);
 router.use('/vouchers', vouchersRouter);
 router.use('/promotions', promotionsRouter);
+router.use('/shipping', shippingRouter);
 
 export default router;

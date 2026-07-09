@@ -386,8 +386,16 @@ export default function OrdersPage() {
                     <div className="flex justify-between mt-2 pt-2 border-t border-dashed border-border/50">
                       <span className="text-muted-foreground font-bold">ĐV Vận Chuyển:</span>
                       <span className="font-bold text-foreground">
-                        {selectedOrder.DeliveryMethod === 'INTERNAL' ? 'Nhân viên quán' : selectedOrder.ThirdPartyShipperName}
+                        {selectedOrder.DeliveryMethod === 'INTERNAL' ? 'Nhân viên quán' : 'Giao Hàng Nhanh (GHN)'}
                       </span>
+                    </div>
+                  )}
+                  {selectedOrder.GHN_OrderCode && (
+                    <div className="flex justify-between mt-1">
+                      <span className="text-muted-foreground font-bold">Mã vận đơn:</span>
+                      <a href={selectedOrder.TrackingURL} target="_blank" rel="noreferrer" className="text-primary hover:underline font-mono">
+                        {selectedOrder.GHN_OrderCode}
+                      </a>
                     </div>
                   )}
                 </div>
@@ -459,7 +467,7 @@ export default function OrdersPage() {
                       </div>
                       <div className="text-center text-[10px] text-muted-foreground">- HOẶC -</div>
                       <Button variant="outline" className="w-full text-xs" onClick={handleBookThirdParty} disabled={isAssigning}>
-                        Gọi Grab/Ahamove
+                        Đẩy đơn GHN
                       </Button>
                     </div>
                   )}

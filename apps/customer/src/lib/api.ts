@@ -83,6 +83,9 @@ export interface Order {
   OrderStatus: 'PENDING' | 'PREPARING' | 'COMPLETED' | 'CANCELLED';
   OrderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
   ShippingAddress?: string;
+  ProvinceID?: number;
+  DistrictID?: number;
+  WardCode?: string;
   ReceiverName?: string;
   ReceiverPhone?: string;
   TotalPrice: number;
@@ -424,11 +427,11 @@ export const api = {
 
   // ORDER SUBMISSIONS & HISTORY
   getCustomerOrders: async (): Promise<Order[]> => {
-    const cust = getSessionCustomer();
-    if (!cust) return [];
-
     try {
-      const res = await fetch(`${API_BASE}/orders/customer-history/${cust.PhoneNumber}`);
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`${API_BASE}/orders/customer-history`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       const payload = await res.json();
       if (res.ok) return payload.data;
       throw new Error();
@@ -461,17 +464,23 @@ export const api = {
     OrderNote?: string;
     OrderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
     ShippingAddress?: string;
-    Latitude?: number;
-    Longitude?: number;
+    ProvinceID?: number;
+    DistrictID?: number;
+    WardCode?: string;
     ReceiverName?: string;
     ReceiverPhone?: string;
+    VoucherCode?: string;
   }): Promise<Order> => {
     const cust = getSessionCustomer();
     
     try {
+      const token = localStorage.getItem('access_token');
       const res = await fetch(`${API_BASE}/orders/customer-place`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           CustomerID: cust?.CustomerID || 1,
           CustomerName: cust?.CustomerName || 'Hội viên Phêla',
@@ -480,10 +489,12 @@ export const api = {
           OrderNote: data.OrderNote || undefined,
           OrderType: data.OrderType,
           ShippingAddress: data.ShippingAddress,
-          Latitude: data.Latitude,
-          Longitude: data.Longitude,
+          ProvinceID: data.ProvinceID,
+          DistrictID: data.DistrictID,
+          WardCode: data.WardCode,
           ReceiverName: data.ReceiverName,
           ReceiverPhone: data.ReceiverPhone,
+          VoucherCode: data.VoucherCode,
           TotalPrice: data.TotalPrice,
           DeliveryType: data.DeliveryType,
           RecipientName: data.RecipientName,
@@ -516,6 +527,9 @@ export const api = {
         OrderNote: data.OrderNote || undefined,
         OrderType: data.OrderType || (data.ShopTableID ? 'DINE_IN' : 'TAKEAWAY'),
         ShippingAddress: data.ShippingAddress || undefined,
+        ProvinceID: data.ProvinceID || undefined,
+        DistrictID: data.DistrictID || undefined,
+        WardCode: data.WardCode || undefined,
         ReceiverName: data.ReceiverName || undefined,
         ReceiverPhone: data.ReceiverPhone || undefined,
         OrderDetails: data.Items.map((item) => ({
@@ -572,8 +586,10 @@ export const api = {
 
   cancelCustomerOrder: async (orderId: number): Promise<any> => {
     try {
+      const token = localStorage.getItem('access_token');
       const res = await fetch(`${API_BASE}/orders/customer-cancel/${orderId}`, {
         method: 'PATCH',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       const payload = await res.json();
       if (res.ok && payload.success) return payload.data;
@@ -602,7 +618,52 @@ export const api = {
       if (res.ok && payload.success) return payload.data;
       throw new Error(payload.message || 'Lỗi gửi đánh giá');
     } catch (e: any) {
-      throw new Error(e.message || 'Lỗi kết nối tới máy chủ');
+      throw new Error(e.message || 'Lỗi khi thanh toán đơn hàng');
+    }
+  },
+
+  getProvinces: async (): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/provinces`);
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+  getDistricts: async (provinceId: number): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/districts/${provinceId}`);
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+  getWards: async (districtId: number): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/wards/${districtId}`);
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+  calculateFee: async (data: { to_district_id: number; to_ward_code: string; items: { DrinkSizeID: number; Quantity: number; }[] }): Promise<{ fee: number, totalWeight: number }> => {
+    try {
+      const res = await fetch(`${API_BASE}/shipping/calculate-fee`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return { fee: 0, totalWeight: 0 };
+    } catch {
+      return { fee: 0, totalWeight: 0 };
     }
   },
 
@@ -633,9 +694,12 @@ export const api = {
     }
   },
 
-  getChatboxCombos: async (): Promise<any[]> => {
+  getChatboxCombos: async (customerId?: number): Promise<any[]> => {
     try {
-      const res = await fetch(`${API_BASE}/promotions/chatbox-combos`, { cache: 'no-store' });
+      const url = customerId 
+        ? `${API_BASE}/promotions/chatbox-combos?customerId=${customerId}`
+        : `${API_BASE}/promotions/chatbox-combos`;
+      const res = await fetch(url, { cache: 'no-store' });
       const payload = await res.json();
       if (res.ok && payload.success) return payload.data;
       return [];

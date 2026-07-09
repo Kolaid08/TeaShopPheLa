@@ -90,11 +90,17 @@ export default function CustomerHome() {
   
   // Delivery states
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY' | 'DELIVERY'>('TAKEAWAY');
-  const [latitude, setLatitude] = useState<number | null>(null);
-  const [longitude, setLongitude] = useState<number | null>(null);
   const [receiverName, setReceiverName] = useState('');
   const [receiverPhone, setReceiverPhone] = useState('');
-  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+  
+  // GHN Address States
+  const [provinces, setProvinces] = useState<any[]>([]);
+  const [districts, setDistricts] = useState<any[]>([]);
+  const [wards, setWards] = useState<any[]>([]);
+  const [selectedProvinceId, setSelectedProvinceId] = useState<number>(0);
+  const [selectedDistrictId, setSelectedDistrictId] = useState<number>(0);
+  const [selectedWardCode, setSelectedWardCode] = useState<string>('');
+  const [ghnShippingFee, setGhnShippingFee] = useState<number>(0);
   
   // PayOS states
   const [payOsQrCode, setPayOsQrCode] = useState<string>('');
@@ -138,6 +144,44 @@ export default function CustomerHome() {
       setComboSuggestions([]);
     }
   }, [cart]);
+
+  // GHN hooks
+  useEffect(() => {
+    api.getProvinces().then(setProvinces);
+  }, []);
+
+  useEffect(() => {
+    if (selectedProvinceId) {
+      api.getDistricts(selectedProvinceId).then(setDistricts);
+      setSelectedDistrictId(0);
+      setSelectedWardCode('');
+      setGhnShippingFee(0);
+    } else {
+      setDistricts([]);
+      setWards([]);
+    }
+  }, [selectedProvinceId]);
+
+  useEffect(() => {
+    if (selectedDistrictId) {
+      api.getWards(selectedDistrictId).then(setWards);
+      setSelectedWardCode('');
+      setGhnShippingFee(0);
+    } else {
+      setWards([]);
+    }
+  }, [selectedDistrictId]);
+
+  useEffect(() => {
+    if (selectedDistrictId && selectedWardCode && cart.length > 0) {
+      const items = cart.map(item => ({ DrinkSizeID: item.DrinkSizeID, Quantity: item.Quantity }));
+      api.calculateFee({ to_district_id: selectedDistrictId, to_ward_code: selectedWardCode, items })
+        .then(res => setGhnShippingFee(res.fee))
+        .catch(() => setGhnShippingFee(0));
+    } else {
+      setGhnShippingFee(0);
+    }
+  }, [selectedDistrictId, selectedWardCode, cart]);
 
   useEffect(() => {
     // Authenticate check
@@ -512,22 +556,11 @@ export default function CustomerHome() {
     const baseFinal = subtotal - Math.floor(voucherDiscount) - Math.floor(promotionDiscount) - Math.floor(membershipDiscountAmount);
     
     let shippingFee = 0;
-    if (orderType === 'DELIVERY' && latitude && longitude) {
-      const shopLat = 10.762622;
-      const shopLng = 106.660172;
-      const R = 6371;
-      const dLat = (latitude - shopLat) * (Math.PI / 180);
-      const dLon = (longitude - shopLng) * (Math.PI / 180);
-      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(shopLat * (Math.PI / 180)) * Math.cos(latitude * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      const distance = R * c;
-      
+    if (orderType === 'DELIVERY') {
       if (baseFinal >= 300000) {
-         shippingFee = 0;
-      } else if (distance <= 3) {
-         shippingFee = 15000;
+         shippingFee = 0; // Free ship if > 300k
       } else {
-         shippingFee = 15000 + Math.ceil(distance - 3) * 5000;
+         shippingFee = ghnShippingFee;
       }
     }
     
@@ -586,6 +619,11 @@ export default function CustomerHome() {
 
     setIsSubmittingOrder(true);
     try {
+      const provinceName = provinces.find(p => p.ProvinceID === selectedProvinceId)?.ProvinceName || '';
+      const districtName = districts.find(d => d.DistrictID === selectedDistrictId)?.DistrictName || '';
+      const wardName = wards.find(w => w.WardCode === selectedWardCode)?.WardName || '';
+      const fullAddress = [deliveryAddress, wardName, districtName, provinceName].filter(Boolean).join(', ');
+
       const orderPayload = {
         Items: cart.map((item) => ({
           DrinkSizeID: item.DrinkSizeID,
@@ -599,9 +637,10 @@ export default function CustomerHome() {
         ShopTableID: tableId > 0 ? tableId : undefined,
         OrderNote: `${deliveryAddress ? `Giao hàng: ${deliveryAddress}` : ''}${orderNote ? ` | Ghi chú: ${orderNote}` : ''}`,
         OrderType: orderType,
-        ShippingAddress: deliveryAddress || undefined,
-        Latitude: latitude || undefined,
-        Longitude: longitude || undefined,
+        ShippingAddress: fullAddress || undefined,
+        ProvinceID: selectedProvinceId || undefined,
+        DistrictID: selectedDistrictId || undefined,
+        WardCode: selectedWardCode || undefined,
         ReceiverName: receiverName || undefined,
         ReceiverPhone: receiverPhone || undefined,
         VoucherCode: appliedVoucher ? appliedVoucher.Code : undefined,
@@ -1198,16 +1237,50 @@ export default function CustomerHome() {
 
                   {orderType === 'DELIVERY' && (
                     <div className="space-y-3 p-3 bg-muted/30 rounded-xl border border-border/50">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Tỉnh / Thành</label>
+                          <select 
+                            className="w-full text-xs h-8 rounded-md border border-border bg-background px-2"
+                            value={selectedProvinceId} 
+                            onChange={(e) => setSelectedProvinceId(Number(e.target.value))}
+                          >
+                            <option value={0}>Chọn Tỉnh...</option>
+                            {provinces.map(p => <option key={p.ProvinceID} value={p.ProvinceID}>{p.ProvinceName}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Quận / Huyện</label>
+                          <select 
+                            className="w-full text-xs h-8 rounded-md border border-border bg-background px-2"
+                            value={selectedDistrictId} 
+                            onChange={(e) => setSelectedDistrictId(Number(e.target.value))}
+                            disabled={!selectedProvinceId}
+                          >
+                            <option value={0}>Chọn Quận...</option>
+                            {districts.map(d => <option key={d.DistrictID} value={d.DistrictID}>{d.DistrictName}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Phường / Xã</label>
+                          <select 
+                            className="w-full text-xs h-8 rounded-md border border-border bg-background px-2"
+                            value={selectedWardCode} 
+                            onChange={(e) => setSelectedWardCode(e.target.value)}
+                            disabled={!selectedDistrictId}
+                          >
+                            <option value="">Chọn Phường...</option>
+                            {wards.map(w => <option key={w.WardCode} value={w.WardCode}>{w.WardName}</option>)}
+                          </select>
+                        </div>
+                      </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Gợi ý địa chỉ giao hàng *</label>
-                        <AddressAutocomplete 
-                          initialValue={deliveryAddress}
-                          onAddressSelect={(address: string, lat: number, lng: number) => {
-                            setDeliveryAddress(address);
-                            setLatitude(lat);
-                            setLongitude(lng);
-                          }}
-                          onOpenMap={() => setIsMapModalOpen(true)}
+                        <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Số nhà, Tên đường *</label>
+                        <Input 
+                          placeholder="Số nhà, Tên đường..."
+                          value={deliveryAddress}
+                          onChange={(e) => setDeliveryAddress(e.target.value)}
+                          className="text-xs h-8"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -1557,43 +1630,7 @@ export default function CustomerHome() {
         </Dialog>
       )}
 
-      {/* C. Map Modal */}
-      <Dialog 
-        isOpen={isMapModalOpen}
-        onClose={() => setIsMapModalOpen(false)}
-        title="Chọn địa chỉ trên bản đồ"
-      >
-        <div className="space-y-4">
-          <MapPicker 
-            defaultLat={latitude || 10.762622}
-            defaultLng={longitude || 106.660172}
-            onLocationSelect={(lat, lng) => {
-              setLatitude(lat);
-              setLongitude(lng);
-            }}
-          />
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-muted-foreground">Chi tiết số nhà, đường (Tùy chọn ghi thêm):</label>
-            <Input 
-              value={deliveryAddress}
-              onChange={(e) => setDeliveryAddress(e.target.value)}
-              placeholder="VD: 155 Lê Quý Đôn..."
-            />
-          </div>
-          <Button 
-            className="w-full mt-4" 
-            onClick={() => {
-              if (!latitude || !longitude) {
-                toast.error('Vui lòng chọn vị trí trên bản đồ');
-                return;
-              }
-              setIsMapModalOpen(false);
-            }}
-          >
-            Xác nhận vị trí này
-          </Button>
-        </div>
-      </Dialog>
+
     </div>
   );
 }

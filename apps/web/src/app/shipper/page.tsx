@@ -118,9 +118,8 @@ export default function ShipperDashboard() {
                     variant="outline" 
                     className="rounded-xl font-bold text-primary border-primary/50 bg-primary/5"
                     onClick={() => {
-                      const lat = order.Latitude || 10.762622;
-                      const lng = order.Longitude || 106.660172;
-                      window.open(`https://maps.google.com/?q=${lat},${lng}`, '_blank');
+                      const addr = order.ShippingAddress || 'Ho Chi Minh City';
+                      window.open(`https://maps.google.com/?q=${encodeURIComponent(addr)}`, '_blank');
                     }}
                   >
                     <Navigation className="w-4 h-4 mr-2" /> Bản đồ

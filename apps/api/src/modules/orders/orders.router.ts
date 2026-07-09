@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../../utils/prisma';
 import { sendResponse, parsePagination } from '../../utils/response';
-import { verifyJWT, requireRole } from '../../middleware/auth';
+import { verifyJWT, requireRole, optionalAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import { upgradeCustomerLevel } from '../customers/customers.router';
 import { payos } from '../payment/payment.controller';
+import { GhnService } from '../shipping/ghn.service';
 
 export async function processOrderIngredients(tx: any, items: { DrinkSizeID: number, Quantity: number }[], mode: 'deduct' | 'refund') {
   for (const item of items) {
@@ -32,18 +33,27 @@ export async function processOrderIngredients(tx: any, items: { DrinkSizeID: num
         });
         
         if (ingredient) {
-          if (mode === 'deduct' && ingredient.QuantityStock.toNumber() < quantityToAdjust) {
-            throw new AppError(400, `Nguyên liệu ${ingredient.IngredientName} không đủ tồn kho để thực hiện đơn hàng (Còn lại: ${ingredient.QuantityStock.toNumber()}, Cần: ${quantityToAdjust}).`);
+          if (mode === 'deduct') {
+            const result = await tx.ingredient.updateMany({
+              where: {
+                IngredientID: detail.IngredientID,
+                QuantityStock: { gte: quantityToAdjust }
+              },
+              data: {
+                QuantityStock: { decrement: quantityToAdjust },
+              },
+            });
+            if (result.count === 0) {
+              throw new AppError(400, `Nguyên liệu ${ingredient.IngredientName} không đủ tồn kho (Cần thêm: ${quantityToAdjust}). Lỗi đồng bộ dữ liệu (Race Condition)!`);
+            }
+          } else {
+            await tx.ingredient.update({
+              where: { IngredientID: detail.IngredientID },
+              data: {
+                QuantityStock: { increment: quantityToAdjust },
+              },
+            });
           }
-
-          await tx.ingredient.update({
-            where: { IngredientID: detail.IngredientID },
-            data: {
-              QuantityStock: mode === 'deduct'
-                ? { decrement: quantityToAdjust }
-                : { increment: quantityToAdjust },
-            },
-          });
         }
       }
     }
@@ -71,8 +81,9 @@ const createOrderSchema = z.object({
   TotalPrice: z.number().positive().optional(),
   OrderType: z.enum(['DINE_IN', 'TAKEAWAY', 'DELIVERY']).optional(),
   ShippingAddress: z.string().optional().nullable(),
-  Latitude: z.number().optional().nullable(),
-  Longitude: z.number().optional().nullable(),
+  ProvinceID: z.number().int().optional().nullable(),
+  DistrictID: z.number().int().optional().nullable(),
+  WardCode: z.string().optional().nullable(),
   ReceiverName: z.string().optional().nullable(),
   ReceiverPhone: z.string().optional().nullable(),
   VoucherCode: z.string().optional().nullable(),
@@ -251,7 +262,7 @@ router.get('/customer-frequent/:customerId', async (req, res, next) => {
   }
 });
 
-router.post('/customer-place', async (req, res, next) => {
+router.post('/customer-place', optionalAuth, async (req, res, next) => {
   try {
     const validatedData = createOrderSchema.parse(req.body);
     
@@ -393,8 +404,8 @@ router.post('/customer-place', async (req, res, next) => {
             const applicableSorted = validatedData.Items
               .filter(i => !targetIds || targetIds.includes(i.DrinkSizeID))
               .sort((a, b) => a.UnitPrice - b.UnitPrice);
-            
-            let freeItemsToGive = Number(promo.Value);
+            const multiplier = Math.floor(applicableQuantity / promo.MinQuantity);
+            let freeItemsToGive = Number(promo.Value) * multiplier;
             for (const item of applicableSorted) {
               if (freeItemsToGive <= 0) break;
               const qtyToFree = Math.min(item.Quantity, freeItemsToGive);
@@ -486,18 +497,22 @@ router.post('/customer-place', async (req, res, next) => {
       let computedDistance = null;
       let shippingFee = 0;
 
-      if (validatedData.OrderType === 'DELIVERY' && validatedData.Latitude && validatedData.Longitude) {
-         // Default shop location (Ho Chi Minh City center)
-         const shopLat = 10.762622;
-         const shopLng = 106.660172;
-         computedDistance = calculateDistance(shopLat, shopLng, validatedData.Latitude, validatedData.Longitude);
-         
+      if (validatedData.OrderType === 'DELIVERY' && validatedData.DistrictID && validatedData.WardCode) {
          if (finalPrice >= 300000) {
             shippingFee = 0; // Free ship > 300k
-         } else if (computedDistance <= 3) {
-            shippingFee = 15000;
          } else {
-            shippingFee = 15000 + Math.ceil(computedDistance - 3) * 5000;
+            try {
+               const ghnFeeRes = await GhnService.calculateFee({
+                  to_district_id: validatedData.DistrictID,
+                  to_ward_code: validatedData.WardCode,
+                  weight: validatedData.Items.reduce((acc, curr) => acc + (curr.Quantity * 500), 0),
+                  insurance_value: finalPrice
+               });
+               shippingFee = ghnFeeRes;
+            } catch (e) {
+               console.error('GHN Calculate Fee Error:', e);
+               shippingFee = 0;
+            }
          }
          finalPrice += shippingFee;
       }
@@ -515,8 +530,17 @@ router.post('/customer-place', async (req, res, next) => {
 
       // Create Order & Details in a Transaction
       const newOrder = await prisma.$transaction(async (tx) => {
+        if (usedVoucherId) {
+          const v = await tx.voucher.findUnique({ where: { VoucherID: usedVoucherId } });
+          if (!v || v.IsUsed) throw new AppError(400, 'Mã giảm giá không hợp lệ hoặc đã được sử dụng');
+          await tx.voucher.update({
+            where: { VoucherID: usedVoucherId },
+            data: { IsUsed: true }
+          });
+        }
         const order = await tx.orders.create({
           data: {
+            VoucherID: usedVoucherId,
             CustomerID: customerId,
             ShopTableID: validShopTableId,
             EmployeeID: employeeId,
@@ -525,9 +549,9 @@ router.post('/customer-place', async (req, res, next) => {
             OrderNote: validatedData.OrderNote || null,
             OrderType: validatedData.OrderType || (validShopTableId ? 'DINE_IN' : 'TAKEAWAY'),
             ShippingAddress: validatedData.ShippingAddress || null,
-            Latitude: validatedData.Latitude || null,
-            Longitude: validatedData.Longitude || null,
-            Distance: computedDistance,
+            ProvinceID: validatedData.ProvinceID || null,
+            DistrictID: validatedData.DistrictID || null,
+            WardCode: validatedData.WardCode || null,
             ReceiverName: validatedData.ReceiverName || validatedData.CustomerName || null,
             ReceiverPhone: validatedData.ReceiverPhone || validatedData.CustomerPhoneNumber || null,
             ShippingFee: shippingFee,
@@ -593,50 +617,15 @@ router.post('/customer-place', async (req, res, next) => {
   }
 });
 
-// POST /customer-cancel/:id - Customer cancels PENDING order
-router.post('/customer-cancel/:id', async (req, res, next) => {
+router.get('/customer-history', verifyJWT, async (req, res, next) => {
   try {
-    const orderId = parseInt(req.params.id || '');
-    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
-
-    const order = await prisma.orders.findUnique({
-      where: { OrderID: orderId },
-    });
-
-    if (!order) throw new AppError(404, 'Order not found.');
-
-    if (order.OrderStatus !== 'PENDING') {
-      throw new AppError(400, 'Chỉ có thể huỷ đơn hàng khi đang ở trạng thái Chờ duyệt (PENDING).');
-    }
-
-    const isPaid = order.PaymentStatus === 'PAID';
-
-    const updated = await prisma.orders.update({
-      where: { OrderID: orderId },
-      data: {
-        OrderStatus: 'CANCELLED',
-        RefundStatus: isPaid ? 'REQUESTED' : 'NONE', // Nếu đã thanh toán, chuyển sang yêu cầu hoàn tiền
-        RefundAmount: isPaid ? order.TotalPrice : 0,
-        RefundReason: 'Khách hàng tự huỷ qua ứng dụng.',
-      },
-    });
-
-    return sendResponse(res, 200, true, 'Huỷ đơn hàng thành công', updated);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.get('/customer-history/:phoneNumber', async (req, res, next) => {
-  try {
-    const phoneNumber = req.params.phoneNumber;
-    if (!phoneNumber) throw new AppError(400, 'Số điện thoại không hợp lệ.');
+    const customerId = req.user?.CustomerID;
+    if (!customerId) throw new AppError(401, 'Unauthorized');
 
     try {
       const dbOrders = await prisma.orders.findMany({
-        where: {
-          Customer: { PhoneNumber: phoneNumber },
-        },
+        where: { CustomerID: customerId },
+        orderBy: { OrderID: 'desc' },
         include: {
           Customer: true,
           ShopTable: true,
@@ -659,108 +648,7 @@ router.get('/customer-history/:phoneNumber', async (req, res, next) => {
   }
 });
 
-// Helper to push order to GHN if it's a paid delivery order
-async function checkAndSyncGHN(order: any) {
-  if (order.DeliveryType === 'DELIVERY' && !order.GHN_OrderCode) {
-    try {
-      const orderDetails = await prisma.orderDetail.findMany({
-        where: { OrderID: order.OrderID },
-        include: { DrinkSize: { include: { Size: true, Drink: true } } },
-      });
-      const items = orderDetails.map((d) => ({
-        name: d.DrinkSize.Drink.DrinkName,
-        quantity: d.Quantity,
-        price: d.UnitPrice.toNumber(),
-        weight: d.DrinkSize.Size.WeightGram || 500,
-      }));
-      const totalWeight = items.reduce((acc, curr) => acc + curr.weight * curr.quantity, 0) || 500;
-
-      const isCOD = (order.PaymentMethod === 'COD' || !order.PaymentMethod) && order.PaymentStatus !== 'PAID';
-      const ghnCode = await GhnService.createOrder({
-        to_name: order.RecipientName || 'Khách hàng',
-        to_phone: order.RecipientPhone || '0900000000',
-        to_address: order.DeliveryAddress || 'Không có địa chỉ',
-        to_ward_code: order.WardCode || '',
-        to_district_id: order.DistrictID || 0,
-        weight: totalWeight,
-        insurance_value: order.TotalPrice.toNumber(),
-        cod_amount: isCOD ? order.TotalPrice.toNumber() : 0,
-        content: `Đơn hàng Phê La #${order.OrderID}`,
-        items,
-      });
-
-      await prisma.orders.update({
-        where: { OrderID: order.OrderID },
-        data: { GHN_OrderCode: ghnCode, OrderStatus: 'PREPARING' },
-      });
-      console.log(`[GHN Sync] Order ${order.OrderID} synced to GHN with code ${ghnCode}`);
-      return ghnCode;
-    } catch (e) {
-      console.error(`[GHN Sync] Failed for order ${order.OrderID}`, e);
-    }
-  }
-  return null;
-}
-
-// POST /:id/refund - Process Refund
-router.post('/:id/refund', async (req, res, next) => {
-  try {
-    const orderId = parseInt(req.params.id || '');
-    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
-
-    const validatedData = refundSchema.parse(req.body);
-
-    const order = await prisma.orders.findUnique({
-      where: { OrderID: orderId },
-    });
-
-    if (!order) throw new AppError(404, 'Order not found.');
-
-    if (order.RefundStatus === 'FULL' || order.RefundStatus === 'PARTIAL') {
-      throw new AppError(400, 'Order has already been refunded.');
-    }
-
-    const updatedOrder = await prisma.$transaction(async (tx) => {
-      let refundStatus = 'FULL';
-      if (validatedData.RefundAmount < order.TotalPrice.toNumber()) {
-        refundStatus = 'PARTIAL';
-      }
-
-      const updated = await tx.orders.update({
-        where: { OrderID: orderId },
-        data: {
-          RefundStatus: refundStatus,
-          RefundAmount: validatedData.RefundAmount,
-          RefundReason: validatedData.RefundReason || null,
-          OrderStatus: 'CANCELLED',
-        },
-      });
-
-      // Bù trừ công nợ hội viên nếu đơn hàng đã COMPLETED trước đó
-      if (order.OrderStatus === 'COMPLETED' && order.CustomerID) {
-        await tx.customer.update({
-          where: { CustomerID: order.CustomerID },
-          data: {
-            TotalMoneySpending: {
-              decrement: validatedData.RefundAmount,
-            },
-          },
-        });
-        
-        await upgradeCustomerLevel(order.CustomerID, tx);
-      }
-
-      return updated;
-    });
-
-    return sendResponse(res, 200, true, 'Hoàn tiền thành công', updatedOrder);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// GET /customer-status/:id - Public status polling for customer UI
-router.get('/customer-status/:id', async (req, res, next) => {
+router.get('/customer-status/:id', optionalAuth, async (req, res, next) => {
   try {
     const orderId = parseInt(req.params.id || '');
     if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
@@ -797,7 +685,8 @@ router.get('/customer-status/:id', async (req, res, next) => {
 });
 
 // PATCH /customer-cancel/:id - Public cancel endpoint for customers
-router.patch('/customer-cancel/:id', async (req, res, next) => {
+router.patch('/customer-cancel/:id', verifyJWT, async (req, res, next) => {
+    const customerId = req.user?.CustomerID;
   try {
     const orderId = parseInt(req.params.id || '');
     if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
@@ -808,6 +697,7 @@ router.patch('/customer-cancel/:id', async (req, res, next) => {
         include: { OrderDetails: true }
       });
       if (!order) throw new AppError(404, 'Order not found.');
+    if (order.CustomerID && order.CustomerID !== customerId) throw new AppError(403, 'Forbidden');
 
       if (order.OrderStatus !== 'PENDING') {
         throw new AppError(400, 'Chỉ có thể hủy đơn hàng khi đang ở trạng thái Chờ xử lý.');
@@ -815,451 +705,17 @@ router.patch('/customer-cancel/:id', async (req, res, next) => {
 
       const updatedOrder = await prisma.$transaction(async (tx) => {
         const updated = await tx.orders.update({
-          where: { OrderID: orderId },
-          data: { OrderStatus: 'CANCELLED' }
-        });
-
-        return updated;
-      });
-
-      return sendResponse(res, 200, true, 'Đã hủy đơn hàng thành công.', updatedOrder);
-    } catch (dbErr: any) {
-      next(dbErr);
-    }
-  } catch(err) {
-    next(err);
-  }
-});
-
-// Protect routes for staff admin dashboard operations
-router.use(verifyJWT);
-
-// GET / - List all orders with filters (by table, status, date, pagination)
-router.get('/', async (req, res, next) => {
-  try {
-    const { page, limit, sortBy, sortDir, skip } = parsePagination(req.query);
-    const shopTableId = req.query.shopTableId
-      ? parseInt(req.query.shopTableId as string)
-      : undefined;
-    const status = req.query.status as string;
-    const dateQuery = req.query.date as string; // 'YYYY-MM-DD'
-
-    const where: any = {};
-
-    if (shopTableId) {
-      where.ShopTableID = shopTableId;
-    }
-
-    if (status) {
-      where.OrderStatus = status;
-    }
-
-    if (dateQuery) {
-      const startDate = new Date(`${dateQuery}T00:00:00.000Z`);
-      const endDate = new Date(`${dateQuery}T23:59:59.999Z`);
-      where.CreatedTime = {
-        gte: startDate,
-        lte: endDate,
-      };
-    }
-
-    try {
-      const [totalItems, orders] = await prisma.$transaction([
-        prisma.orders.count({ where }),
-        prisma.orders.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { [sortBy]: sortDir },
-          include: {
-            Customer: { select: { CustomerName: true, PhoneNumber: true } },
-            ShopTable: { select: { ShopTableNumber: true } },
-            Employee: { select: { FullName: true } },
-            OrderDetails: {
-              include: {
-                DrinkSize: {
-                  include: {
-                    Drink: { select: { DrinkName: true } },
-                    Size: { select: { SizeName: true } },
-                  },
-                },
-              },
-            },
-          },
-        }),
-      ]);
-
-      const totalPages = Math.ceil(totalItems / limit);
-
-      return sendResponse(res, 200, true, 'Orders list retrieved successfully', orders, {
-        page,
-        limit,
-        totalItems,
-        totalPages,
-      });
-    } catch (err) {
-      next(err);
-    }
-  } catch (err) {
-    next(err);
-  }
-});
-
-// GET /:id - Single order details
-router.get('/:id', async (req, res, next) => {
-  try {
-    const orderId = parseInt(req.params.id || '');
-    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
-
-    try {
-      const order = await prisma.orders.findUnique({
-        where: { OrderID: orderId },
-        include: {
-          Customer: true,
-          ShopTable: true,
-          Employee: true,
-          OrderDetails: {
-            include: {
-              DrinkSize: {
-                include: {
-                  Drink: true,
-                  Size: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      if (!order) throw new AppError(404, 'Order not found.');
-
-      // Automatically check PayOS status if the order is PENDING
-      if (order.OrderStatus === 'PENDING') {
-        try {
-          const payosRes = await payos.paymentRequests.get(order.OrderID);
-          if (payosRes.status === 'PAID') {
-            order.PaymentStatus = 'PAID';
-            order.PaymentMethod = 'QR_CODE'; // Assume it was paid via QR
-            await prisma.orders.update({
-              where: { OrderID: order.OrderID },
-              data: { PaymentStatus: 'PAID', PaymentMethod: 'QR_CODE' },
-            });
-            console.log(`[PayOS Polling] Auto-updated order ${order.OrderID} to PAID`);
-
-            // Sync to GHN if it's a delivery order
-            const ghnCode = await checkAndSyncGHN(order);
-            if (ghnCode) order.GHN_OrderCode = ghnCode;
-          }
-        } catch (payosErr: any) {
-          // Ignore errors if the payment link doesn't exist on PayOS yet or expired
-        }
-      }
-
-      return sendResponse(res, 200, true, 'Order retrieved', order);
-    } catch (fallbackErr) {
-      throw new AppError(404, 'Order not found');
-    }
-  } catch (err) {
-    next(err);
-  }
-});
-
-// POST / - Create a new order (Staff/Manager/Admin)
-router.post('/', async (req, res, next) => {
-  try {
-    const validatedData = createOrderSchema.parse(req.body);
-    const employeeId = req.user?.EmployeeID;
-
-    if (!employeeId) {
-      throw new AppError(401, 'Unauthorized: Handlers missing user token.');
-    }
-
-    // 1. Gather all DrinkSize ids
-    const drinkSizeIds = validatedData.Items.map((i) => i.DrinkSizeID);
-    
-    let shippingFee = 0;
-    let computedDistance: number | null = null;
-
-    // We try to save to database using Prisma first
-    try {
-      const catalogItems = await prisma.drinkSize.findMany({
-        where: { DrinkSizeID: { in: drinkSizeIds } },
-        include: { Drink: true, Size: true },
-      });
-
-      if (catalogItems.length !== drinkSizeIds.length) {
-        throw new AppError(
-          400,
-          'One or more items in your order do not exist in the product catalog.',
-        );
-      }
-
-      // 2. Validate availability
-      for (const item of catalogItems) {
-        if (item.DrinkSizeStatus === 'UNAVAILABLE') {
-          throw new AppError(
-            400,
-            `The product ${item.Drink.DrinkName} (${item.Size.SizeName}) is currently unavailable.`,
-          );
-        }
-      }
-
-      // 3. Compute base total pricing securely
-      let baseTotal = 0;
-      validatedData.Items.forEach((item) => {
-        const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
-        if (catalogItem) {
-           item.UnitPrice = catalogItem.UnitPrice.toNumber();
-        }
-        baseTotal += item.UnitPrice * item.Quantity;
-      });
-
-      // Calculate Promotion Discount (Best applicable promo)
-      let promotionDiscountAmount = 0;
-      const now = new Date();
-      const activePromos = await prisma.promotion.findMany({
-        where: { 
-          IsActive: true,
-          OR: [
-            { StartDate: null, EndDate: null },
-            { StartDate: { lte: now }, EndDate: { gte: now } },
-            { StartDate: { lte: now }, EndDate: null },
-            { StartDate: null, EndDate: { gte: now } }
-          ]
-        }
-      });
-
-      for (const promo of activePromos) {
-        let applicableItemsTotal = 0;
-        let applicableQuantity = 0;
-        
-        let targetIds: number[] | null = null;
-        if (promo.TargetDrinkIDs) {
-          try {
-            targetIds = JSON.parse(promo.TargetDrinkIDs);
-          } catch {}
-        }
-        
-        for (const item of validatedData.Items) {
-          if (!targetIds || targetIds.includes(item.DrinkSizeID)) {
-            applicableItemsTotal += item.UnitPrice * item.Quantity;
-            applicableQuantity += item.Quantity;
-          }
-        }
-
-        if (applicableQuantity >= promo.MinQuantity) {
-          let currentPromoDiscount = 0;
-          if (promo.Type === 'PERCENT') {
-            currentPromoDiscount = applicableItemsTotal * (Number(promo.Value) / 100);
-          } else if (promo.Type === 'AMOUNT') {
-            currentPromoDiscount = Number(promo.Value);
-          } else if (promo.Type === 'FREE_ITEM') {
-            const applicableSorted = validatedData.Items
-              .filter(i => !targetIds || targetIds.includes(i.DrinkSizeID))
-              .sort((a, b) => a.UnitPrice - b.UnitPrice);
-            
-            const multiplier = Math.floor(applicableQuantity / promo.MinQuantity);
-            let freeItemsToGive = Number(promo.Value) * multiplier;
-            
-            for (const item of applicableSorted) {
-              if (freeItemsToGive <= 0) break;
-              const qtyToFree = Math.min(item.Quantity, freeItemsToGive);
-              currentPromoDiscount += qtyToFree * item.UnitPrice;
-              freeItemsToGive -= qtyToFree;
-            }
-          }
-          
-          if (currentPromoDiscount > promotionDiscountAmount) {
-            promotionDiscountAmount = currentPromoDiscount;
-          }
-        }
-      }
-
-      // Ratio of remaining price after promo to original price
-      const promoRatio = baseTotal > 0 ? (baseTotal - promotionDiscountAmount) / baseTotal : 1;
-
-      // 4. Calculate Customer Discount
-      let discountRate = 0;
-      let customerId = validatedData.CustomerID || null;
-      if (customerId) {
-        const customer = await prisma.customer.findUnique({
-          where: { CustomerID: customerId },
-          include: { MemberShipLevel: true },
-        });
-        if (!customer) {
-          throw new AppError(404, 'The associated customer record was not found.');
-        }
-        discountRate = customer.MemberShipLevel.DiscountRate.toNumber();
-      }
-
-      // Check Voucher
-      let voucherDiscountAmount = 0;
-      let membershipDiscount = 0;
-      let usedVoucherId = null;
-
-      if (validatedData.VoucherCode) {
-        const voucher = await prisma.voucher.findUnique({ where: { Code: validatedData.VoucherCode } });
-        if (!voucher) throw new AppError(404, 'Mã giảm giá không tồn tại');
-        if (voucher.IsUsed) throw new AppError(400, 'Mã giảm giá đã được sử dụng');
-        if (voucher.ValidUntil && new Date(voucher.ValidUntil) < new Date()) throw new AppError(400, 'Mã giảm giá đã hết hạn');
-        if (voucher.OwnerID && voucher.OwnerID !== customerId) throw new AppError(403, 'Mã giảm giá không dành cho tài khoản này');
-
-        // Apply voucher
-        let targetItemTotal = 0;
-        let otherItemsTotal = 0;
-
-        if (voucher.TargetProductID) {
-          // Find exactly 1 item in the cart to apply
-          let applied = false;
-          for (const item of validatedData.Items) {
-            if (item.DrinkSizeID === voucher.TargetProductID && !applied) {
-               targetItemTotal += item.UnitPrice;
-               otherItemsTotal += item.UnitPrice * (item.Quantity - 1);
-               applied = true;
-            } else {
-               otherItemsTotal += item.UnitPrice * item.Quantity;
-            }
-          }
-          if (!applied) throw new AppError(400, 'Giỏ hàng không chứa món được áp dụng mã giảm giá');
-        } else {
-           targetItemTotal = baseTotal;
-           otherItemsTotal = 0;
-        }
-
-        // Scale down totals to calculate voucher on the remaining amount after promotion
-        targetItemTotal = targetItemTotal * promoRatio;
-        otherItemsTotal = otherItemsTotal * promoRatio;
-
-        if (voucher.DiscountType === 'PERCENT') {
-           voucherDiscountAmount = targetItemTotal * (Number(voucher.DiscountValue) / 100);
-        } else {
-           voucherDiscountAmount = Number(voucher.DiscountValue);
-           if (voucherDiscountAmount > targetItemTotal) voucherDiscountAmount = targetItemTotal;
-        }
-
-        membershipDiscount = otherItemsTotal * (discountRate / 100);
-        usedVoucherId = voucher.VoucherID;
-      } else {
-        membershipDiscount = (baseTotal * promoRatio) * (discountRate / 100);
-      }
-
-      const totalDiscount = promotionDiscountAmount + voucherDiscountAmount + membershipDiscount;
-      let finalPrice = Math.max(0, baseTotal - totalDiscount);
-
-      if (validatedData.OrderType === 'DELIVERY' && validatedData.Latitude && validatedData.Longitude) {
-         // Default shop location (Ho Chi Minh City center)
-         const shopLat = 10.762622;
-         const shopLng = 106.660172;
-         computedDistance = calculateDistance(shopLat, shopLng, validatedData.Latitude, validatedData.Longitude);
-         
-         if (finalPrice >= 300000) {
-            shippingFee = 0; // Free ship > 300k
-         } else if (computedDistance <= 3) {
-            shippingFee = 15000;
-         } else {
-            shippingFee = 15000 + Math.ceil(computedDistance - 3) * 5000;
-         }
-         finalPrice += shippingFee;
-      }
-
-      // Validate ShopTableID
-      let validShopTableId = validatedData.ShopTableID || null;
-      if (validShopTableId) {
-        const tableExists = await prisma.shopTable.findUnique({
-          where: { ShopTableID: validShopTableId }
-        });
-        if (!tableExists) {
-          validShopTableId = null; // Fallback to null if table doesn't exist
-        }
-      }
-
-      // 5. Create Order & Details in a Transaction
-      const newOrder = await prisma.$transaction(async (tx) => {
-        const order = await tx.orders.create({
-          data: {
-            CustomerID: validatedData.CustomerID || null,
-            ShopTableID: validShopTableId,
-            EmployeeID: employeeId,
-            OrderStatus: 'PENDING',
-            TotalPrice: finalPrice,
-            OrderNote: validatedData.OrderNote || null,
-            OrderType: validatedData.OrderType || (validShopTableId ? 'DINE_IN' : 'TAKEAWAY'),
-            ShippingAddress: validatedData.ShippingAddress || null,
-            Latitude: validatedData.Latitude || null,
-            Longitude: validatedData.Longitude || null,
-            Distance: computedDistance,
-            ReceiverName: validatedData.ReceiverName || validatedData.CustomerName || null,
-            ReceiverPhone: validatedData.ReceiverPhone || validatedData.CustomerPhoneNumber || null,
-            ShippingFee: shippingFee,
-          },
-        });
-
-        await tx.orderDetail.createMany({
-          data: validatedData.Items.map((item) => {
-            return {
-              OrderID: order.OrderID,
-              DrinkSizeID: item.DrinkSizeID,
-              Quantity: item.Quantity,
-              Sugar: item.Sugar || '100%',
-              Ice: item.Ice || '100%',
-              Toppings: item.Toppings || null,
-              UnitPrice: item.UnitPrice,
-            };
-          }),
-        });
-
-        if (usedVoucherId) {
-          // @ts-ignore
-          await tx.voucher.update({
-            where: { VoucherID: usedVoucherId },
-            data: { IsUsed: true }
+            where: { OrderID: orderId },
+            data: { OrderStatus: validatedData.OrderStatus },
           });
-        }
 
-        return tx.orders.findUnique({
-          where: { OrderID: order.OrderID },
-          include: { OrderDetails: true },
-        });
-      });
-
-      return sendResponse(res, 201, true, 'Order created successfully', newOrder);
-    } catch (dbErr: any) {
-      next(dbErr);
-    }
-  } catch (err) {
-    next(err);
-  }
-});
-
-// PATCH /:id/status - Update Order Status & Trigger customer total updates on COMPLETED (Staff/Manager/Admin)
-router.patch('/:id/status', async (req, res, next) => {
-  try {
-    const orderId = parseInt(req.params.id || '');
-    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
-
-    const validatedData = updateStatusSchema.parse(req.body);
-
-    try {
-      const order = await prisma.orders.findUnique({
-        where: { OrderID: orderId },
-      });
-
-      if (!order) throw new AppError(404, 'Order not found.');
-
-      // Guard status transition duplicates
-      if (order.OrderStatus === 'COMPLETED') {
-        throw new AppError(400, 'Cannot change the status of an already completed order.');
-      }
-      if (order.OrderStatus === 'CANCELLED') {
-        throw new AppError(400, 'Cannot change the status of an already cancelled order.');
-      }
-
-      const updatedOrder = await prisma.$transaction(async (tx) => {
-        // 1. Update order status
-        const updated = await tx.orders.update({
-          where: { OrderID: orderId },
-          data: { OrderStatus: validatedData.OrderStatus },
-        });
+          // Refund voucher if cancelled
+          if (validatedData.OrderStatus === 'CANCELLED' && order.VoucherID && order.OrderStatus !== 'CANCELLED') {
+            await tx.voucher.update({
+              where: { VoucherID: order.VoucherID },
+              data: { IsUsed: false },
+            });
+          }
 
         // 2. If status moves to COMPLETED and customer is present, add to Customer spending
         if (validatedData.OrderStatus === 'COMPLETED' && order.CustomerID) {
@@ -1342,8 +798,6 @@ router.patch('/:id/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER'])
         OrderStatus: 'SHIPPING',
         DeliveryMethod: validatedData.DeliveryMethod,
         ShipperID: validatedData.DeliveryMethod === 'INTERNAL' ? validatedData.ShipperID : null,
-        ThirdPartyShipperName: validatedData.DeliveryMethod === 'THIRD_PARTY' ? validatedData.ThirdPartyShipperName : null,
-        ThirdPartyShipperPhone: validatedData.DeliveryMethod === 'THIRD_PARTY' ? validatedData.ThirdPartyShipperPhone : null,
         TrackingURL: validatedData.DeliveryMethod === 'THIRD_PARTY' ? validatedData.TrackingURL : null,
       },
     });

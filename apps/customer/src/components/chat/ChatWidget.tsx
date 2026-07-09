@@ -58,9 +58,10 @@ export function ChatWidget() {
     const sessionId = getSessionId();
     const customer = api.getCurrentCustomer();
     const customerId = customer ? customer.CustomerID : undefined;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('phela_customer_token') || undefined : undefined;
 
     newSocket.on('connect', () => {
-      newSocket.emit('join_session', { sessionId, customerId });
+      newSocket.emit('join_session', { sessionId, customerId, token });
     });
 
     newSocket.on('session_joined', async (session) => {
@@ -68,13 +69,21 @@ export function ChatWidget() {
       let loadedMessages = session.Messages || [];
       
       try {
-        const lastComboSession = localStorage.getItem('last_combo_shown_session');
+        const ephemeralKey = `ephemeral_msgs_${sessionId}_${customerId || 'guest'}`;
+        const storedEphemeral = localStorage.getItem(ephemeralKey);
+        let ephemeralMsgs = [];
+
+        if (storedEphemeral) {
+           try {
+             ephemeralMsgs = JSON.parse(storedEphemeral);
+           } catch(e) {}
+        }
         
-        if (lastComboSession !== sessionId) {
-          const combos = await api.getChatboxCombos();
+        if (ephemeralMsgs.length === 0) {
+          const combos = await api.getChatboxCombos(customerId);
           if (combos && combos.length > 0) {
-            const comboMsgs = combos.map((p: any) => {
-              let btn = '[XEM MENU](/menu)'; // This will be parsed by UI if needed, or just text
+            ephemeralMsgs = combos.map((p: any) => {
+              let btn = '[XEM MENU](/menu)';
               if (p.TargetDrinkIDs) {
                 try {
                   const arr = JSON.parse(p.TargetDrinkIDs);
@@ -89,14 +98,15 @@ export function ChatWidget() {
               return {
                 SenderType: 'AI',
                 Content: `✨ **Gợi Ý Khuyến Mãi:**\n\nChương trình **${p.Name}** đang diễn ra: ${val}${condition}.\n\n👉 ${btn}`,
-                MessageID: `ephemeral-combo-${p.PromotionID}`,
+                MessageID: `ephemeral-combo-${p.PromotionID}-${Date.now()}`,
                 createdAt: new Date().toISOString()
               };
             });
-            loadedMessages = [...loadedMessages, ...comboMsgs];
-            localStorage.setItem('last_combo_shown_session', sessionId);
+            localStorage.setItem(ephemeralKey, JSON.stringify(ephemeralMsgs));
           }
         }
+        
+        loadedMessages = [...loadedMessages, ...ephemeralMsgs];
       } catch (err) {
         console.error('Lỗi lấy combo chatbox:', err);
       }
@@ -244,7 +254,7 @@ export function ChatWidget() {
                                   <p className="text-emerald-800 text-xs font-bold mb-2 leading-tight">Thêm Combo Này Vào Giỏ Hàng?</p>
                                   <button 
                                      onClick={() => {
-                                       window.dispatchEvent(new CustomEvent('ai_add_combo', { detail: { drinkSizeIds: drinkSizeIdsStr.split(',').map(Number) } }));
+                                       window.dispatchEvent(new CustomEvent('ai_add_combo', { detail: { drinkSizeIds: drinkSizeIdsStr?.split(',').map(Number) || [] } }));
                                      }}
                                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-xs transition-colors shadow-sm"
                                   >

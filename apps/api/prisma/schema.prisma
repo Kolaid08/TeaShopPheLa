@@ -27,7 +27,7 @@ model Size {
   SizeName    String      @db.VarChar(50)
   Description String?     @db.NVarChar(255)
   VolumeML    Int
-  WeightGram  Int         @default(500) // Trọng lượng ước tính (gram) dùng cho GHN
+  WeightGram  Int         @default(500)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   DrinkSizes  DrinkSize[]
@@ -240,10 +240,12 @@ model Orders {
   Distance        Float?
   ReceiverName    String?       @db.NVarChar(255)
   ReceiverPhone   String?       @db.VarChar(20)
+  ProvinceID      Int?
+  DistrictID      Int?
+  WardCode        String?       @db.VarChar(50)
+  GHN_OrderCode   String?       @db.VarChar(100)
   ShippingFee     Decimal?      @default(0) @db.Decimal(10, 2)
   DeliveryMethod  String?       @db.VarChar(50)
-  ThirdPartyShipperName String? @db.NVarChar(255)
-  ThirdPartyShipperPhone String? @db.VarChar(20)
   TrackingURL     String?       @db.VarChar(500)
   CreatedTime     DateTime      @default(now())
   OrderStatus     String        @default("PENDING") @db.VarChar(50)
@@ -254,10 +256,12 @@ model Orders {
   AppTransId      String?       @db.VarChar(100)
   RefundReason    String?       @db.NVarChar(500)
   RefundStatus    String?       @db.VarChar(50)
+  VoucherID       Int?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   OrderDetails    OrderDetail[]
   Customer        Customer?     @relation(fields: [CustomerID], references: [CustomerID], onDelete: SetNull, map: "FK_Orders_Customer")
+  Voucher         Voucher?      @relation(fields: [VoucherID], references: [VoucherID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Orders_Voucher")
   Employee        Employee      @relation("OrderCreator", fields: [EmployeeID], references: [EmployeeID], map: "FK_Orders_Employee")
   Shipper         Employee?     @relation("OrderShipper", fields: [ShipperID], references: [EmployeeID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Orders_Shipper")
   ShopTable       ShopTable?    @relation(fields: [ShopTableID], references: [ShopTableID], map: "FK_Orders_ShopTable")
@@ -440,14 +444,14 @@ model Voucher {
   DiscountValue   Decimal     @db.Decimal(15, 2)
   TargetProductID Int?
   OwnerID         Int?
-  Creator         String      @default("ADMIN") @db.VarChar(20)
+  Creator         String?     @db.VarChar(50)
   IsUsed          Boolean     @default(false)
   ValidUntil      DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
-
-  Customer        Customer?   @relation(fields: [OwnerID], references: [CustomerID], onDelete: Cascade, map: "FK_Voucher_Customer")
-  DrinkSize       DrinkSize?  @relation(fields: [TargetProductID], references: [DrinkSizeID], onDelete: Cascade, map: "FK_Voucher_DrinkSize")
+  Customer        Customer?   @relation(fields: [OwnerID], references: [CustomerID], map: "FK_Voucher_Customer")
+  DrinkSize       DrinkSize?  @relation(fields: [TargetProductID], references: [DrinkSizeID], map: "FK_Voucher_DrinkSize")
+  Orders          Orders[]
 
   @@map("Voucher")
 }

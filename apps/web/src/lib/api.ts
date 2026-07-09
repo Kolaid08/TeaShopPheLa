@@ -145,14 +145,14 @@ export interface Order {
   OrderNote?: string;
   OrderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
   ShippingAddress?: string;
-  Latitude?: number;
-  Longitude?: number;
+  ProvinceID?: number;
+  DistrictID?: number;
+  WardCode?: string;
   ReceiverName?: string;
   ReceiverPhone?: string;
   DeliveryMethod?: 'INTERNAL' | 'THIRD_PARTY';
   ShipperID?: number;
-  ThirdPartyShipperName?: string;
-  ThirdPartyShipperPhone?: string;
+  GHN_OrderCode?: string;
   TrackingURL?: string;
   Customer?: { CustomerName: string; PhoneNumber: string };
   ShopTable?: { ShopTableNumber: number };
@@ -1093,8 +1093,7 @@ export const api = {
       if (idx === -1) throw err;
       db.orders[idx]!.OrderStatus = 'SHIPPING';
       db.orders[idx]!.DeliveryMethod = 'THIRD_PARTY';
-      db.orders[idx]!.ThirdPartyShipperName = 'Nguyễn Văn Grab (Mock)';
-      db.orders[idx]!.ThirdPartyShipperPhone = '0911222333';
+      db.orders[idx]!.GHN_OrderCode = 'GHN-MOCK-123';
       db.orders[idx]!.TrackingURL = 'https://mock-tracking.phela.vn/TRACK-123';
       return db.orders[idx]!;
     }
@@ -1444,201 +1443,7 @@ export const api = {
       throw new Error(e.message || 'Lỗi tạo voucher');
     }
   },
-  createShift: async (data: any): Promise<Shift> => {
-    try {
-      return await api.request('/shifts', { method: 'POST', body: JSON.stringify(data) });
-    } catch {
-      const newS = { ShiftID: db.shifts.length + 1, ...data };
-      db.shifts.push(newS);
-      return newS;
-    }
-  },
-  updateShift: async (id: number, data: any): Promise<Shift> => {
-    try {
-      return await api.request(`/shifts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-    } catch {
-      const idx = db.shifts.findIndex((s) => s.ShiftID === id);
-      if (idx === -1) throw new Error('Shift not found');
-      db.shifts[idx] = { ...db.shifts[idx], ...data } as Shift;
-      return db.shifts[idx]!;
-    }
-  },
-  deleteShift: async (id: number): Promise<void> => {
-    try {
-      await api.request(`/shifts/${id}`, { method: 'DELETE' });
-    } catch {
-      db.shifts = db.shifts.filter((s) => s.ShiftID !== id);
-    }
-  },
 
-  // SHIFT LOGS (ATTENDANCE)
-  getShiftLogs: async (): Promise<ShiftLog[]> => {
-    try {
-      return await api.request('/shift-logs');
-    } catch {
-      return db.shiftLogs.map((l) => ({
-        ...l,
-        Employee: db.employees.find((e) => e.EmployeeID === l.EmployeeID),
-        Shift: db.shifts.find((s) => s.ShiftID === l.ShiftID),
-      }));
-    }
-  },
-  checkIn: async (shiftId: number): Promise<ShiftLog> => {
-    try {
-      return await api.request('/shift-logs/check-in', {
-        method: 'POST',
-        body: JSON.stringify({ ShiftID: shiftId }),
-      });
-    } catch {
-      const user = getSessionUser();
-      const today = new Date().toISOString().split('T')[0]!;
-      const newLog: ShiftLog = {
-        ShiftLogID: db.shiftLogs.length + 1,
-        EmployeeID: user.EmployeeID,
-        ShiftID: shiftId,
-        WorkDate: today,
-        CheckInTime: new Date().toISOString(),
-        ShiftStatus: 'PRESENT',
-      };
-      db.shiftLogs.push(newLog);
-      return newLog;
-    }
-  },
-  checkOut: async (): Promise<ShiftLog> => {
-    try {
-      return await api.request('/shift-logs/check-out', { method: 'POST' });
-    } catch {
-      const user = getSessionUser();
-      const log = db.shiftLogs.find((l) => l.EmployeeID === user.EmployeeID && !l.CheckOutTime);
-      if (!log) throw new Error('Bạn chưa Check-in ngày hôm nay.');
-      log.CheckOutTime = new Date().toISOString();
-      return log;
-    }
-  },
-
-  // SALARY
-  getSalaries: async (): Promise<Salary[]> => {
-    try {
-      return await api.request('/salary');
-    } catch {
-      return db.salaries.map((s) => ({
-        ...s,
-        Employee: db.employees.find((e) => e.EmployeeID === s.EmployeeID),
-      }));
-    }
-  },
-  generateSalaries: async (month: number, year: number): Promise<Salary[]> => {
-    try {
-      return await api.request('/salary/generate', {
-        method: 'POST',
-        body: JSON.stringify({ Month: month, Year: year }),
-      });
-    } catch {
-      const list: Salary[] = [];
-      db.employees.forEach((emp) => {
-        const role = db.roles.find((r) => r.RoleID === emp.RoleID);
-        const base = role?.DefaultBaseSalary || 5000000;
-        const exists = db.salaries.find(
-          (s) => s.EmployeeID === emp.EmployeeID && s.Month === month && s.Year === year,
-        );
-        if (exists) return;
-
-        const newSal: Salary = {
-          SalaryID: db.salaries.length + 1,
-          EmployeeID: emp.EmployeeID,
-          Month: month,
-          Year: year,
-          BaseSalary: base,
-          TotalHours: 160, // standard hours
-          Bonus: 200000,
-          Deduction: 50000,
-          RealSalary: base + 200000 - 50000,
-        };
-        db.salaries.push(newSal);
-        list.push(newSal);
-      });
-      return list;
-    }
-  },
-  paySalary: async (id: number): Promise<Salary> => {
-    try {
-      return await api.request(`/salary/${id}/pay`, { method: 'PATCH' });
-    } catch {
-      const sal = db.salaries.find((s) => s.SalaryID === id);
-      if (!sal) throw new Error('Salary sheet not found');
-      sal.PaidDate = new Date().toISOString();
-      return sal;
-    }
-  },
-
-  // DASHBOARD Operational stats
-  getDashboardStats: async (): Promise<any> => {
-    try {
-      return await api.request('/dashboard');
-    } catch {
-      // Return high-quality mock data curves
-      const todayRev =
-        db.orders
-          .filter((o) => o.OrderStatus === 'COMPLETED')
-          .reduce((acc, curr) => acc + curr.TotalPrice, 0) || 1285000;
-      const todayOrd = db.orders.length || 18;
-      const lowS = db.ingredients.filter((i) => i.QuantityStock < 10).length;
-      return {
-        todayRevenue: todayRev,
-        todayOrdersCount: todayOrd,
-        lowStockCount: lowS,
-        lowStockAlerts: db.ingredients
-          .filter((i) => i.QuantityStock < 10)
-          .map((i) => ({ ...i, Unit: db.units.find((u) => u.UnitID === i.UnitID) })),
-        bestSellers: db.drinkSizes.slice(0, 3).map((ds, i) => {
-          const d = db.drinks.find((dr) => dr.DrinkID === ds.DrinkID);
-          return {
-            DrinkName: d?.DrinkName || 'Artisanal Tea',
-            TotalSold: 28 - i * 5,
-          };
-        }),
-        monthlyRevenueChart: [
-          { month: 'Jan', revenue: 45000000 },
-          { month: 'Feb', revenue: 52000000 },
-          { month: 'Mar', revenue: 49000000 },
-          { month: 'Apr', revenue: 61000000 },
-          { month: 'May', revenue: 68000000 },
-          { month: 'Jun', revenue: 75000000 },
-        ],
-        abandonedCarts: [],
-      };
-    }
-  },
-
-  checkVoucher: async (code: string, customerId?: number, targetProductId?: number): Promise<any> => {
-    try {
-      return await api.request('/vouchers/check', {
-        method: 'POST',
-        body: JSON.stringify({ Code: code, CustomerID: customerId, TargetProductID: targetProductId }),
-      });
-    } catch (e: any) {
-      throw new Error(e.message || 'Mã giảm giá không hợp lệ');
-    }
-  },
-
-  getVouchers: async (): Promise<any[]> => {
-    try {
-      return await api.request('/vouchers');
-    } catch {
-      return [];
-    }
-  },
-
-  createVoucher: async (data: any): Promise<any> => {
-    try {
-      return await api.request('/vouchers', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-    } catch (e: any) {
-      throw new Error(e.message || 'Lỗi tạo voucher');
-    }
-  },
 
   getAbandonedCarts: async (): Promise<any[]> => {
     try {
@@ -1677,6 +1482,7 @@ export const api = {
 
     for (let i = db.orders.length - 1; i >= 0; i--) {
       const o = db.orders[i];
+      if (!o) continue;
       try {
         const payload = {
           CustomerID: o.CustomerID,

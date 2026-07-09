@@ -56,6 +56,32 @@ export const verifyJWT = (req: Request, _res: Response, next: NextFunction) => {
   }
 };
 
+export const optionalAuth = (req: Request, _res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  const cookieToken = req.cookies?.accessToken;
+  let token = '';
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1] || '';
+  } else if (cookieToken) {
+    token = cookieToken;
+  }
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, config.jwt.accessSecret) as UserPayload;
+    req.user = decoded;
+    next();
+  } catch (err) {
+    // Ignore invalid tokens for optional auth
+    next();
+  }
+};
+
+
 export const requireRole = (allowedRoles: string[]) => {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {
