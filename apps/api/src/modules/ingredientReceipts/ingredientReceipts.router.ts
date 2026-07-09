@@ -10,7 +10,7 @@ const router = Router();
 const receiptDetailSchema = z.object({
   IngredientID: z.number().int(),
   Quantity: z.number().positive(),
-  CostPrice: z.number().positive(),
+  CostPrice: z.number().nonnegative(),
 });
 
 const receiptSchema = z.object({
@@ -21,6 +21,7 @@ const receiptSchema = z.object({
 
 // Protect routes
 router.use(verifyJWT);
+router.use(requireRole(['ADMIN', 'MANAGER', 'STAFF']));
 
 // GET / - List all receipts with optional paginations
 router.get('/', async (req, res, next) => {
@@ -42,6 +43,7 @@ router.get('/', async (req, res, next) => {
         orderBy: { [sortBy]: sortDir },
         include: {
           Supplier: { select: { SupplierName: true } },
+          Shipper: { select: { FullName: true, PhoneNumber: true } },
           IngredientReceiptDetails: {
             include: {
               Ingredient: { select: { IngredientName: true } },
@@ -74,6 +76,7 @@ router.get('/:id', async (req, res, next) => {
       where: { IngredientReceiptID: receiptId },
       include: {
         Supplier: true,
+        Shipper: { select: { FullName: true, PhoneNumber: true } },
         IngredientReceiptDetails: {
           include: { Ingredient: true },
         },
@@ -89,7 +92,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a receipt + nested details (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = receiptSchema.parse(req.body);
 
@@ -136,8 +139,57 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   }
 });
 
+// PATCH /:id/assign-shipper - Assign a shipper to pick up the receipt (Manager/Admin only)
+router.patch('/:id/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+  try {
+    const receiptId = parseInt(req.params.id || '');
+    if (isNaN(receiptId)) throw new AppError(400, 'Invalid ID format.');
+
+    const assignSchema = z.object({
+      ShipperID: z.number().int().positive(),
+      ShippingAddress: z.string().optional(),
+      Latitude: z.number().optional(),
+      Longitude: z.number().optional(),
+    });
+    const validatedData = assignSchema.parse(req.body);
+
+    const receipt = await prisma.ingredientReceipt.findUnique({
+      where: { IngredientReceiptID: receiptId },
+    });
+
+    if (!receipt) throw new AppError(404, 'Receipt not found.');
+    if (receipt.IngredientReceiptStatus !== 'PENDING') {
+      throw new AppError(400, 'Cannot assign shipper to a non-pending receipt.');
+    }
+
+    const shipper = await prisma.employee.findUnique({
+      where: { EmployeeID: validatedData.ShipperID },
+      include: { Role: true },
+    });
+
+    if (!shipper) {
+      throw new AppError(404, 'Shipper not found.');
+    }
+
+    const updatedReceipt = await prisma.ingredientReceipt.update({
+      where: { IngredientReceiptID: receiptId },
+      data: {
+        ShipperID: validatedData.ShipperID,
+        ShippingAddress: validatedData.ShippingAddress,
+        Latitude: validatedData.Latitude,
+        Longitude: validatedData.Longitude,
+        IngredientReceiptStatus: 'SHIPPING',
+      },
+    });
+
+    return sendResponse(res, 200, true, 'Shipper assigned successfully.', updatedReceipt);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PATCH /:id/confirm - Confirm a receipt and trigger stock increment (Manager/Admin only)
-router.patch('/:id/confirm', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.patch('/:id/confirm', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const receiptId = parseInt(req.params.id || '');
     if (isNaN(receiptId)) throw new AppError(400, 'Invalid ID format.');
@@ -188,7 +240,7 @@ router.patch('/:id/confirm', requireRole(['ADMIN', 'MANAGER']), async (req, res,
 });
 
 // DELETE /:id - Delete a pending receipt (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const receiptId = parseInt(req.params.id || '');
     if (isNaN(receiptId)) throw new AppError(400, 'Invalid ID format.');

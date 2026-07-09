@@ -81,6 +81,10 @@ export interface Order {
   EmployeeID?: number;
   CreatedTime: string;
   OrderStatus: 'PENDING' | 'PREPARING' | 'COMPLETED' | 'CANCELLED';
+  OrderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
+  ShippingAddress?: string;
+  ReceiverName?: string;
+  ReceiverPhone?: string;
   TotalPrice: number;
   ShippingFee?: number;
   DiscountAmount?: number;
@@ -276,38 +280,28 @@ export const api = {
   // CUSTOMER AUTHENTICATION (With auto-registration for new phones)
   customerLogin: async (phoneNumber: string, fullName = 'Khách Hàng Mới'): Promise<Customer> => {
     try {
-      // In real mode, check if customer exists, else create one
-      // (Since we are client-only, we first search via /customers on backend.
-      // Because /customers is protected, we can attempt standard mock or fallback lookup)
-      throw new Error('API Auth requires staff credentials; fallback to mock logic.');
-    } catch {
-      // Look up inside local database
-      let cust = db.customers.find((c) => c.PhoneNumber === phoneNumber);
+      const res = await fetch(`${API_BASE}/customers/public/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber, fullName }),
+      });
+      const payload = await res.json();
       
-      // Auto-register if not found
-      if (!cust) {
-        cust = {
-          CustomerID: db.customers.length + 1,
-          CustomerName: fullName === 'Khách Hàng Mới' ? `Hội Viên Phêla ${phoneNumber.slice(-4)}` : fullName,
-          PhoneNumber: phoneNumber,
-          TotalMoneySpending: 0,
-          LevelID: 1, // Bronze Level
-        };
-        db.customers.push(cust);
-        saveLocalState();
+      if (!res.ok || !payload.data) {
+        throw new Error(payload.message || 'Login failed');
       }
-
-      // Map membership level info
-      const level = db.levels.find((l) => l.LevelID === cust!.LevelID);
-      cust.MemberShipLevel = level ? { LevelName: level.LevelName, DiscountRate: level.DiscountRate } : { LevelName: 'Đồng (Bronze)', DiscountRate: 0 };
-
+      
+      const cust = payload.data.customer || payload.data;
       if (typeof window !== 'undefined') {
-        localStorage.setItem('phela_customer_token', 'mock_cust_token_' + Date.now());
+        localStorage.setItem('phela_customer_token', payload.data.token || 'real_cust_token_' + Date.now());
         localStorage.setItem('phela_customer_user', JSON.stringify(cust));
         localStorage.removeItem('chat_session_id'); // Xóa phiên chat cũ
         window.dispatchEvent(new Event('customer_auth_changed'));
       }
       return cust;
+    } catch (error) {
+      console.error('Customer login error:', error);
+      throw error;
     }
   },
 
@@ -321,6 +315,23 @@ export const api = {
   },
 
   getCurrentCustomer: () => getSessionCustomer(),
+
+  syncCustomerProfile: async (phoneNumber: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/customers/public/profile/${phoneNumber}`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (res.ok && payload.data) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('phela_customer_user', JSON.stringify(payload.data));
+          window.dispatchEvent(new Event('customer_auth_changed'));
+        }
+        return payload.data;
+      }
+    } catch {
+      // fallback
+    }
+    return getSessionCustomer();
+  },
 
   // DRINKS CATALOG
   syncCart: async (Items: any[], customerId?: number, sessionId?: string): Promise<any> => {
@@ -384,6 +395,33 @@ export const api = {
     }
   },
 
+  getComboSuggestions: async (drinkSizeIds: number[]): Promise<any[]> => {
+    if (drinkSizeIds.length === 0) return [];
+    try {
+      const res = await fetch(`${API_BASE}/orders/customer-combos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ drinkSizeIds }),
+      });
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  getActivePromotions: async (): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/promotions/active`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (res.ok) return payload.data.filter((p: any) => p.IsActive);
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
   // ORDER SUBMISSIONS & HISTORY
   getCustomerOrders: async (): Promise<Order[]> => {
     const cust = getSessionCustomer();
@@ -421,13 +459,12 @@ export const api = {
     TotalPrice: number;
     ShopTableID?: number;
     OrderNote?: string;
-    DeliveryType?: string;
-    RecipientName?: string;
-    RecipientPhone?: string;
-    DeliveryAddress?: string;
-    ProvinceID?: number;
-    DistrictID?: number;
-    WardCode?: string;
+    OrderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
+    ShippingAddress?: string;
+    Latitude?: number;
+    Longitude?: number;
+    ReceiverName?: string;
+    ReceiverPhone?: string;
   }): Promise<Order> => {
     const cust = getSessionCustomer();
     
@@ -441,6 +478,12 @@ export const api = {
           CustomerPhoneNumber: cust?.PhoneNumber || '0900000000',
           ShopTableID: data.ShopTableID || undefined,
           OrderNote: data.OrderNote || undefined,
+          OrderType: data.OrderType,
+          ShippingAddress: data.ShippingAddress,
+          Latitude: data.Latitude,
+          Longitude: data.Longitude,
+          ReceiverName: data.ReceiverName,
+          ReceiverPhone: data.ReceiverPhone,
           TotalPrice: data.TotalPrice,
           DeliveryType: data.DeliveryType,
           RecipientName: data.RecipientName,
@@ -471,6 +514,10 @@ export const api = {
         OrderStatus: 'PENDING',
         TotalPrice: data.TotalPrice,
         OrderNote: data.OrderNote || undefined,
+        OrderType: data.OrderType || (data.ShopTableID ? 'DINE_IN' : 'TAKEAWAY'),
+        ShippingAddress: data.ShippingAddress || undefined,
+        ReceiverName: data.ReceiverName || undefined,
+        ReceiverPhone: data.ReceiverPhone || undefined,
         OrderDetails: data.Items.map((item) => ({
           OrderID: db.orders.length + 1,
           DrinkSizeID: item.DrinkSizeID,
@@ -523,6 +570,27 @@ export const api = {
     }
   },
 
+  cancelCustomerOrder: async (orderId: number): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/orders/customer-cancel/${orderId}`, {
+        method: 'PATCH',
+      });
+      const payload = await res.json();
+      if (res.ok && payload.success) return payload.data;
+      throw new Error(payload.message || 'Lỗi hủy đơn hàng');
+    } catch (e: any) {
+      // Local fallback
+      const idx = db.orders.findIndex(o => o.OrderID === orderId);
+      const order = db.orders[idx];
+      if (order && order.OrderStatus === 'PENDING') {
+        order.OrderStatus = 'CANCELLED';
+        saveLocalState();
+        return order;
+      }
+      throw new Error(e?.message || 'Lỗi kết nối tới máy chủ');
+    }
+  },
+
   submitReview: async (data: { CustomerID: number; DrinkID: number; OrderID: number; Rating: number; Comment: string }): Promise<any> => {
     try {
       const res = await fetch(`${API_BASE}/reviews`, {
@@ -538,62 +606,41 @@ export const api = {
     }
   },
 
-  cancelOrder: async (orderId: number): Promise<any> => {
+  getFrequentOrders: async (customerId: number): Promise<any[]> => {
     try {
-      const res = await fetch(`${API_BASE}/orders/customer-cancel/${orderId}`, {
-        method: 'POST',
-      });
+      const res = await fetch(`${API_BASE}/orders/customer-frequent/${customerId}`, { cache: 'no-store' });
       const payload = await res.json();
       if (res.ok && payload.success) return payload.data;
-      throw new Error(payload.message || 'Lỗi huỷ đơn hàng');
+      return [];
     } catch (e: any) {
-      throw new Error(e.message || 'Lỗi kết nối tới máy chủ');
+      // Local fallback: We can implement local grouping if we want, but for now just return empty array
+      return [];
     }
   },
 
-  // SHIPPING & GHN API
-  getProvinces: async (): Promise<any[]> => {
+  checkVoucher: async (code: string, customerId?: number, targetProductId?: number): Promise<any> => {
     try {
-      const res = await fetch(`${API_BASE}/shipping/provinces`);
-      const payload = await res.json();
-      if (res.ok) return payload.data;
-      return [];
-    } catch {
-      return [];
-    }
-  },
-  getDistricts: async (provinceId: number): Promise<any[]> => {
-    try {
-      const res = await fetch(`${API_BASE}/shipping/districts/${provinceId}`);
-      const payload = await res.json();
-      if (res.ok) return payload.data;
-      return [];
-    } catch {
-      return [];
-    }
-  },
-  getWards: async (districtId: number): Promise<any[]> => {
-    try {
-      const res = await fetch(`${API_BASE}/shipping/wards/${districtId}`);
-      const payload = await res.json();
-      if (res.ok) return payload.data;
-      return [];
-    } catch {
-      return [];
-    }
-  },
-  calculateFee: async (data: { to_district_id: number; to_ward_code: string; items: { DrinkSizeID: number; Quantity: number; }[] }): Promise<{ fee: number, totalWeight: number }> => {
-    try {
-      const res = await fetch(`${API_BASE}/shipping/calculate-fee`, {
+      const res = await fetch(`${API_BASE}/vouchers/check`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify({ Code: code, CustomerID: customerId, TargetProductID: targetProductId }),
       });
       const payload = await res.json();
-      if (res.ok) return payload.data;
-      return { fee: 0, totalWeight: 0 };
-    } catch {
-      return { fee: 0, totalWeight: 0 };
+      if (res.ok && payload.success) return payload.data;
+      throw new Error(payload.message || 'Mã giảm giá không hợp lệ');
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi kết nối kiểm tra mã giảm giá');
+    }
+  },
+
+  getChatboxCombos: async (): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/promotions/chatbox-combos`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (res.ok && payload.success) return payload.data;
+      return [];
+    } catch (e: any) {
+      return [];
     }
   },
 };

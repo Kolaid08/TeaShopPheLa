@@ -5,7 +5,9 @@ import { getSessionById, getAdminSessions } from './chat.service';
 export const getSessionHistory = async (req: Request, res: Response) => {
   try {
     const { sessionId } = req.params;
-    if (!sessionId) return sendResponse(res, 400, false, 'Missing session ID');
+    if (!sessionId) {
+      return sendResponse(res, 400, false, 'Missing session ID');
+    }
     const session = await getSessionById(sessionId);
     if (!session) {
       return sendResponse(res, 404, false, 'Session not found');

@@ -67,7 +67,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a unit (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = unitSchema.parse(req.body);
 
@@ -82,7 +82,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PUT /:id - Update a unit (Manager/Admin only)
-router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const unitId = parseInt(req.params.id || '');
     if (isNaN(unitId)) throw new AppError(400, 'Invalid ID format.');
@@ -101,7 +101,7 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
 });
 
 // DELETE /:id - Delete a unit (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const unitId = parseInt(req.params.id || '');
     if (isNaN(unitId)) throw new AppError(400, 'Invalid ID format.');
@@ -111,7 +111,10 @@ router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) 
     });
 
     return sendResponse(res, 200, true, 'Unit deleted successfully');
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'P2003') {
+      return next(new AppError(400, 'Không thể xóa Đơn vị này vì đang được dùng cho các nguyên liệu.'));
+    }
     next(err);
   }
 });

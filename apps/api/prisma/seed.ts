@@ -12,6 +12,7 @@ async function main() {
     { RoleName: 'Admin', Description: 'Quản trị viên toàn hệ thống', DefaultBaseSalary: 30000 },
     { RoleName: 'Manager', Description: 'Quản lý cửa hàng', DefaultBaseSalary: 25000 },
     { RoleName: 'Staff', Description: 'Nhân viên pha chế/phục vụ', DefaultBaseSalary: 20000 },
+    { RoleName: 'Shipper', Description: 'Nhân viên giao hàng', DefaultBaseSalary: 15000 },
   ];
   for (const r of rolesData) {
     const exists = await prisma.employeeRole.findFirst({ where: { RoleName: r.RoleName } });
@@ -24,6 +25,9 @@ async function main() {
 
   // Lấy các roles để dùng
   const adminRole = await prisma.employeeRole.findFirst({ where: { RoleName: 'Admin' } });
+  const managerRole = await prisma.employeeRole.findFirst({ where: { RoleName: 'Manager' } });
+  const staffRole = await prisma.employeeRole.findFirst({ where: { RoleName: 'Staff' } });
+  const shipperRole = await prisma.employeeRole.findFirst({ where: { RoleName: 'Shipper' } });
 
   // 2. Employees
   console.log('Đang xử lý Employees...');
@@ -40,6 +44,36 @@ async function main() {
       PINCode: '1234',
       password: hashedPassword,
       RoleID: adminRole!.RoleID,
+    },
+    {
+      FullName: 'Lê Đình Quản Lý',
+      PhoneNumber: '0966554433',
+      Email: 'manager@phela.vn',
+      Birth: new Date('1992-02-10'),
+      Sex: 'Nam',
+      PINCode: '2222',
+      password: hashedPassword,
+      RoleID: managerRole!.RoleID,
+    },
+    {
+      FullName: 'Trần Văn Shipper',
+      PhoneNumber: '0933445566',
+      Email: 'shipper@phela.vn',
+      Birth: new Date('1997-11-25'),
+      Sex: 'Nam',
+      PINCode: '3333',
+      password: hashedPassword,
+      RoleID: shipperRole!.RoleID,
+    },
+    {
+      FullName: 'Nguyễn Văn Staff',
+      PhoneNumber: '0911223344',
+      Email: 'staff@phela.vn',
+      Birth: new Date('1999-05-15'),
+      Sex: 'Nữ',
+      PINCode: '4444',
+      password: hashedPassword,
+      RoleID: staffRole!.RoleID,
     }
   ];
 
@@ -79,6 +113,11 @@ async function main() {
     { IngredientName: 'Sữa Tươi', QuantityStock: 20000, UnitID: unitML!.UnitID },
     { IngredientName: 'Đường', QuantityStock: 15000, UnitID: unitGram!.UnitID },
     { IngredientName: 'Trân Châu Châu Mộc', QuantityStock: 5000, UnitID: unitGram!.UnitID },
+    { IngredientName: 'Mứt chanh dây nhiệt đới', QuantityStock: 5000, UnitID: unitGram!.UnitID },
+    { IngredientName: 'Nước cốt dừa nguyên chất', QuantityStock: 10000, UnitID: unitML!.UnitID },
+    { IngredientName: 'Kem trứng tươi', QuantityStock: 5000, UnitID: unitGram!.UnitID },
+    { IngredientName: 'Bột Matcha Uji', QuantityStock: 5000, UnitID: unitGram!.UnitID },
+    { IngredientName: 'Cà phê Robusta', QuantityStock: 10000, UnitID: unitGram!.UnitID },
   ];
   for (const i of ingredientsData) {
     const exists = await prisma.ingredient.findFirst({ where: { IngredientName: i.IngredientName } });
@@ -110,26 +149,26 @@ async function main() {
   // 6. Drinks
   console.log('Đang xử lý Drinks...');
   const drinksData = [
-    { DrinkName: 'Ô Long Nhài Sữa', DrinkDescription: 'Trà Ô long thượng hạng ướp hương hoa nhài tinh tế, kết hợp sữa đặc biệt.', DrinkImageURL: 'http://localhost:3001/uploads/o_long_nhai_sua.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: "Khói B'Lao", DrinkDescription: "Trà Ô long nướng mộc hương khói đậm đà B'Lao, quyện cùng sữa tươi thanh mát.", DrinkImageURL: "http://localhost:3001/uploads/khoi_b_lao.png", DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: 'Phan Xi Păng', DrinkDescription: 'Sự kết hợp độc đáo giữa trà Ô long đặc sản và cốt dừa xay tuyết.', DrinkImageURL: 'http://localhost:3001/uploads/phan_xi_pang.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: 'Gấm', DrinkDescription: 'Trà Ô long Nhài kết hợp với trái cây nhiệt đới thanh mát.', DrinkImageURL: 'http://localhost:3001/uploads/gam.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
-    { DrinkName: 'Lang Biang', DrinkDescription: 'Trà Ô long đặc sản hoà quyện với hương vị núi rừng Lang Biang.', DrinkImageURL: 'http://localhost:3001/uploads/lang_biang.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: 'Tấm', DrinkDescription: 'Trà xanh mộc châu ướp hương cốm non, thanh tao nhẹ nhàng.', DrinkImageURL: 'http://localhost:3001/uploads/tam.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
-    { DrinkName: 'Sương Tôn Môn', DrinkDescription: 'Trà đen hảo hạng kết hợp với lớp kem sữa béo ngậy.', DrinkImageURL: 'http://localhost:3001/uploads/suong_ton_mon.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
-    { DrinkName: 'Ô Long Phê La', DrinkDescription: 'Trà Ô long đặc sản Phê La nguyên bản.', DrinkImageURL: 'http://localhost:3001/uploads/o_long_phe_la.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: 'Cà Phê Sữa Đá', DrinkDescription: 'Cà phê Việt Nam pha phin truyền thống với sữa đặc.', DrinkImageURL: 'http://localhost:3001/uploads/ca_phe_sua_da.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: 'Bạc Xỉu', DrinkDescription: 'Cà phê hòa quyện với sữa đặc và sữa tươi, ngọt ngào dễ uống.', DrinkImageURL: 'http://localhost:3001/uploads/bac_xiu.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
-    { DrinkName: 'Trà Chanh Giã Tay', DrinkDescription: 'Trà đen kết hợp với chanh tươi giã tay thơm mát.', DrinkImageURL: 'http://localhost:3001/uploads/tra_chanh_gia_tay.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: 'Trà Đào Cam Sả', DrinkDescription: 'Trà đào thanh mát thêm vị cam sả giải nhiệt.', DrinkImageURL: 'http://localhost:3001/uploads/tra_dao_cam_sa.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: 'Trà Vải Lài', DrinkDescription: 'Trà nhài êm dịu kết hợp cùng trái vải tươi.', DrinkImageURL: 'http://localhost:3001/uploads/tra_vai_lai.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
-    { DrinkName: 'Matcha Latte', DrinkDescription: 'Trà xanh Nhật Bản nguyên chất với sữa tươi.', DrinkImageURL: 'http://localhost:3001/uploads/matcha_latte.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
-    { DrinkName: 'Sữa Tươi Trân Châu Đường Đen', DrinkDescription: 'Sữa tươi Đà Lạt quyện cùng trân châu nấu đường đen dẻo thơm.', DrinkImageURL: 'http://localhost:3001/uploads/sua_tuoi_tran_chau_duong_den.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: 'Trà Xoài Macchiato', DrinkDescription: 'Trà xoài nhiệt đới phủ lớp macchiato mặn ngọt béo ngậy.', DrinkImageURL: 'http://localhost:3001/uploads/tra_xoai_macchiato.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
-    { DrinkName: 'Cà Phê Đen Đá', DrinkDescription: 'Cà phê đậm vị, đắng thanh, đúng chất cà phê phin.', DrinkImageURL: 'http://localhost:3001/uploads/ca_phe_den_da.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
-    { DrinkName: 'Trà Dâu Kem Phô Mai', DrinkDescription: 'Trà dâu tây tươi chua ngọt kèm lớp kem phô mai sánh mịn.', DrinkImageURL: 'http://localhost:3001/uploads/tra_dau_kem_pho_mai.png', DrinkStatus: 'ACTIVE', IsFeatured: true },
-    { DrinkName: 'Hồng Trà Sữa', DrinkDescription: 'Hồng trà cổ điển pha cùng sữa bột béo ngậy.', DrinkImageURL: 'http://localhost:3001/uploads/hong_tra_sua.png', DrinkStatus: 'ACTIVE', IsFeatured: false },
-    { DrinkName: 'Cà Phê Muối', DrinkDescription: 'Cà phê đắng nhẹ phủ lớp kem mặn độc đáo.', DrinkImageURL: 'http://localhost:3001/uploads/ca_phe_muoi.png', DrinkStatus: 'ACTIVE', IsFeatured: true }
+    { DrinkName: 'Ô Long Nhài Sữa', DrinkDescription: 'Trà Ô long thượng hạng ướp hương hoa nhài tinh tế, kết hợp sữa đặc biệt.', DrinkImageURL: 'http://localhost:3001/uploads/o_long_nhai_sua.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: "Khói B'Lao", DrinkDescription: "Trà Ô long nướng mộc hương khói đậm đà B'Lao, quyện cùng sữa tươi thanh mát.", DrinkImageURL: "http://localhost:3001/uploads/khoi_b_lao.png", DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Phan Xi Păng', DrinkDescription: 'Sự kết hợp độc đáo giữa trà Ô long đặc sản và cốt dừa xay tuyết.', DrinkImageURL: 'http://localhost:3001/uploads/phan_xi_pang.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Gấm', DrinkDescription: 'Trà Ô long Nhài kết hợp với trái cây nhiệt đới thanh mát.', DrinkImageURL: 'http://localhost:3001/uploads/gam.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Lang Biang', DrinkDescription: 'Trà Ô long đặc sản hoà quyện với hương vị núi rừng Lang Biang.', DrinkImageURL: 'http://localhost:3001/uploads/lang_biang.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Tấm', DrinkDescription: 'Trà xanh mộc châu ướp hương cốm non, thanh tao nhẹ nhàng.', DrinkImageURL: 'http://localhost:3001/uploads/tam.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Sương Tôn Môn', DrinkDescription: 'Trà đen hảo hạng kết hợp với lớp kem sữa béo ngậy.', DrinkImageURL: 'http://localhost:3001/uploads/suong_ton_mon.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Ô Long Phê La', DrinkDescription: 'Trà Ô long đặc sản Phê La nguyên bản.', DrinkImageURL: 'http://localhost:3001/uploads/o_long_phe_la.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Cà Phê Sữa Đá', DrinkDescription: 'Cà phê Việt Nam pha phin truyền thống với sữa đặc.', DrinkImageURL: 'http://localhost:3001/uploads/ca_phe_sua_da.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Bạc Xỉu', DrinkDescription: 'Cà phê hòa quyện với sữa đặc và sữa tươi, ngọt ngào dễ uống.', DrinkImageURL: 'http://localhost:3001/uploads/bac_xiu.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Trà Chanh Giã Tay', DrinkDescription: 'Trà đen kết hợp với chanh tươi giã tay thơm mát.', DrinkImageURL: 'http://localhost:3001/uploads/tra_chanh_gia_tay.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Trà Đào Cam Sả', DrinkDescription: 'Trà đào thanh mát thêm vị cam sả giải nhiệt.', DrinkImageURL: 'http://localhost:3001/uploads/tra_dao_cam_sa.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Trà Vải Lài', DrinkDescription: 'Trà nhài êm dịu kết hợp cùng trái vải tươi.', DrinkImageURL: 'http://localhost:3001/uploads/tra_vai_lai.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Matcha Latte', DrinkDescription: 'Trà xanh Nhật Bản nguyên chất với sữa tươi.', DrinkImageURL: 'http://localhost:3001/uploads/matcha_latte.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Sữa Tươi Trân Châu Đường Đen', DrinkDescription: 'Sữa tươi Đà Lạt quyện cùng trân châu nấu đường đen dẻo thơm.', DrinkImageURL: 'http://localhost:3001/uploads/sua_tuoi_tran_chau_duong_den.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Trà Xoài Macchiato', DrinkDescription: 'Trà xoài nhiệt đới phủ lớp macchiato mặn ngọt béo ngậy.', DrinkImageURL: 'http://localhost:3001/uploads/tra_xoai_macchiato.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Cà Phê Đen Đá', DrinkDescription: 'Cà phê đậm vị, đắng thanh, đúng chất cà phê phin.', DrinkImageURL: 'http://localhost:3001/uploads/ca_phe_den_da.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Trà Dâu Kem Phô Mai', DrinkDescription: 'Trà dâu tây tươi chua ngọt kèm lớp kem phô mai sánh mịn.', DrinkImageURL: 'http://localhost:3001/uploads/tra_dau_kem_pho_mai.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Hồng Trà Sữa', DrinkDescription: 'Hồng trà cổ điển pha cùng sữa bột béo ngậy.', DrinkImageURL: 'http://localhost:3001/uploads/hong_tra_sua.png', DrinkStatus: 'ACTIVE' },
+    { DrinkName: 'Cà Phê Muối', DrinkDescription: 'Cà phê đắng nhẹ phủ lớp kem mặn độc đáo.', DrinkImageURL: 'http://localhost:3001/uploads/ca_phe_muoi.png', DrinkStatus: 'ACTIVE' }
   ];
   for (const d of drinksData) {
     const exists = await prisma.drink.findFirst({ where: { DrinkName: d.DrinkName } });
@@ -146,20 +185,26 @@ async function main() {
   
   if (sizeM && sizeL) {
     for (const drink of allDrinks) {
+      let priceM = 45000;
+      let priceL = 55000;
+      if (drink.DrinkName.includes('Cà Phê') || drink.DrinkName.includes('Bạc Xỉu')) { priceM = 35000; priceL = 45000; }
+      else if (drink.DrinkName.includes('Đặc Sản') || drink.DrinkName === 'Phan Xi Păng') { priceM = 55000; priceL = 65000; }
+      else if (drink.DrinkName.includes('Matcha') || drink.DrinkName.includes('Sương Tôn Môn')) { priceM = 50000; priceL = 60000; }
+
       // Size M
       const existM = await prisma.drinkSize.findFirst({ where: { DrinkID: drink.DrinkID, SizeID: sizeM.SizeID } });
       if (!existM) {
-        await prisma.drinkSize.create({ data: { DrinkID: drink.DrinkID, SizeID: sizeM.SizeID, UnitPrice: 45000, DrinkSizeStatus: 'AVAILABLE' } });
+        await prisma.drinkSize.create({ data: { DrinkID: drink.DrinkID, SizeID: sizeM.SizeID, UnitPrice: priceM, DrinkSizeStatus: 'AVAILABLE' } });
       } else {
-        await prisma.drinkSize.update({ where: { DrinkSizeID: existM.DrinkSizeID }, data: { UnitPrice: 45000, DrinkSizeStatus: 'AVAILABLE' } });
+        await prisma.drinkSize.update({ where: { DrinkSizeID: existM.DrinkSizeID }, data: { UnitPrice: priceM, DrinkSizeStatus: 'AVAILABLE' } });
       }
 
       // Size L
       const existL = await prisma.drinkSize.findFirst({ where: { DrinkID: drink.DrinkID, SizeID: sizeL.SizeID } });
       if (!existL) {
-        await prisma.drinkSize.create({ data: { DrinkID: drink.DrinkID, SizeID: sizeL.SizeID, UnitPrice: 55000, DrinkSizeStatus: 'AVAILABLE' } });
+        await prisma.drinkSize.create({ data: { DrinkID: drink.DrinkID, SizeID: sizeL.SizeID, UnitPrice: priceL, DrinkSizeStatus: 'AVAILABLE' } });
       } else {
-        await prisma.drinkSize.update({ where: { DrinkSizeID: existL.DrinkSizeID }, data: { UnitPrice: 55000, DrinkSizeStatus: 'AVAILABLE' } });
+        await prisma.drinkSize.update({ where: { DrinkSizeID: existL.DrinkSizeID }, data: { UnitPrice: priceL, DrinkSizeStatus: 'AVAILABLE' } });
       }
     }
   }
@@ -187,6 +232,8 @@ async function main() {
   const customersData = [
     { CustomerName: 'Khách vãng lai', PhoneNumber: '0000000000', TotalMoneySpending: 0, LevelID: memberLvl!.LevelID },
     { CustomerName: 'Nguyễn Văn A', PhoneNumber: '0987654321', Email: 'nguyenvana@gmail.com', TotalMoneySpending: 150000, LevelID: memberLvl!.LevelID },
+    { CustomerName: 'Trần Thị B', PhoneNumber: '0912345678', Email: 'tranthib@gmail.com', TotalMoneySpending: 550000, LevelID: memberLvl!.LevelID },
+    { CustomerName: 'Lê Văn C', PhoneNumber: '0923456789', Email: 'levanc@gmail.com', TotalMoneySpending: 1200000, LevelID: memberLvl!.LevelID },
   ];
   for (const c of customersData) {
     const exists = await prisma.customer.findFirst({ where: { PhoneNumber: c.PhoneNumber } });
@@ -219,6 +266,14 @@ async function main() {
     }
   }
 
+  const allSuppliersDb = await prisma.supplier.findMany();
+  for (const sup of allSuppliersDb) {
+    const existsPhone = await prisma.supplierPhone.findFirst({ where: { SupplierID: sup.SupplierID } });
+    if (!existsPhone) {
+      await prisma.supplierPhone.create({ data: { SupplierID: sup.SupplierID, PhoneNumber: '0888' + Math.floor(100000 + Math.random() * 900000) } });
+    }
+  }
+
   // 12. Shifts
   console.log('Đang xử lý Shifts...');
   const shiftsData = [
@@ -236,34 +291,144 @@ async function main() {
 
   // 13. Recipes & Recipe Details
   console.log('Đang xử lý Recipes...');
-  const oLongNhaiDrink = await prisma.drink.findFirst({ where: { DrinkName: 'Ô Long Nhài Sữa' } });
-  const traOlong = await prisma.ingredient.findFirst({ where: { IngredientName: 'Trà Ô Long Nhài' } });
-  const suaDac = await prisma.ingredient.findFirst({ where: { IngredientName: 'Sữa Đặc' } });
+  const allIngredients = await prisma.ingredient.findMany();
+  const getIngId = (name: string) => allIngredients.find(i => i.IngredientName === name)?.IngredientID;
+  const allDrinksDb = await prisma.drink.findMany();
+  const getDrinkId = (name: string) => allDrinksDb.find(d => d.DrinkName === name)?.DrinkID;
 
-  if (oLongNhaiDrink && traOlong && suaDac) {
-    let recipe = await prisma.recipe.findFirst({ where: { DrinkID: oLongNhaiDrink.DrinkID } });
-    if (!recipe) {
-      recipe = await prisma.recipe.create({ data: { DrinkID: oLongNhaiDrink.DrinkID } });
+  const recipesToAdd = [
+    {
+      drink: 'Ô Long Nhài Sữa',
+      details: [
+        { name: 'Trà Ô Long Nhài', qty: 15 },
+        { name: 'Sữa Đặc', qty: 40 },
+        { name: 'Đường', qty: 20 }
+      ]
+    },
+    {
+      drink: 'Cà Phê Muối',
+      details: [
+        { name: 'Cà phê Robusta', qty: 20 },
+        { name: 'Sữa Đặc', qty: 25 },
+        { name: 'Kem trứng tươi', qty: 30 }
+      ]
+    },
+    {
+      drink: 'Matcha Latte',
+      details: [
+        { name: 'Bột Matcha Uji', qty: 10 },
+        { name: 'Sữa Tươi', qty: 150 },
+        { name: 'Đường', qty: 15 }
+      ]
+    },
+    {
+      drink: 'Gấm',
+      details: [
+        { name: 'Trà Ô Long Nhài', qty: 15 },
+        { name: 'Mứt chanh dây nhiệt đới', qty: 40 }
+      ]
+    },
+    {
+      drink: 'Phan Xi Păng',
+      details: [
+        { name: 'Trà Ô Long Đặc Sản', qty: 15 },
+        { name: 'Nước cốt dừa nguyên chất', qty: 50 },
+        { name: 'Đường', qty: 20 }
+      ]
     }
-    
-    // Upsert RecipeDetail
-    const detail1 = await prisma.recipeDetail.findFirst({ where: { RecipeID: recipe.RecipeID, IngredientID: traOlong.IngredientID } });
-    if (!detail1) await prisma.recipeDetail.create({ data: { RecipeID: recipe.RecipeID, IngredientID: traOlong.IngredientID, Quantity: 15 } });
+  ];
 
-    const detail2 = await prisma.recipeDetail.findFirst({ where: { RecipeID: recipe.RecipeID, IngredientID: suaDac.IngredientID } });
-    if (!detail2) await prisma.recipeDetail.create({ data: { RecipeID: recipe.RecipeID, IngredientID: suaDac.IngredientID, Quantity: 40 } });
+  // Auto-generate mock recipes for drinks that don't have one
+  for (const drink of allDrinksDb) {
+    const hasRecipe = recipesToAdd.find(r => r.drink === drink.DrinkName);
+    if (!hasRecipe) {
+      recipesToAdd.push({
+        drink: drink.DrinkName,
+        details: [
+          { name: 'Trà Ô Long Nhài', qty: 10 },
+          { name: 'Đường', qty: 15 },
+          { name: 'Sữa Tươi', qty: 50 }
+        ]
+      });
+    }
+  }
+
+  for (const r of recipesToAdd) {
+    const dId = getDrinkId(r.drink);
+    if (!dId) continue;
+
+    let recipe = await prisma.recipe.findFirst({ where: { DrinkID: dId } });
+    if (!recipe) {
+      recipe = await prisma.recipe.create({ data: { DrinkID: dId } });
+    }
+
+    for (const d of r.details) {
+      const iId = getIngId(d.name);
+      if (!iId) continue;
+      
+      const existDetail = await prisma.recipeDetail.findFirst({ where: { RecipeID: recipe.RecipeID, IngredientID: iId } });
+      if (!existDetail) {
+        await prisma.recipeDetail.create({ data: { RecipeID: recipe.RecipeID, IngredientID: iId, Quantity: d.qty } });
+      } else {
+        await prisma.recipeDetail.update({ where: { RecipeID_IngredientID: { RecipeID: recipe.RecipeID, IngredientID: iId } }, data: { Quantity: d.qty } });
+      }
+    }
+  }
+
+  // 13.5 Ingredient Receipts
+  console.log('Đang xử lý Ingredient Receipts...');
+  const receiptCount = await prisma.ingredientReceipt.count();
+  if (receiptCount === 0) {
+    const sup1 = await prisma.supplier.findFirst({ where: { SupplierName: 'Công ty TNHH Trà Phê La Mộc Châu' } });
+    const sup2 = await prisma.supplier.findFirst({ where: { SupplierName: 'Công ty Sữa Vinamilk' } });
+    const shipper = await prisma.employee.findFirst({ where: { Email: 'shipper@phela.vn' } });
+
+    if (sup1 && sup2 && shipper) {
+      const rec1 = await prisma.ingredientReceipt.create({
+        data: {
+          SupplierID: sup1.SupplierID,
+          ShipperID: shipper.EmployeeID,
+          ReceivedDate: new Date(),
+          IngredientReceiptStatus: 'CONFIRMED',
+          ShippingAddress: '123 Cửa Hàng Phê La',
+        }
+      });
+      await prisma.ingredientReceiptDetail.createMany({
+        data: [
+          { IngredientReceiptID: rec1.IngredientReceiptID, IngredientID: getIngId('Trà Ô Long Nhài')!, Quantity: 10, CostPrice: 150000 },
+          { IngredientReceiptID: rec1.IngredientReceiptID, IngredientID: getIngId('Trà Ô Long Đặc Sản')!, Quantity: 15, CostPrice: 180000 },
+        ]
+      });
+
+      const rec2 = await prisma.ingredientReceipt.create({
+        data: {
+          SupplierID: sup2.SupplierID,
+          ShipperID: shipper.EmployeeID,
+          ReceivedDate: new Date(),
+          IngredientReceiptStatus: 'PENDING',
+          ShippingAddress: '123 Cửa Hàng Phê La',
+        }
+      });
+      await prisma.ingredientReceiptDetail.createMany({
+        data: [
+          { IngredientReceiptID: rec2.IngredientReceiptID, IngredientID: getIngId('Sữa Tươi')!, Quantity: 20, CostPrice: 25000 },
+          { IngredientReceiptID: rec2.IngredientReceiptID, IngredientID: getIngId('Sữa Đặc')!, Quantity: 15, CostPrice: 35000 },
+        ]
+      });
+    }
   }
 
   // 14. Reviews
   console.log('Đang xử lý Reviews...');
   const customerA = await prisma.customer.findFirst({ where: { PhoneNumber: '0987654321' } });
-  if (customerA && oLongNhaiDrink) {
-    const existReview = await prisma.review.findFirst({ where: { CustomerID: customerA.CustomerID, DrinkID: oLongNhaiDrink.DrinkID } });
+  const oLongNhaiDrinkDb = await prisma.drink.findFirst({ where: { DrinkName: 'Ô Long Nhài Sữa' } });
+  if (customerA && oLongNhaiDrinkDb) {
+    const existReview = await prisma.review.findFirst({ where: { CustomerID: customerA.CustomerID, DrinkID: oLongNhaiDrinkDb.DrinkID } });
     if (!existReview) {
       await prisma.review.create({
         data: {
           CustomerID: customerA.CustomerID,
-          DrinkID: oLongNhaiDrink.DrinkID,
+          DrinkID: oLongNhaiDrinkDb.DrinkID,
           Rating: 5,
           Comment: 'Trà rất thơm, đậm vị trà và sữa, trân châu mềm dẻo. Sẽ ủng hộ dài dài!',
         }
@@ -273,40 +438,173 @@ async function main() {
 
   // 15. Orders and OrderDetails
   console.log('Đang xử lý Orders...');
-  const employeeAdmin = await prisma.employee.findFirst({ where: { Email: 'admin@phela.vn' } });
-  const table1 = await prisma.shopTable.findFirst({ where: { ShopTableNumber: 1 } });
-  const oLongNhaiM = await prisma.drinkSize.findFirst({
-    where: { 
-      Drink: { DrinkName: 'Ô Long Nhài Sữa' },
-      Size: { SizeName: 'M' }
-    }
-  });
+  const employeeStaff = await prisma.employee.findFirst({ where: { Email: 'staff@phela.vn' } });
+  const allTables = await prisma.shopTable.findMany();
+  const allDrinkSizes = await prisma.drinkSize.findMany();
+  const allCustomers = await prisma.customer.findMany();
 
-  if (customerA && employeeAdmin && table1 && oLongNhaiM) {
-    const existOrder = await prisma.orders.findFirst({ where: { CustomerID: customerA.CustomerID } });
-    if (!existOrder) {
-      const order = await prisma.orders.create({
-        data: {
-          CustomerID: customerA.CustomerID,
-          ShopTableID: table1.ShopTableID,
-          EmployeeID: employeeAdmin.EmployeeID,
-          OrderStatus: 'COMPLETED',
-          TotalPrice: 45000,
-          PaymentMethod: 'CASH',
-          PaymentStatus: 'PAID',
+  if (employeeStaff && allTables.length > 0 && allDrinkSizes.length > 0 && allCustomers.length > 0) {
+    const orderCount = await prisma.orders.count();
+    if (orderCount === 0) {
+      console.log('Tạo dữ liệu đơn hàng ngẫu nhiên trong 6 tháng...');
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      const currentMonth = today.getMonth();
+
+      for (let offset = 5; offset >= 0; offset--) {
+        const targetMonth = currentMonth - offset;
+        const year = targetMonth < 0 ? currentYear - 1 : currentYear;
+        const normalizedMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
+
+        const numOrders = Math.floor(Math.random() * 10) + 5;
+        
+        for (let i = 0; i < numOrders; i++) {
+          const randomDay = Math.floor(Math.random() * 28) + 1;
+          const orderDate = new Date(year, normalizedMonth, randomDay, 14, 30, 0);
+
+          const randomVal = Math.random();
+          const orderType = randomVal < 0.6 ? 'DINE_IN' : (randomVal < 0.8 ? 'TAKE_AWAY' : 'DELIVERY');
+          const paymentMethod = Math.random() < 0.7 ? 'BANKING' : 'CASH';
+
+          const randomCustomer = allCustomers[Math.floor(Math.random() * allCustomers.length)]!;
+          const randomTable = allTables[Math.floor(Math.random() * allTables.length)]!;
+
+          const order = await prisma.orders.create({
+            data: {
+              CustomerID: randomCustomer.CustomerID,
+              EmployeeID: employeeStaff.EmployeeID,
+              ShopTableID: orderType === 'DINE_IN' ? randomTable.ShopTableID : null,
+              OrderStatus: 'COMPLETED',
+              OrderType: orderType,
+              PaymentMethod: paymentMethod,
+              PaymentStatus: 'COMPLETED', // Use COMPLETED for PaymentStatus
+              TotalPrice: 0, // Will update below
+              CreatedTime: orderDate,
+              createdAt: orderDate,
+              updatedAt: orderDate,
+            }
+          });
+
+          let totalPrice = 0;
+          const numDetails = Math.floor(Math.random() * 3) + 1;
+          for (let j = 0; j < numDetails; j++) {
+            const randomDS = allDrinkSizes[Math.floor(Math.random() * allDrinkSizes.length)]!;
+            const qty = Math.floor(Math.random() * 2) + 1;
+            totalPrice += Number(randomDS.UnitPrice) * qty;
+
+            await prisma.orderDetail.create({
+              data: {
+                OrderID: order.OrderID,
+                DrinkSizeID: randomDS.DrinkSizeID,
+                Quantity: qty,
+                Sugar: '100%',
+                Ice: '50%',
+                UnitPrice: randomDS.UnitPrice,
+                createdAt: orderDate,
+                updatedAt: orderDate,
+              }
+            });
+          }
+
+          await prisma.orders.update({
+            where: { OrderID: order.OrderID },
+            data: { TotalPrice: totalPrice }
+          });
         }
-      });
-      await prisma.orderDetail.create({
-        data: {
-          OrderID: order.OrderID,
-          DrinkSizeID: oLongNhaiM.DrinkSizeID,
-          Quantity: 1,
-          Sugar: '100%',
-          Ice: '50%',
-          UnitPrice: 45000,
-        }
-      });
+      }
     }
+  }
+
+  // 16. Carts
+  console.log('Đang xử lý Carts...');
+  const cartCount = await prisma.cart.count();
+  if (cartCount === 0 && allCustomers.length > 0 && allDrinkSizes.length > 1) {
+    const activeCart = await prisma.cart.create({
+      data: {
+        CustomerID: allCustomers[0]!.CustomerID,
+        Status: 'ACTIVE',
+      }
+    });
+    await prisma.cartItem.createMany({
+      data: [
+        { CartID: activeCart.CartID, DrinkSizeID: allDrinkSizes[0]!.DrinkSizeID, Quantity: 2, UnitPrice: allDrinkSizes[0]!.UnitPrice },
+        { CartID: activeCart.CartID, DrinkSizeID: allDrinkSizes[1]!.DrinkSizeID, Quantity: 1, UnitPrice: allDrinkSizes[1]!.UnitPrice }
+      ]
+    });
+  }
+
+  // 17. Promotions & Vouchers
+  console.log('Đang xử lý Promotions & Vouchers...');
+  const promoCount = await prisma.promotion.count();
+  if (promoCount === 0) {
+    await prisma.promotion.createMany({
+      data: [
+        { Name: 'Giảm giá cuối tuần', Description: 'Giảm 10% cho tất cả món', Type: 'PERCENT', Value: 10, MinQuantity: 2, IsActive: true },
+        { Name: 'Mua 2 tặng 1', Description: 'Giảm 30% khi mua trên 3 món', Type: 'PERCENT', Value: 30, MinQuantity: 3, IsActive: true }
+      ]
+    });
+  }
+
+  const voucherCount = await prisma.voucher.count();
+  if (voucherCount === 0 && allCustomers.length > 0) {
+    await prisma.voucher.createMany({
+      data: [
+        { Code: 'WELCOME', DiscountType: 'PERCENT', DiscountValue: 10, Creator: 'ADMIN', IsUsed: false },
+        { Code: 'VIP', DiscountType: 'AMOUNT', DiscountValue: 20000, Creator: 'ADMIN', IsUsed: false, OwnerID: allCustomers[0]!.CustomerID }
+      ]
+    });
+  }
+
+  // 18. Chat Sessions
+  console.log('Đang xử lý Chat Sessions...');
+  const chatCount = await prisma.chatSession.count();
+  if (chatCount === 0 && allCustomers.length > 0) {
+    const session = await prisma.chatSession.create({
+      data: {
+        CustomerID: allCustomers[0]!.CustomerID,
+        Status: 'AI_HANDLING',
+      }
+    });
+    await prisma.chatMessage.createMany({
+      data: [
+        { SessionID: session.SessionID, SenderType: 'CUSTOMER', Content: 'Cho tôi hỏi trà nào ngon nhất?' },
+        { SessionID: session.SessionID, SenderType: 'AI', Content: 'Dạ quán có món Ô Long Nhài Sữa đang bán rất chạy ạ!' }
+      ]
+    });
+  }
+
+  // 19. Salary & ShiftLog
+  console.log('Đang xử lý Salary & ShiftLog...');
+  const shiftLogCount = await prisma.shiftLog.count();
+  const allShifts = await prisma.shift.findMany();
+  const targetEmployeeForSalary = await prisma.employee.findFirst({ where: { Email: 'staff@phela.vn' } });
+
+  if (shiftLogCount === 0 && targetEmployeeForSalary && allShifts.length > 0) {
+    await prisma.shiftLog.create({
+      data: {
+        EmployeeID: targetEmployeeForSalary.EmployeeID,
+        ShiftID: allShifts[0]!.ShiftID,
+        WorkDate: new Date(),
+        CheckInTime: new Date(),
+        ShiftStatus: 'WORKING'
+      }
+    });
+  }
+
+  const salaryCount = await prisma.salary.count();
+  if (salaryCount === 0 && targetEmployeeForSalary) {
+    await prisma.salary.create({
+      data: {
+        EmployeeID: targetEmployeeForSalary.EmployeeID,
+        Month: new Date().getMonth() + 1,
+        Year: new Date().getFullYear(),
+        BaseSalary: 30000,
+        TotalHours: 40,
+        Bonus: 500000,
+        Deduction: 0,
+        RealSalary: 30000 * 40 + 500000
+      }
+    });
   }
 
   console.log('✅ Chèn dữ liệu seed thành công!');

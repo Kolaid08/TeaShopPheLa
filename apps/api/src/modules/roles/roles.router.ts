@@ -13,8 +13,9 @@ const roleSchema = z.object({
   DefaultBaseSalary: z.number().positive(),
 });
 
-// Apply JWT protection for all routes in roles
+// Protect routes
 router.use(verifyJWT);
+router.use(requireRole(['ADMIN', 'MANAGER']));
 
 // GET / - List all roles with optional pagination & sorting
 router.get('/', async (req, res, next) => {
@@ -69,7 +70,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a role (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = roleSchema.parse(req.body);
 
@@ -84,7 +85,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PUT /:id - Update a role (Manager/Admin only)
-router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const roleId = parseInt(req.params.id || '');
     if (isNaN(roleId)) throw new AppError(400, 'Invalid ID format.');
@@ -103,7 +104,7 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
 });
 
 // DELETE /:id - Delete a role (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const roleId = parseInt(req.params.id || '');
     if (isNaN(roleId)) throw new AppError(400, 'Invalid ID format.');
@@ -113,7 +114,10 @@ router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) 
     });
 
     return sendResponse(res, 200, true, 'Role deleted successfully');
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'P2003') {
+      return next(new AppError(400, 'Không thể xóa Chức vụ này vì đang có Nhân viên giữ chức vụ này.'));
+    }
     next(err);
   }
 });

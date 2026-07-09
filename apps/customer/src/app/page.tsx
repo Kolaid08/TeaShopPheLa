@@ -16,6 +16,8 @@ import {
   TableProperties,
   CheckCircle,
   PlusCircle,
+  X,
+  Gift,
 } from 'lucide-react';
 import {
   Card,
@@ -26,6 +28,10 @@ import {
 } from '@/components/ui/core';
 import { api, Drink, DrinkSize, Customer, ShopTable } from '@/lib/api';
 import { toast } from 'sonner';
+import dynamic from 'next/dynamic';
+import AddressAutocomplete from '@/components/AddressAutocomplete';
+
+const MapPicker = dynamic(() => import('@/components/MapPicker'), { ssr: false });
 
 const removeAccents = (str: string) => {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
@@ -52,6 +58,8 @@ export default function CustomerHome() {
   const [drinks, setDrinks] = useState<Drink[]>([]);
   const [drinkSizes, setDrinkSizes] = useState<DrinkSize[]>([]);
   const [tables, setTables] = useState<ShopTable[]>([]);
+  const [frequentOrders, setFrequentOrders] = useState<any[]>([]);
+  const [timeGreeting, setTimeGreeting] = useState('Xin chào');
   const [isLoadingMenu, setIsLoadingMenu] = useState(true);
 
   // Search & Filters
@@ -80,6 +88,14 @@ export default function CustomerHome() {
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'COD' | 'QR_CODE'>('COD');
   
+  // Delivery states
+  const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY' | 'DELIVERY'>('TAKEAWAY');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [receiverName, setReceiverName] = useState('');
+  const [receiverPhone, setReceiverPhone] = useState('');
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+  
   // PayOS states
   const [payOsQrCode, setPayOsQrCode] = useState<string>('');
   const [payOsDetails, setPayOsDetails] = useState<{ accountNumber?: string; description?: string; bin?: string; amount?: number } | null>(null);
@@ -103,11 +119,43 @@ export default function CustomerHome() {
     { name: 'Thạch Ô Long Giòn', price: 10000 },
   ];
 
+  // Voucher states
+  const [voucherInput, setVoucherInput] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<any | null>(null);
+  const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
+  const [comboSuggestions, setComboSuggestions] = useState<any[]>([]);
+  const [activePromotions, setActivePromotions] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.getActivePromotions().then(setActivePromotions);
+  }, []);
+
+  useEffect(() => {
+    if (cart.length > 0) {
+      const drinkSizeIds = cart.map(c => c.DrinkSizeID);
+      api.getComboSuggestions(drinkSizeIds).then(setComboSuggestions);
+    } else {
+      setComboSuggestions([]);
+    }
+  }, [cart]);
+
   useEffect(() => {
     // Authenticate check
     const active = api.getCurrentCustomer();
     setCustomer(active);
     setIsLoadingUser(false);
+
+    // Sync latest customer rank from backend
+    if (active && active.PhoneNumber) {
+      api.syncCustomerProfile(active.PhoneNumber).then((updatedCust) => {
+        if (updatedCust) setCustomer(updatedCust);
+      });
+    }
+
+    const hour = new Date().getHours();
+    if (hour < 12) setTimeGreeting('Chào buổi sáng');
+    else if (hour < 18) setTimeGreeting('Chào buổi chiều');
+    else setTimeGreeting('Chào buổi tối');
 
     // Fetch lists
     const loadData = async () => {
@@ -120,6 +168,11 @@ export default function CustomerHome() {
         setDrinks(dList.filter(d => d.DrinkStatus === 'ACTIVE'));
         setDrinkSizes(dsList);
         setTables(tList);
+
+        if (active && active.CustomerID) {
+          const freqs = await api.getFrequentOrders(active.CustomerID);
+          setFrequentOrders(freqs);
+        }
       } catch {}
       setIsLoadingMenu(false);
     };
@@ -128,6 +181,84 @@ export default function CustomerHome() {
     // Load cart from LocalStorage
     const savedCart = localStorage.getItem('phela_customer_cart');
     if (savedCart) setCart(JSON.parse(savedCart));
+
+    // Listen to AI Buy Now
+    const handleAIBuyNow = async (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { code, drinkSizeId } = customEvent.detail;
+      
+      try {
+        // Set voucher input
+        setVoucherInput(code);
+        
+        // Check and apply voucher
+        const v = await api.checkVoucher(code, active?.CustomerID, undefined);
+        setAppliedVoucher(v);
+        
+        toast.success('Đã áp dụng mã giảm giá thành công! Vui lòng kiểm tra giỏ hàng.');
+      } catch (err: any) {
+        toast.error(err.message || 'Có lỗi xảy ra khi áp dụng mã.');
+      }
+    };
+    
+    const handleAIAddCombo = async (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { drinkSizeIds } = customEvent.detail;
+      
+      try {
+        const sizes = await api.getDrinkSizes();
+        const allDrinks = await api.getDrinks();
+        
+        let currentCartStr = localStorage.getItem('phela_customer_cart');
+        let currentCart = currentCartStr ? JSON.parse(currentCartStr) : [];
+        let addedCount = 0;
+        
+        for (const dId of drinkSizeIds) {
+          const dSize = sizes.find((ds: any) => ds.DrinkSizeID === dId && ds.DrinkSizeStatus !== 'UNAVAILABLE');
+          if (!dSize) continue;
+          
+          const drinkInfo = allDrinks.find((d: any) => d.DrinkID === dSize.DrinkID);
+          if (!drinkInfo) continue;
+          
+          const itemKey = `${dSize.DrinkSizeID}-100%-100%-`;
+          const existingIdx = currentCart.findIndex((item: any) => item.id === itemKey);
+          
+          if (existingIdx !== -1) {
+            currentCart[existingIdx].Quantity += 1;
+          } else {
+            currentCart.push({
+              id: itemKey,
+              DrinkSizeID: dSize.DrinkSizeID,
+              DrinkName: drinkInfo.DrinkName,
+              SizeName: dSize.Size?.SizeName || 'M',
+              UnitPrice: Number(dSize.UnitPrice),
+              Quantity: 1,
+              Sugar: '100%',
+              Ice: '100%',
+              Toppings: [],
+            });
+          }
+          addedCount++;
+        }
+        
+        if (addedCount > 0) {
+          setCart(currentCart);
+          localStorage.setItem('phela_customer_cart', JSON.stringify(currentCart));
+          toast.success(`Đã thêm ${addedCount} ly nước của Combo vào giỏ hàng!`);
+        } else {
+          toast.error('Các sản phẩm trong Combo này hiện đang hết hàng.');
+        }
+      } catch(err) {
+         toast.error('Lỗi khi thêm Combo vào giỏ hàng.');
+      }
+    };
+    
+    window.addEventListener('ai_buy_now', handleAIBuyNow);
+    window.addEventListener('ai_add_combo', handleAIAddCombo);
+    return () => {
+      window.removeEventListener('ai_buy_now', handleAIBuyNow);
+      window.removeEventListener('ai_add_combo', handleAIAddCombo);
+    };
   }, [router]);
 
   useEffect(() => {
@@ -178,6 +309,11 @@ export default function CustomerHome() {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('phela_customer_cart');
+    localStorage.removeItem('phela_session_id');
+    localStorage.removeItem('chat_session_id');
+    setCart([]);
+    
     api.customerLogout();
     toast.success('Đã đăng xuất cổng hội viên.');
     router.push('/login');
@@ -269,11 +405,172 @@ export default function CustomerHome() {
 
   // Cart calculations
   const getSubtotal = () => cart.reduce((acc, curr) => acc + curr.UnitPrice * curr.Quantity, 0);
-  const getDiscountAmount = () => {
-    const discountRate = customer?.MemberShipLevel?.DiscountRate || 0;
-    return Math.floor((getSubtotal() * discountRate) / 100);
+  
+  const getCalculations = () => {
+    const subtotal = getSubtotal();
+    let membershipDiscountRate = customer?.MemberShipLevel?.DiscountRate || 0;
+    
+    let voucherDiscount = 0;
+    let targetItemTotal = 0;
+    let otherItemsTotal = 0;
+
+    if (appliedVoucher) {
+      if (appliedVoucher.TargetProductID) {
+        let applied = false;
+        for (const item of cart) {
+          if (item.DrinkSizeID === appliedVoucher.TargetProductID && !applied) {
+             targetItemTotal += item.UnitPrice;
+             otherItemsTotal += item.UnitPrice * (item.Quantity - 1);
+             applied = true;
+          } else {
+             otherItemsTotal += item.UnitPrice * item.Quantity;
+          }
+        }
+      } else {
+         targetItemTotal = subtotal;
+         otherItemsTotal = 0;
+      }
+
+      if (appliedVoucher.DiscountType === 'PERCENT') {
+        voucherDiscount = targetItemTotal * (appliedVoucher.DiscountValue / 100);
+      } else {
+        voucherDiscount = appliedVoucher.DiscountValue;
+        if (voucherDiscount > targetItemTotal) voucherDiscount = targetItemTotal;
+      }
+    } else {
+      otherItemsTotal = subtotal;
+    }
+
+    let promotionDiscount = 0;
+    
+    // Calculate combo promotion discount
+    if (activePromotions.length > 0) {
+      for (const promo of activePromotions) {
+        if (!promo.TargetDrinkIDs) {
+          // Store-wide or general promotion based on total items
+          const totalItems = cart.reduce((acc, curr) => acc + curr.Quantity, 0);
+          if (totalItems >= promo.MinQuantity) {
+            if (promo.Type === 'PERCENT') {
+              promotionDiscount += subtotal * (promo.Value / 100);
+            } else if (promo.Type === 'AMOUNT') {
+              promotionDiscount += promo.Value;
+            } else if (promo.Type === 'FREE_ITEM') {
+              // Get the cheapest item price for the free item
+              const sortedCart = [...cart].sort((a, b) => a.UnitPrice - b.UnitPrice);
+              if (sortedCart.length > 0) {
+                // Determine how many times the promotion applies
+                const multiplier = Math.floor(totalItems / promo.MinQuantity);
+                const maxFreeItems = Math.min(promo.Value * multiplier, totalItems);
+                
+                let currentFreeCount = 0;
+                for (const item of sortedCart) {
+                  if (currentFreeCount >= maxFreeItems) break;
+                  
+                  const applyCount = Math.min(item.Quantity, maxFreeItems - currentFreeCount);
+                  promotionDiscount += item.UnitPrice * applyCount;
+                  currentFreeCount += applyCount;
+                }
+              }
+            }
+          }
+        } else {
+          // Specific item promotion
+          try {
+            const targetIds = JSON.parse(promo.TargetDrinkIDs);
+            const qualifyingItems = cart.filter(c => targetIds.includes(c.DrinkSizeID));
+            const qualifyingCount = qualifyingItems.reduce((acc, curr) => acc + curr.Quantity, 0);
+            
+            if (qualifyingCount >= promo.MinQuantity) {
+              const qualifyingTotal = qualifyingItems.reduce((acc, curr) => acc + (curr.UnitPrice * curr.Quantity), 0);
+              if (promo.Type === 'PERCENT') {
+                promotionDiscount += qualifyingTotal * (promo.Value / 100);
+              } else if (promo.Type === 'AMOUNT') {
+                promotionDiscount += promo.Value;
+              } else if (promo.Type === 'FREE_ITEM') {
+                const sortedQualifying = [...qualifyingItems].sort((a, b) => a.UnitPrice - b.UnitPrice);
+                if (sortedQualifying.length > 0) {
+                  const multiplier = Math.floor(qualifyingCount / promo.MinQuantity);
+                  const maxFreeItems = Math.min(promo.Value * multiplier, qualifyingCount);
+                  
+                  let currentFreeCount = 0;
+                  for (const item of sortedQualifying) {
+                    if (currentFreeCount >= maxFreeItems) break;
+                    
+                    const applyCount = Math.min(item.Quantity, maxFreeItems - currentFreeCount);
+                    promotionDiscount += item.UnitPrice * applyCount;
+                    currentFreeCount += applyCount;
+                  }
+                }
+              }
+            }
+          } catch(e) {}
+        }
+      }
+    }
+
+    const membershipDiscountAmount = otherItemsTotal * (membershipDiscountRate / 100);
+    const baseFinal = subtotal - Math.floor(voucherDiscount) - Math.floor(promotionDiscount) - Math.floor(membershipDiscountAmount);
+    
+    let shippingFee = 0;
+    if (orderType === 'DELIVERY' && latitude && longitude) {
+      const shopLat = 10.762622;
+      const shopLng = 106.660172;
+      const R = 6371;
+      const dLat = (latitude - shopLat) * (Math.PI / 180);
+      const dLon = (longitude - shopLng) * (Math.PI / 180);
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(shopLat * (Math.PI / 180)) * Math.cos(latitude * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+      
+      if (baseFinal >= 300000) {
+         shippingFee = 0;
+      } else if (distance <= 3) {
+         shippingFee = 15000;
+      } else {
+         shippingFee = 15000 + Math.ceil(distance - 3) * 5000;
+      }
+    }
+    
+    const finalTotal = baseFinal + shippingFee;
+    
+    return {
+      subtotal,
+      voucherDiscount: Math.floor(voucherDiscount),
+      promotionDiscount: Math.floor(promotionDiscount),
+      membershipDiscount: Math.floor(membershipDiscountAmount),
+      shippingFee,
+      total: Math.floor(finalTotal > 0 ? finalTotal : 0)
+    };
   };
-  const getTotalPrice = () => getSubtotal() - getDiscountAmount() + shippingFee;
+
+  const { subtotal, voucherDiscount, promotionDiscount, membershipDiscount, shippingFee, total } = getCalculations();
+  const getTotalPrice = () => total;
+
+  const handleApplyVoucher = async () => {
+    if (!voucherInput.trim()) return;
+    setIsApplyingVoucher(true);
+    try {
+      const v = await api.checkVoucher(voucherInput.trim(), customer?.CustomerID, undefined);
+      
+      // Check if target item is in cart
+      if (v.TargetProductID) {
+        const hasItem = cart.some(c => c.DrinkSizeID === v.TargetProductID);
+        if (!hasItem) {
+          toast.error('Giỏ hàng không chứa món nước được áp dụng mã giảm giá này.');
+          setIsApplyingVoucher(false);
+          return;
+        }
+      }
+      
+      setAppliedVoucher(v);
+      toast.success('Áp dụng mã giảm giá thành công!');
+    } catch (e: any) {
+      toast.error(e.message);
+      setAppliedVoucher(null);
+    } finally {
+      setIsApplyingVoucher(false);
+    }
+  };
 
   // Submit checkout Order
   const handlePlaceOrder = async (method: 'QR_CODE' | 'COD') => {
@@ -296,18 +593,18 @@ export default function CustomerHome() {
           Sugar: item.Sugar,
           Ice: item.Ice,
           Toppings: item.Toppings && item.Toppings.length > 0 ? item.Toppings.map(t => t.name).join(', ') : undefined,
-          UnitPrice: item.UnitPrice,
+          UnitPrice: Number(item.UnitPrice),
         })),
         TotalPrice: getTotalPrice(),
         ShopTableID: tableId > 0 ? tableId : undefined,
-        OrderNote: orderNote,
-        DeliveryType: tableId === 0 ? 'DELIVERY' : 'DINE_IN',
-        RecipientName: customer?.CustomerName,
-        RecipientPhone: customer?.PhoneNumber,
-        DeliveryAddress: deliveryAddress,
-        ProvinceID: selectedProvinceId || undefined,
-        DistrictID: selectedDistrictId || undefined,
-        WardCode: selectedWardCode || undefined,
+        OrderNote: `${deliveryAddress ? `Giao hàng: ${deliveryAddress}` : ''}${orderNote ? ` | Ghi chú: ${orderNote}` : ''}`,
+        OrderType: orderType,
+        ShippingAddress: deliveryAddress || undefined,
+        Latitude: latitude || undefined,
+        Longitude: longitude || undefined,
+        ReceiverName: receiverName || undefined,
+        ReceiverPhone: receiverPhone || undefined,
+        VoucherCode: appliedVoucher ? appliedVoucher.Code : undefined,
       };
 
       const res = await api.createCustomerOrder(orderPayload);
@@ -461,7 +758,7 @@ export default function CustomerHome() {
             {customer ? (
               <>
                 <Badge variant="warning" className="font-bold text-[10px]">
-                  {customer.MemberShipLevel?.LevelName || 'Đồng (Bronze)'}
+                  {customer.MemberShipLevel?.LevelName || 'Đồng (Bronze)'} (-{customer.MemberShipLevel?.DiscountRate || 0}%)
                 </Badge>
                 <Link href="/history">
                   <Button variant="ghost" size="sm" className="rounded-xl flex items-center gap-1.5 text-xs text-primary font-bold">
@@ -491,7 +788,7 @@ export default function CustomerHome() {
           <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center">
             <div>
               <h2 className="font-serif font-black text-2xl md:text-3xl text-foreground tracking-tight flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" /> Hôm nay uống gì?
+                <Sparkles className="w-5 h-5 text-primary" /> {timeGreeting}{customer ? `, ${customer.CustomerName.split(' ').pop()}!` : '! Hôm nay uống gì?'}
               </h2>
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest font-sans mt-0.5">Đặt trực tuyến giao tận tay hoặc phục vụ tại quầy trong 15 phút</p>
             </div>
@@ -518,6 +815,47 @@ export default function CustomerHome() {
               </button>
             </div>
           </div>
+          {/* Frequent Orders */}
+          {frequentOrders.length > 0 && (
+            <div className="bg-primary/5 p-4 rounded-2xl border border-primary/20 space-y-3">
+              <h3 className="font-serif font-bold text-primary flex items-center gap-2">
+                <Sparkles className="w-4 h-4" /> Món tủ của bạn
+              </h3>
+              <div className="flex gap-3 overflow-x-auto pb-2 snap-x hide-scrollbar">
+                {frequentOrders.map((f: any, idx: number) => (
+                  <div key={idx} className="min-w-[200px] bg-background rounded-xl p-3 shadow-sm border border-border/50 snap-start shrink-0 cursor-pointer hover:border-primary/50 hover:shadow-md transition-all flex flex-col justify-between" 
+                    onClick={() => {
+                      const drinkObj = drinks.find(d => d.DrinkName === f.DrinkName);
+                      if (drinkObj) {
+                        setSelectedDrink(drinkObj);
+                        setSelectedSizeId(f.DrinkSizeID);
+                        setSugarLevel(f.PreferredConfig.Sugar);
+                        setIceLevel(f.PreferredConfig.Ice);
+                        const tps = f.PreferredConfig.Toppings ? f.PreferredConfig.Toppings.split(',') : [];
+                        const tArr = tps.map((t:string) => toppingsList.find(x => x.name.trim() === t.trim())).filter(Boolean) as any;
+                        setSelectedToppings(tArr);
+                      }
+                    }}
+                  >
+                    <div>
+                      <div className="text-sm font-bold text-foreground line-clamp-1">{f.DrinkName}</div>
+                      <div className="text-[10px] font-semibold text-primary mt-0.5">Size {f.SizeName}</div>
+                      <div className="text-[10px] text-muted-foreground mt-1 line-clamp-2">
+                        {f.PreferredConfig.Sugar} đường, {f.PreferredConfig.Ice} đá
+                        {f.PreferredConfig.Toppings && `, ${f.PreferredConfig.Toppings}`}
+                      </div>
+                    </div>
+                    <div className="mt-2 text-xs font-bold flex justify-between items-center">
+                      <span>{f.UnitPrice.toLocaleString()}đ</span>
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 rounded-full bg-primary/10 text-primary">
+                        <PlusCircle className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Search Bar input */}
           <div className="relative w-full">
@@ -734,100 +1072,161 @@ export default function CustomerHome() {
               )}
             </div>
 
+            {comboSuggestions.length > 0 && cart.length > 0 && (
+              <div className="pt-2 pb-2 border-t border-border/50">
+                <h4 className="text-[11px] font-bold text-foreground mb-2 flex items-center gap-1.5"><Gift className="w-3.5 h-3.5 text-primary" /> Gợi ý thêm cho bạn</h4>
+                <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-none">
+                  {comboSuggestions.map((combo, idx) => (
+                    <div key={idx} className="flex-none w-[110px] border border-border/50 rounded-xl p-2 flex flex-col gap-1 items-center bg-muted/10 text-center hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => {
+                      const drink = drinks.find(d => d.DrinkName === combo.DrinkName);
+                      if (drink) {
+                        setSelectedDrink(drink);
+                        setSelectedSizeId(combo.DrinkSizeID);
+                        setSugarLevel('100%');
+                        setIceLevel('100%');
+                        setSelectedToppings([]);
+                      }
+                    }}>
+                      <div className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center shrink-0 mb-1 overflow-hidden">
+                        {combo.DrinkImageURL ? (
+                          <img src={combo.DrinkImageURL} alt={combo.DrinkName} className="w-full h-full object-cover" />
+                        ) : (
+                          <Coffee className="w-4 h-4 text-muted-foreground/30" />
+                        )}
+                      </div>
+                      <p className="text-[9px] font-bold leading-tight line-clamp-2 h-6">{combo.DrinkName} ({combo.SizeName})</p>
+                      <p className="text-[9px] font-mono text-primary font-bold">{combo.UnitPrice.toLocaleString('vi-VN')}đ</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Calculations and Order Details form */}
             {cart.length > 0 && (
               <div className="border-t border-border/80 pt-4 space-y-4">
+                
+                {/* Voucher input */}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Mã giảm giá (nếu có)"
+                    className="h-8 text-xs flex-1"
+                    value={voucherInput}
+                    onChange={(e) => setVoucherInput(e.target.value)}
+                    disabled={!!appliedVoucher}
+                  />
+                  {!appliedVoucher ? (
+                    <Button 
+                      size="sm" 
+                      className="h-8 text-xs font-bold" 
+                      onClick={handleApplyVoucher} 
+                      disabled={isApplyingVoucher || !voucherInput}
+                    >
+                      {isApplyingVoucher ? '...' : 'Áp dụng'}
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="danger" className="h-8 px-2" onClick={() => {
+                      setAppliedVoucher(null);
+                      setVoucherInput('');
+                    }}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>Tạm tính</span>
-                    <span className="font-mono">{getSubtotal().toLocaleString('vi-VN')} đ</span>
+                    <span className="font-mono">{subtotal.toLocaleString('vi-VN')} đ</span>
                   </div>
-                  {customer?.MemberShipLevel?.DiscountRate ? (
-                    <div className="flex justify-between text-xs text-emerald-500 font-semibold">
-                      <span>Giảm giá Hội viên ({customer.MemberShipLevel.DiscountRate}%)</span>
-                      <span className="font-mono">-{getDiscountAmount().toLocaleString('vi-VN')} đ</span>
+                  
+                  {appliedVoucher && (
+                    <div className="flex justify-between text-xs text-primary font-semibold">
+                      <span>Voucher: {appliedVoucher.Code}</span>
+                      <span className="font-mono">-{voucherDiscount.toLocaleString('vi-VN')} đ</span>
                     </div>
-                  ) : null}
-                  {shippingFee > 0 && (
-                    <div className="flex justify-between text-xs text-muted-foreground font-semibold">
-                      <span>Phí giao hàng (GHN)</span>
-                      <span className="font-mono">+{shippingFee.toLocaleString('vi-VN')} đ</span>
+                  )}
+
+                  {promotionDiscount > 0 && (
+                    <div className="flex justify-between text-xs text-primary font-semibold">
+                      <span>Giảm giá Combo</span>
+                      <span className="font-mono">- {promotionDiscount.toLocaleString('vi-VN')} đ</span>
+                    </div>
+                  )}
+
+                  {customer && (
+                    <div className="flex justify-between text-xs text-primary font-semibold">
+                      <span>Giảm giá Hội viên ({customer.MemberShipLevel?.DiscountRate || 0}%)</span>
+                      <span className="font-mono">-{membershipDiscount.toLocaleString('vi-VN')} đ</span>
+                    </div>
+                  )}
+                  {orderType === 'DELIVERY' && (
+                    <div className="flex justify-between text-xs text-primary font-semibold">
+                      <span>Phí giao hàng</span>
+                      <span className="font-mono">{shippingFee > 0 ? `+ ${shippingFee.toLocaleString('vi-VN')} đ` : 'Miễn phí'}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-base font-bold text-foreground pt-1 border-t border-border/30">
                     <span>Tổng thanh toán</span>
-                    <span className="font-mono text-primary">{getTotalPrice().toLocaleString('vi-VN')} đ</span>
+                    <span className="font-mono text-primary">{total.toLocaleString('vi-VN')} đ</span>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
+                <div className="space-y-4">
+                  {/* Order Type Selection */}
+                  <div className="flex bg-muted p-1 rounded-xl gap-1">
+                    <button onClick={() => setOrderType('TAKEAWAY')} className={`flex-1 text-xs py-2 rounded-lg font-bold transition-all ${orderType === 'TAKEAWAY' ? 'bg-background shadow text-primary' : 'text-muted-foreground'}`}>Mang đi</button>
+                    <button onClick={() => setOrderType('DINE_IN')} className={`flex-1 text-xs py-2 rounded-lg font-bold transition-all ${orderType === 'DINE_IN' ? 'bg-background shadow text-primary' : 'text-muted-foreground'}`}>Tại bàn</button>
+                    <button onClick={() => setOrderType('DELIVERY')} className={`flex-1 text-xs py-2 rounded-lg font-bold transition-all ${orderType === 'DELIVERY' ? 'bg-background shadow text-primary' : 'text-muted-foreground'}`}>Giao hàng</button>
+                  </div>
+
+                  {orderType === 'DINE_IN' && (
+                    <div className="space-y-1">
                       <label className="text-[10px] font-bold text-muted-foreground block mb-1 uppercase tracking-wide">Số bàn (Tại quầy)</label>
                       <select 
                         value={tableId}
                         onChange={(e)=>setTableId(parseInt(e.target.value))}
-                        className="w-full rounded-lg border border-border bg-background/50 p-2 text-xs"
+                        className="w-full rounded-lg border border-border bg-background p-2 text-xs"
                       >
-                        <option value={0}>Giao hàng mang đi</option>
+                        <option value={0}>Chọn bàn...</option>
                         {tables.map(t => (
                           <option key={t.ShopTableID} value={t.ShopTableID}>Bàn {t.ShopTableNumber}</option>
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground block mb-1 uppercase tracking-wide">Số điện thoại</label>
-                      <Input value={customer?.PhoneNumber || ''} disabled className="p-2 h-8 text-xs font-mono" />
-                    </div>
-                  </div>
+                  )}
 
-                  {tableId === 0 && (
-                    <div className="space-y-2 border border-border/60 p-2 rounded-xl bg-background/30">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Tỉnh/Thành</label>
-                          <select 
-                            value={selectedProvinceId} 
-                            onChange={(e) => setSelectedProvinceId(Number(e.target.value))}
-                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
-                          >
-                            <option value={0}>Chọn Tỉnh/Thành</option>
-                            {provinces.map(p => <option key={p.ProvinceID} value={p.ProvinceID}>{p.ProvinceName}</option>)}
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Quận/Huyện</label>
-                          <select 
-                            value={selectedDistrictId} 
-                            onChange={(e) => setSelectedDistrictId(Number(e.target.value))}
-                            disabled={!selectedProvinceId}
-                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
-                          >
-                            <option value={0}>Chọn Quận/Huyện</option>
-                            {districts.map(d => <option key={d.DistrictID} value={d.DistrictID}>{d.DistrictName}</option>)}
-                          </select>
-                        </div>
+                  {orderType === 'DELIVERY' && (
+                    <div className="space-y-3 p-3 bg-muted/30 rounded-xl border border-border/50">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Gợi ý địa chỉ giao hàng *</label>
+                        <AddressAutocomplete 
+                          initialValue={deliveryAddress}
+                          onAddressSelect={(address: string, lat: number, lng: number) => {
+                            setDeliveryAddress(address);
+                            setLatitude(lat);
+                            setLongitude(lng);
+                          }}
+                          onOpenMap={() => setIsMapModalOpen(true)}
+                        />
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Phường/Xã</label>
-                          <select 
-                            value={selectedWardCode} 
-                            onChange={(e) => setSelectedWardCode(e.target.value)}
-                            disabled={!selectedDistrictId}
-                            className="w-full text-xs h-8 rounded-lg border border-border bg-background px-2"
-                          >
-                            <option value="">Chọn Phường/Xã</option>
-                            {wards.map(w => <option key={w.WardCode} value={w.WardCode}>{w.WardName}</option>)}
-                          </select>
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Tên người nhận</label>
+                          <Input 
+                            placeholder={customer?.CustomerName || ''}
+                            value={receiverName}
+                            onChange={(e)=>setReceiverName(e.target.value)}
+                            className="text-xs h-8"
+                          />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">Địa chỉ cụ thể *</label>
+                          <label className="text-[10px] font-bold text-muted-foreground block uppercase tracking-wide">SĐT liên hệ</label>
                           <Input 
-                            placeholder="Số nhà, đường..." 
-                            value={deliveryAddress}
-                            onChange={(e)=>setDeliveryAddress(e.target.value)}
-                            className="text-xs h-8 bg-background"
+                            placeholder={customer?.PhoneNumber || ''}
+                            value={receiverPhone}
+                            onChange={(e)=>setReceiverPhone(e.target.value)}
+                            className="text-xs h-8"
                           />
                         </div>
                       </div>
@@ -852,8 +1251,12 @@ export default function CustomerHome() {
                       router.push('/login');
                       return;
                     }
-                    if (tableId === 0 && !deliveryAddress) {
+                    if (orderType === 'DELIVERY' && !deliveryAddress) {
                       toast.error('Vui lòng cung cấp địa chỉ giao hàng.');
+                      return;
+                    }
+                    if (orderType === 'DINE_IN' && tableId === 0) {
+                      toast.error('Vui lòng chọn số bàn.');
                       return;
                     }
                     setIsCheckoutOpen(true);
@@ -1153,6 +1556,44 @@ export default function CustomerHome() {
           </div>
         </Dialog>
       )}
+
+      {/* C. Map Modal */}
+      <Dialog 
+        isOpen={isMapModalOpen}
+        onClose={() => setIsMapModalOpen(false)}
+        title="Chọn địa chỉ trên bản đồ"
+      >
+        <div className="space-y-4">
+          <MapPicker 
+            defaultLat={latitude || 10.762622}
+            defaultLng={longitude || 106.660172}
+            onLocationSelect={(lat, lng) => {
+              setLatitude(lat);
+              setLongitude(lng);
+            }}
+          />
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-muted-foreground">Chi tiết số nhà, đường (Tùy chọn ghi thêm):</label>
+            <Input 
+              value={deliveryAddress}
+              onChange={(e) => setDeliveryAddress(e.target.value)}
+              placeholder="VD: 155 Lê Quý Đôn..."
+            />
+          </div>
+          <Button 
+            className="w-full mt-4" 
+            onClick={() => {
+              if (!latitude || !longitude) {
+                toast.error('Vui lòng chọn vị trí trên bản đồ');
+                return;
+              }
+              setIsMapModalOpen(false);
+            }}
+          >
+            Xác nhận vị trí này
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

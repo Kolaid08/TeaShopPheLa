@@ -227,6 +227,7 @@ export default function IngredientsInventory() {
             </label>
             <Input
               type="number"
+              min="0"
               placeholder="e.g. 5000"
               value={qty}
               onChange={(e) => setQty(parseFloat(e.target.value))}

@@ -12,6 +12,7 @@ const generateSalarySchema = z.object({
   Year: z.number().int().min(2000).max(2100),
   BonusDefault: z.number().nonnegative().optional(),
   DeductionDefault: z.number().nonnegative().optional(),
+  LatePenaltyDefault: z.number().nonnegative().optional().default(50000),
 });
 
 const paySalarySchema = z.object({
@@ -22,7 +23,6 @@ const paySalarySchema = z.object({
 // Protect routes
 router.use(verifyJWT);
 
-// Helper to compute decimal hours between two time strings e.g. "08:00" and "16:30" => 8.5
 const calculateShiftHours = (start: string, end: string): number => {
   try {
     const [startH, startM] = start.split(':').map(Number);
@@ -40,8 +40,18 @@ const calculateShiftHours = (start: string, end: string): number => {
   }
 };
 
+const calculateActualHours = (checkIn: Date, checkOut: Date): number => {
+  try {
+    const diffMs = checkOut.getTime() - checkIn.getTime();
+    if (diffMs < 0) return 0;
+    return parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+  } catch {
+    return 0;
+  }
+};
+
 // GET /summary - Get aggregate payout statistics for a given month/year (Manager/Admin only)
-router.get('/summary', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.get('/summary', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const month = parseInt(req.query.month as string);
     const year = parseInt(req.query.year as string);
@@ -91,7 +101,12 @@ router.get('/', async (req, res, next) => {
     const where: any = {};
     if (month) where.Month = month;
     if (year) where.Year = year;
-    if (search) {
+    const userRole = (req.user as any)?.Role?.RoleName;
+    if (userRole !== 'ADMIN' && userRole !== 'MANAGER') {
+      where.EmployeeID = (req.user as any)?.EmployeeID;
+    }
+
+    if (search && (userRole === 'ADMIN' || userRole === 'MANAGER')) {
       where.Employee = {
         FullName: { contains: search },
       };
@@ -126,12 +141,13 @@ router.get('/', async (req, res, next) => {
 });
 
 // POST /generate - Batch generate salaries for a month/year (Manager/Admin only)
-router.post('/generate', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/generate', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = generateSalarySchema.parse(req.body);
     const { Month, Year } = validatedData;
     const bonusDefault = validatedData.BonusDefault || 0;
     const deductionDefault = validatedData.DeductionDefault || 0;
+    const latePenaltyDefault = validatedData.LatePenaltyDefault || 50000;
 
     // 1. Fetch all active employees
     const employees = await prisma.employee.findMany({
@@ -166,27 +182,41 @@ router.post('/generate', requireRole(['ADMIN', 'MANAGER']), async (req, res, nex
               lte: endOfMonth,
             },
             ShiftStatus: { in: ['PRESENT', 'LATE'] },
+            CheckOutTime: { not: null },
           },
           include: { Shift: true },
         });
 
         let totalHours = 0;
+        let lateCount = 0;
         logs.forEach((log) => {
-          totalHours += calculateShiftHours(log.Shift.StartTime, log.Shift.EndTime);
+          if (log.CheckInTime && log.CheckOutTime) {
+            totalHours += calculateActualHours(log.CheckInTime, log.CheckOutTime);
+          } else {
+            totalHours += calculateShiftHours(log.Shift.StartTime, log.Shift.EndTime);
+          }
+          if (log.ShiftStatus === 'LATE') {
+            lateCount++;
+          }
         });
 
-        const baseSalary = employee.Role.DefaultBaseSalary.toNumber(); // Base Salary model representation
-        const realSalary = baseSalary + bonusDefault - deductionDefault;
+        const hourlyWage = employee.Role.DefaultBaseSalary.toNumber(); // Lương theo giờ
+        const totalWage = totalHours * hourlyWage;
+        const latePenalty = lateCount * latePenaltyDefault; // Phạt cấu hình động (mặc định 50k)
+        
+        // Gộp phạt đi muộn vào deduction
+        const finalDeduction = deductionDefault + latePenalty;
+        const realSalary = totalWage + bonusDefault - finalDeduction;
 
         const sal = await tx.salary.create({
           data: {
             EmployeeID: employee.EmployeeID,
             Month,
             Year,
-            BaseSalary: baseSalary,
+            BaseSalary: hourlyWage,
             TotalHours: totalHours,
             Bonus: bonusDefault,
-            Deduction: deductionDefault,
+            Deduction: finalDeduction,
             RealSalary: realSalary < 0 ? 0 : realSalary,
             PaidDate: null, // Unpaid
           },
@@ -209,7 +239,7 @@ router.post('/generate', requireRole(['ADMIN', 'MANAGER']), async (req, res, nex
 });
 
 // PATCH /:id/pay - Mark salary as paid with final adjustments (Manager/Admin only)
-router.patch('/:id/pay', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.patch('/:id/pay', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const salaryId = parseInt(req.params.id || '');
     if (isNaN(salaryId)) throw new AppError(400, 'Invalid ID format.');
@@ -228,8 +258,9 @@ router.patch('/:id/pay', requireRole(['ADMIN', 'MANAGER']), async (req, res, nex
     const bonus = bodyData.Bonus !== undefined ? bodyData.Bonus : salary.Bonus.toNumber();
     const deduction =
       bodyData.Deduction !== undefined ? bodyData.Deduction : salary.Deduction.toNumber();
-    const base = salary.BaseSalary.toNumber();
-    const finalReal = base + bonus - deduction;
+    const hourlyWage = salary.BaseSalary.toNumber();
+    const totalHours = salary.TotalHours.toNumber();
+    const finalReal = (hourlyWage * totalHours) + bonus - deduction;
 
     const paidSalary = await prisma.salary.update({
       where: { SalaryID: salaryId },

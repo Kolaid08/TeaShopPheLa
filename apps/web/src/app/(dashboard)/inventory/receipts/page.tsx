@@ -15,8 +15,9 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/core';
-import { api, IngredientReceipt, Supplier, Ingredient } from '@/lib/api';
+import { api, IngredientReceipt, Supplier, Ingredient, Employee } from '@/lib/api';
 import { toast } from 'sonner';
+import { MapPin, Truck } from 'lucide-react';
 
 interface ReceiptItem {
   IngredientID: number;
@@ -28,6 +29,7 @@ export default function IngredientReceipts() {
   const [receipts, setReceipts] = useState<IngredientReceipt[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [shippers, setShippers] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Form states
@@ -41,16 +43,24 @@ export default function IngredientReceipts() {
   const [addQty, setAddQty] = useState(10);
   const [addCost, setAddCost] = useState(5000);
 
+  // Shipper assignment states
+  const [isAssignShipperOpen, setIsAssignShipperOpen] = useState(false);
+  const [assignReceiptId, setAssignReceiptId] = useState(0);
+  const [selectedShipperId, setSelectedShipperId] = useState(0);
+  const [shippingAddress, setShippingAddress] = useState('');
+
   const loadReceipts = async () => {
     try {
-      const [rList, sList, iList] = await Promise.all([
+      const [rList, sList, iList, eList] = await Promise.all([
         api.getReceipts(),
         api.getSuppliers(),
         api.getIngredients(),
+        api.getEmployees(),
       ]);
       setReceipts(rList);
       setSuppliers(sList);
       setIngredients(iList);
+      setShippers(eList.filter(e => e.Role?.RoleName === 'Shipper' || !e.Role || e.Role?.RoleName === 'STAFF'));
     } catch {}
     setIsLoading(false);
   };
@@ -71,6 +81,15 @@ export default function IngredientReceipts() {
 
   const handleAddItemToReceipt = () => {
     if (!addItemId) return;
+    
+    if (addQty <= 0) {
+      toast.error('Số lượng nhập phải lớn hơn 0.');
+      return;
+    }
+    if (addCost < 0) {
+      toast.error('Giá vốn nhập không được là số âm.');
+      return;
+    }
     const exists = items.findIndex((i) => i.IngredientID === addItemId);
     if (exists !== -1) {
       toast.error('Nguyên liệu này đã có trong danh sách nhập kho.');
@@ -129,6 +148,30 @@ export default function IngredientReceipts() {
       loadReceipts();
     } catch (err: any) {
       toast.error(err.message || 'Lỗi duyệt phiếu nhập kho.');
+    }
+  };
+
+  const openAssignShipper = (rec: IngredientReceipt) => {
+    setAssignReceiptId(rec.IngredientReceiptID);
+    setSelectedShipperId(shippers[0]?.EmployeeID || 0);
+    const supplierAddress = rec.Supplier?.SupplierName ? `Kho ${rec.Supplier.SupplierName}` : '';
+    setShippingAddress(supplierAddress);
+    setIsAssignShipperOpen(true);
+  };
+
+  const handleAssignShipper = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedShipperId) {
+      toast.error('Vui lòng chọn tài xế giao hàng.');
+      return;
+    }
+    try {
+      await api.assignReceiptShipper(assignReceiptId, selectedShipperId, shippingAddress, 0, 0);
+      toast.success('Đã điều phối shipper đi lấy hàng thành công.');
+      setIsAssignShipperOpen(false);
+      loadReceipts();
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi điều phối shipper.');
     }
   };
 
@@ -199,20 +242,40 @@ export default function IngredientReceipts() {
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant={rec.IngredientReceiptStatus === 'CONFIRMED' ? 'success' : 'neutral'}
+                      variant={
+                        rec.IngredientReceiptStatus === 'CONFIRMED'
+                          ? 'success'
+                          : rec.IngredientReceiptStatus === 'SHIPPING'
+                          ? 'warning'
+                          : 'neutral'
+                      }
                     >
-                      {rec.IngredientReceiptStatus === 'CONFIRMED' ? 'Đã duyệt' : 'Chờ duyệt'}
+                      {rec.IngredientReceiptStatus === 'CONFIRMED'
+                        ? 'Đã duyệt'
+                        : rec.IngredientReceiptStatus === 'SHIPPING'
+                        ? 'Đang lấy hàng'
+                        : 'Chờ xử lý'}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     {rec.IngredientReceiptStatus === 'PENDING' && (
-                      <Button
-                        size="sm"
-                        className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs"
-                        onClick={() => handleConfirmReceipt(rec.IngredientReceiptID)}
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" /> Duyệt Nhập Kho
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-xl border-amber-500/50 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 gap-1 text-xs"
+                          onClick={() => openAssignShipper(rec)}
+                        >
+                          <Truck className="w-3.5 h-3.5" /> Gọi Shipper lấy hàng
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs"
+                          onClick={() => handleConfirmReceipt(rec.IngredientReceiptID)}
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" /> Tự đi lấy / Đã nhận
+                        </Button>
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>
@@ -287,6 +350,7 @@ export default function IngredientReceipts() {
                 </label>
                 <Input
                   type="number"
+                  min="1"
                   value={addQty}
                   onChange={(e) => setAddQty(parseFloat(e.target.value))}
                   className="p-2 h-9 text-xs font-mono bg-background/40"
@@ -298,6 +362,7 @@ export default function IngredientReceipts() {
                 </label>
                 <Input
                   type="number"
+                  min="0"
                   value={addCost}
                   onChange={(e) => setAddCost(parseFloat(e.target.value))}
                   className="p-2 h-9 text-xs font-mono bg-background/40"
@@ -350,20 +415,75 @@ export default function IngredientReceipts() {
             )}
           </div>
 
-          <div className="flex gap-4 pt-4 border-t border-border">
+          <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-border">
             <Button
               type="button"
               variant="outline"
-              className="flex-1 py-3 rounded-xl"
               onClick={() => setIsFormOpen(false)}
+              className="rounded-xl font-bold"
             >
               Hủy
             </Button>
-            <Button
-              type="submit"
-              className="flex-1 py-3 rounded-xl font-serif uppercase tracking-wider font-extrabold"
+            <Button type="submit" className="rounded-xl font-bold px-6 text-white uppercase font-serif tracking-wider">
+              Lưu Phiếu
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Assign Shipper Modal */}
+      <Dialog
+        isOpen={isAssignShipperOpen}
+        onClose={() => setIsAssignShipperOpen(false)}
+        title="Điều phối Shipper lấy hàng (Phiếu nhập)"
+      >
+        <form onSubmit={handleAssignShipper} className="space-y-4">
+          <div>
+            <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">
+              Chọn nhân viên lấy hàng *
+            </label>
+            <select
+              value={selectedShipperId}
+              onChange={(e) => setSelectedShipperId(parseInt(e.target.value))}
+              className="w-full rounded-xl border border-border bg-background/50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
-              Lập Phiếu
+              <option value={0}>-- Chọn Shipper --</option>
+              {shippers.map((s) => (
+                <option key={s.EmployeeID} value={s.EmployeeID}>
+                  {s.FullName} - {s.PhoneNumber}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">
+              Địa chỉ nhận nguyên liệu *
+            </label>
+            <div className="relative">
+              <MapPin className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input
+                value={shippingAddress}
+                onChange={(e) => setShippingAddress(e.target.value)}
+                placeholder="VD: Kho hàng nhà cung cấp..."
+                className="pl-9"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Shipper sẽ được chỉ dẫn tới địa chỉ này để nhận nguyên liệu mang về quán.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsAssignShipperOpen(false)}
+              className="rounded-xl font-bold"
+            >
+              Hủy
+            </Button>
+            <Button type="submit" className="rounded-xl font-bold px-6 bg-primary text-white uppercase font-serif tracking-wider">
+              Phân Công
             </Button>
           </div>
         </form>

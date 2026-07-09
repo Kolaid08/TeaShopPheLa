@@ -14,9 +14,13 @@ import {
   Sparkles,
   Ticket,
   Coffee,
+  CheckCircle,
+  CheckCircle2,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { Button, Input, Card, Badge, Dialog } from '@/components/ui/core';
-import { api, Drink, Size, DrinkSize, Customer, ShopTable } from '@/lib/api';
+import { api, Drink, Size, DrinkSize, Customer, ShopTable, Promotion } from '@/lib/api';
 import { toast } from 'sonner';
 
 interface CartItem {
@@ -35,6 +39,7 @@ export default function PosTerminal() {
   const [sizes, setSizes] = useState<Size[]>([]);
   const [drinkSizes, setDrinkSizes] = useState<DrinkSize[]>([]);
   const [tables, setTables] = useState<ShopTable[]>([]);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -52,19 +57,39 @@ export default function PosTerminal() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
+  // Receipt states
+  const [paidOrder, setPaidOrder] = useState<any>(null);
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+
+  // Voucher states
+  const [voucherInput, setVoucherInput] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<any | null>(null);
+  const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
+
   useEffect(() => {
     const loadCatalog = async () => {
       try {
-        const [dList, sList, dsList, tList] = await Promise.all([
+        const [dList, sList, dsList, tList, pList] = await Promise.all([
           api.getDrinks(),
           api.getSizes(),
           api.getDrinkSizes(),
           api.getTables(),
+          api.getPromotions(),
         ]);
         setDrinks(dList);
         setSizes(sList);
         setDrinkSizes(dsList);
         setTables(tList);
+        
+        // Filter active promos
+        const now = new Date();
+        const active = pList.filter((p: Promotion) => {
+          if (!p.IsActive) return false;
+          if (p.StartDate && new Date(p.StartDate) > now) return false;
+          if (p.EndDate && new Date(p.EndDate) < now) return false;
+          return true;
+        });
+        setPromotions(active);
       } catch {}
       setIsLoading(false);
     };
@@ -164,8 +189,117 @@ export default function PosTerminal() {
   // Pricing calculations
   const baseTotal = cart.reduce((sum, item) => sum + item.UnitPrice * item.Quantity, 0);
   const discountRate = activeCustomer?.MemberShipLevel?.DiscountRate || 0; // e.g. 10 (%)
-  const discountAmount = baseTotal * (discountRate / 100);
-  const grandTotal = baseTotal - discountAmount;
+  
+  // Calculate Promotion Discount (Best applicable promo)
+  let promotionDiscountAmount = 0;
+  for (const promo of promotions) {
+    let applicableItemsTotal = 0;
+    let applicableQuantity = 0;
+    
+    let targetIds: number[] | null = null;
+    if (promo.TargetDrinkIDs) {
+      try {
+        targetIds = JSON.parse(promo.TargetDrinkIDs);
+      } catch {}
+    }
+    
+    for (const item of cart) {
+      if (!targetIds || targetIds.includes(item.DrinkSizeID)) {
+        applicableItemsTotal += item.UnitPrice * item.Quantity;
+        applicableQuantity += item.Quantity;
+      }
+    }
+
+    if (applicableQuantity >= promo.MinQuantity) {
+      let currentPromoDiscount = 0;
+      if (promo.Type === 'PERCENT') {
+        currentPromoDiscount = applicableItemsTotal * (promo.Value / 100);
+      } else if (promo.Type === 'AMOUNT') {
+        currentPromoDiscount = promo.Value;
+      } else if (promo.Type === 'FREE_ITEM') {
+        const applicableSorted = cart
+          .filter(i => !targetIds || targetIds.includes(i.DrinkSizeID))
+          .sort((a, b) => a.UnitPrice - b.UnitPrice);
+        
+        let freeItemsToGive = promo.Value;
+        for (const item of applicableSorted) {
+          if (freeItemsToGive <= 0) break;
+          const qtyToFree = Math.min(item.Quantity, freeItemsToGive);
+          currentPromoDiscount += qtyToFree * item.UnitPrice;
+          freeItemsToGive -= qtyToFree;
+        }
+      }
+      
+      if (currentPromoDiscount > promotionDiscountAmount) {
+        promotionDiscountAmount = currentPromoDiscount;
+      }
+    }
+  }
+
+  const promoRatio = baseTotal > 0 ? Math.max(0, (baseTotal - promotionDiscountAmount) / baseTotal) : 1;
+
+  let voucherDiscount = 0;
+  let targetItemTotal = 0;
+  let otherItemsTotal = 0;
+
+  if (appliedVoucher) {
+    if (appliedVoucher.TargetProductID) {
+      let applied = false;
+      for (const item of cart) {
+        if (item.DrinkSizeID === appliedVoucher.TargetProductID && !applied) {
+           targetItemTotal += item.UnitPrice;
+           otherItemsTotal += item.UnitPrice * (item.Quantity - 1);
+           applied = true;
+        } else {
+           otherItemsTotal += item.UnitPrice * item.Quantity;
+        }
+      }
+    } else {
+       targetItemTotal = baseTotal;
+       otherItemsTotal = 0;
+    }
+
+    targetItemTotal = targetItemTotal * promoRatio;
+    otherItemsTotal = otherItemsTotal * promoRatio;
+
+    if (appliedVoucher.DiscountType === 'PERCENT') {
+      voucherDiscount = targetItemTotal * (appliedVoucher.DiscountValue / 100);
+    } else {
+      voucherDiscount = appliedVoucher.DiscountValue;
+      if (voucherDiscount > targetItemTotal) voucherDiscount = targetItemTotal;
+    }
+  } else {
+    otherItemsTotal = baseTotal * promoRatio;
+  }
+
+  const membershipDiscountAmount = otherItemsTotal * (discountRate / 100);
+  const totalDiscount = Math.floor(promotionDiscountAmount) + Math.floor(voucherDiscount) + Math.floor(membershipDiscountAmount);
+  const grandTotal = Math.max(0, baseTotal - totalDiscount);
+
+  const handleApplyVoucher = async () => {
+    if (!voucherInput.trim()) return;
+    setIsApplyingVoucher(true);
+    try {
+      const v = await api.checkVoucher(voucherInput.trim(), activeCustomer?.CustomerID, undefined);
+      
+      if (v.TargetProductID) {
+        const hasItem = cart.some(c => c.DrinkSizeID === v.TargetProductID);
+        if (!hasItem) {
+          toast.error('Giỏ hàng không chứa món nước được áp dụng mã giảm giá này.');
+          setIsApplyingVoucher(false);
+          return;
+        }
+      }
+      
+      setAppliedVoucher(v);
+      toast.success('Áp dụng mã giảm giá thành công!');
+    } catch (e: any) {
+      toast.error(e.message);
+      setAppliedVoucher(null);
+    } finally {
+      setIsApplyingVoucher(false);
+    }
+  };
 
   const handleCheckoutSubmit = async () => {
     if (cart.length === 0) {
@@ -187,6 +321,7 @@ export default function PosTerminal() {
           .map((i) => (i.Note ? `${i.DrinkName}: ${i.Note}` : ''))
           .filter(Boolean)
           .join(' | '),
+        VoucherCode: appliedVoucher ? appliedVoucher.Code : undefined,
       };
 
       const order = await api.createOrder(orderPayload);
@@ -196,14 +331,151 @@ export default function PosTerminal() {
 
       toast.success(`Hóa đơn #${order.OrderID} đã thanh toán & hoàn thành thành công!`);
 
+      // Calculate true total discount from backend response to cover promotions not calculated by frontend
+      const trueTotalDiscount = baseTotal - order.TotalPrice;
+      let finalVoucher = Math.floor(voucherDiscount);
+      let finalMembership = Math.floor(membershipDiscountAmount);
+      let promotionDiff = trueTotalDiscount - finalVoucher - finalMembership;
+
+      // Store the paid order details for printing
+      setPaidOrder({
+        OrderID: order.OrderID,
+        Customer: activeCustomer,
+        TableNumber: selectedTable,
+        Items: [...cart],
+        BaseTotal: baseTotal,
+        DiscountRate: discountRate,
+        MembershipDiscountAmount: finalMembership,
+        VoucherDiscountAmount: finalVoucher,
+        PromotionDiscountAmount: promotionDiff > 0 ? promotionDiff : 0,
+        AppliedVoucherCode: appliedVoucher ? appliedVoucher.Code : null,
+        GrandTotal: order.TotalPrice,
+        Date: new Date().toISOString(),
+      });
+
       // reset states
       setCart([]);
       setSelectedTable(null);
       setActiveCustomer(null);
       setPhoneSearch('');
+      setVoucherInput('');
+      setAppliedVoucher(null);
       setIsCheckoutOpen(false);
+      setIsReceiptOpen(true);
     } catch (err: any) {
       toast.error(err.message || 'Lỗi xử lý thanh toán.');
+    }
+  };
+
+  const handlePrintReceipt = () => {
+    if (!paidOrder) return;
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>In Hóa Đơn #${paidOrder.OrderID}</title>
+            <style>
+              body { font-family: monospace; width: 80mm; margin: 0; padding: 10px; color: #000; }
+              .center { text-align: center; }
+              .right { text-align: right; }
+              .bold { font-weight: bold; }
+              .dashed { border-bottom: 1px dashed #000; margin: 10px 0; }
+              .flex { display: flex; justify-content: space-between; }
+              table { width: 100%; border-collapse: collapse; }
+              th, td { padding: 4px 0; text-align: left; }
+              th.center, td.center { text-align: center; }
+              th.right, td.right { text-align: right; }
+              .line-through { text-decoration: line-through; font-size: 10px; color: #666; }
+            </style>
+          </head>
+          <body>
+            <div class="center">
+              <h2 style="margin:0;">PHÊLA CAFE</h2>
+              <p style="margin:2px 0;">Tầng 1, Tòa nhà Wow, TP. Hà Nội</p>
+              <p style="margin:2px 0;">SĐT: 0123.456.789</p>
+            </div>
+            <div class="dashed"></div>
+            <h3 class="center" style="margin:5px 0;">HÓA ĐƠN THANH TOÁN</h3>
+            <p style="margin:2px 0;">Số HĐ: #${paidOrder.OrderID}</p>
+            <p style="margin:2px 0;">Ngày: ${new Date(paidOrder.Date).toLocaleString('vi-VN')}</p>
+            ${paidOrder.Customer ? `<p style="margin:2px 0;">Khách hàng: ${paidOrder.Customer.CustomerName}</p>` : ''}
+            ${paidOrder.TableNumber ? `<p style="margin:2px 0;">Bàn: ${paidOrder.TableNumber}</p>` : ''}
+            <div class="dashed"></div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Món</th>
+                  <th class="center">SL</th>
+                  <th class="right">T.Tiền</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${paidOrder.Items.map((item: any) => {
+                  const itemTotal = item.UnitPrice * item.Quantity;
+                  const discounted = itemTotal * (1 - paidOrder.DiscountRate / 100);
+                  let priceHtml = itemTotal.toLocaleString('vi-VN');
+                  if (paidOrder.DiscountRate > 0) {
+                     priceHtml = `<div class="line-through">${itemTotal.toLocaleString('vi-VN')}</div><div>${discounted.toLocaleString('vi-VN')}</div>`;
+                  }
+                  return `
+                    <tr>
+                      <td style="padding-bottom: 4px;">
+                        <div class="bold">${item.DrinkName} (${item.SizeName})</div>
+                        <div style="font-size: 10px; color: #555;">Đường: ${item.Sugar}, Đá: ${item.Ice}</div>
+                      </td>
+                      <td class="center">${item.Quantity}</td>
+                      <td class="right">${priceHtml}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+            <div class="dashed"></div>
+            <div class="flex">
+              <span>Tổng cộng:</span>
+              <span class="bold">${paidOrder.BaseTotal.toLocaleString('vi-VN')}đ</span>
+            </div>
+            ${
+              paidOrder.VoucherDiscountAmount > 0
+                ? `<div class="flex">
+                  <span>Voucher (${paidOrder.AppliedVoucherCode}):</span>
+                  <span>-${paidOrder.VoucherDiscountAmount.toLocaleString('vi-VN')}đ</span>
+                </div>`
+                : ''
+            }
+            ${
+              paidOrder.MembershipDiscountAmount > 0
+                ? `<div class="flex">
+                  <span>Hội viên (${paidOrder.DiscountRate}%):</span>
+                  <span>-${paidOrder.MembershipDiscountAmount.toLocaleString('vi-VN')}đ</span>
+                </div>`
+                : ''
+            }
+            ${
+              paidOrder.PromotionDiscountAmount > 0
+                ? `<div class="flex">
+                  <span>CT Khuyến Mãi:</span>
+                  <span>-${paidOrder.PromotionDiscountAmount.toLocaleString('vi-VN')}đ</span>
+                </div>`
+                : ''
+            }
+            <div class="dashed"></div>
+            <div class="flex">
+              <span class="bold">THÀNH TIỀN:</span>
+              <span class="bold">${paidOrder.GrandTotal.toLocaleString('vi-VN')}đ</span>
+            </div>
+            <div class="dashed"></div>
+            <p class="center" style="font-style: italic;">Cảm ơn quý khách và hẹn gặp lại!</p>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 500);
     }
   };
 
@@ -246,6 +518,30 @@ export default function PosTerminal() {
             ))}
           </div>
         </div>
+
+        {/* Promotional Banner */}
+        {promotions.length > 0 && (
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-md p-4 flex items-center justify-between animate-fade-in-up mt-1 mb-1">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-full">
+                <Sparkles className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white flex items-center gap-2">
+                  Khuyến Mãi Đang Diễn Ra
+                  <Badge variant="warning" className="bg-white text-amber-600 px-2 py-0">LIVE</Badge>
+                </h3>
+                <p className="text-white/90 text-sm">
+                  {promotions.map(p => {
+                     const condition = p.MinQuantity > 0 ? ` (Mua từ ${p.MinQuantity} ly)` : '';
+                     const val = p.Type === 'PERCENT' ? `giảm ${p.Value}%` : p.Type === 'AMOUNT' ? `giảm ${p.Value.toLocaleString()}đ` : `tặng ${p.Value} ly`;
+                     return `${p.Name}: ${val}${condition}`;
+                  }).join(' | ')}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Menu Cards List */}
         <div className="flex-1 overflow-y-auto pr-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -349,9 +645,22 @@ export default function PosTerminal() {
                       Size: {item.SizeName}
                     </span>
                   </div>
-                  <span className="text-xs font-bold font-mono text-foreground">
-                    {(item.UnitPrice * item.Quantity).toLocaleString('vi-VN')}đ
-                  </span>
+                  <div className="flex flex-col items-end">
+                    {discountRate > 0 ? (
+                      <>
+                        <span className="text-[10px] font-bold font-mono text-muted-foreground line-through">
+                          {(item.UnitPrice * item.Quantity).toLocaleString('vi-VN')}đ
+                        </span>
+                        <span className="text-xs font-bold font-mono text-primary">
+                          {((item.UnitPrice * item.Quantity) * (1 - discountRate / 100)).toLocaleString('vi-VN')}đ
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-xs font-bold font-mono text-foreground">
+                        {(item.UnitPrice * item.Quantity).toLocaleString('vi-VN')}đ
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* note and qty counters */}
@@ -455,16 +764,55 @@ export default function PosTerminal() {
         {/* Pricing totals and checkout trigger */}
         <div className="space-y-4 pt-6 border-t border-border/60">
           <div className="space-y-2 text-xs">
+            
+            {/* Voucher input block */}
+            <div className="flex gap-2 mb-4 border-b border-border/40 pb-4">
+              <Input
+                placeholder="Nhập Voucher..."
+                className="h-8 text-xs flex-1"
+                value={voucherInput}
+                onChange={(e) => setVoucherInput(e.target.value)}
+                disabled={!!appliedVoucher}
+              />
+              {!appliedVoucher ? (
+                <Button 
+                  size="sm" 
+                  className="h-8 text-xs font-bold" 
+                  onClick={handleApplyVoucher} 
+                  disabled={isApplyingVoucher || !voucherInput}
+                >
+                  {isApplyingVoucher ? '...' : 'Áp dụng'}
+                </Button>
+              ) : (
+                <Button size="sm" variant="danger" className="h-8 px-2" onClick={() => {
+                  setAppliedVoucher(null);
+                  setVoucherInput('');
+                }}>
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+
             <div className="flex justify-between text-muted-foreground font-semibold">
               <span>Tổng tiền món:</span>
               <span className="font-mono">{baseTotal.toLocaleString('vi-VN')} đ</span>
             </div>
-            {discountAmount > 0 && (
+            
+            {appliedVoucher && (
               <div className="flex justify-between text-primary font-bold">
                 <span className="flex items-center gap-1">
-                  <Ticket className="w-3.5 h-3.5" /> Hội viên giảm giá ({discountRate}%):
+                  <Ticket className="w-3.5 h-3.5" /> Voucher ({appliedVoucher.Code}):
                 </span>
-                <span className="font-mono">-{discountAmount.toLocaleString('vi-VN')} đ</span>
+                <span className="font-mono">-{Math.floor(voucherDiscount).toLocaleString('vi-VN')} đ</span>
+              </div>
+            )}
+
+            {Math.floor(membershipDiscountAmount) > 0 && (
+              <div className="flex justify-between text-primary font-bold">
+                <span className="flex items-center gap-1">
+                  <Ticket className="w-3.5 h-3.5" /> Hội viên ({discountRate}%):
+                </span>
+                <span className="font-mono">-{Math.floor(membershipDiscountAmount).toLocaleString('vi-VN')} đ</span>
               </div>
             )}
             <div className="flex justify-between text-lg font-black text-foreground border-t border-border/40 pt-2">
@@ -500,9 +848,22 @@ export default function PosTerminal() {
                   <span>
                     {item.DrinkName} ({item.SizeName}) x {item.Quantity}
                   </span>
-                  <span className="font-mono">
-                    {(item.UnitPrice * item.Quantity).toLocaleString('vi-VN')} đ
-                  </span>
+                  <div className="flex flex-col items-end font-mono">
+                    {discountRate > 0 ? (
+                      <>
+                        <span className="text-[10px] text-muted-foreground line-through">
+                          {(item.UnitPrice * item.Quantity).toLocaleString('vi-VN')} đ
+                        </span>
+                        <span>
+                          {((item.UnitPrice * item.Quantity) * (1 - discountRate / 100)).toLocaleString('vi-VN')} đ
+                        </span>
+                      </>
+                    ) : (
+                      <span>
+                        {(item.UnitPrice * item.Quantity).toLocaleString('vi-VN')} đ
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -510,7 +871,7 @@ export default function PosTerminal() {
               {activeCustomer && (
                 <div className="flex justify-between text-primary font-bold">
                   <span>Ưu đãi thành viên ({discountRate}%):</span>
-                  <span>-{discountAmount.toLocaleString('vi-VN')} đ</span>
+                  <span>-{membershipDiscountAmount.toLocaleString('vi-VN')} đ</span>
                 </div>
               )}
               {selectedTable && (
@@ -541,6 +902,38 @@ export default function PosTerminal() {
               onClick={handleCheckoutSubmit}
             >
               Thanh Toán
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Receipt Dialog after checkout */}
+      <Dialog
+        isOpen={isReceiptOpen}
+        onClose={() => setIsReceiptOpen(false)}
+        title="Thanh toán thành công!"
+      >
+        <div className="space-y-6 flex flex-col items-center">
+          <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-2">
+            <CheckCircle className="w-8 h-8" />
+          </div>
+          <h4 className="text-xl font-bold text-center">Đơn hàng #{paidOrder?.OrderID}</h4>
+          <p className="text-center text-muted-foreground text-sm">
+            Hóa đơn đã được thanh toán hoàn tất. Bạn có muốn in hóa đơn cho khách không?
+          </p>
+          <div className="flex gap-4 w-full">
+            <Button
+              variant="outline"
+              className="flex-1 py-3 rounded-xl"
+              onClick={() => setIsReceiptOpen(false)}
+            >
+              Đóng (Lên đơn mới)
+            </Button>
+            <Button
+              className="flex-1 py-3 rounded-xl font-serif uppercase tracking-wider font-extrabold gap-2"
+              onClick={handlePrintReceipt}
+            >
+              <Ticket className="w-4 h-4" /> In Hóa Đơn
             </Button>
           </div>
         </div>

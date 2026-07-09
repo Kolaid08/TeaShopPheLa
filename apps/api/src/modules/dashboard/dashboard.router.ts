@@ -9,7 +9,7 @@ const router = Router();
 router.use(verifyJWT);
 
 // GET / - Retrieve live stats for store management dashboard
-router.get('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.get('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const today = new Date();
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
@@ -130,7 +130,7 @@ router.get('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
     // 6. Abandoned Carts (Giỏ hàng bị bỏ quên)
     const abandonedCartsRaw = await prisma.cart.findMany({
       where: {
-        Status: 'ACTIVE',
+        Status: 'ABANDONED',
         CartItems: { some: {} },
       },
       include: {

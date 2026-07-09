@@ -23,7 +23,7 @@ const employeeSchema = z.object({
 router.use(verifyJWT);
 
 // GET / - List employees with optional pagination & role filtering
-router.get('/', async (req, res, next) => {
+router.get('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const { page, limit, search, sortBy, sortDir, skip } = parsePagination(req.query);
     const roleIdQuery = req.query.roleId ? parseInt(req.query.roleId as string) : undefined;
@@ -73,7 +73,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // GET /:id - Single employee detail
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const empId = parseInt(req.params.id || '');
     if (isNaN(empId)) throw new AppError(400, 'Invalid ID format.');
@@ -93,7 +93,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a new employee (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const bodyData = employeeSchema.parse(req.body);
     if (!bodyData.password) {
@@ -134,7 +134,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PUT /:id - Update an employee (Manager/Admin only)
-router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const empId = parseInt(req.params.id || '');
     if (isNaN(empId)) throw new AppError(400, 'Invalid ID format.');
@@ -145,6 +145,18 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
       where: { EmployeeID: empId },
     });
     if (!targetEmployee) throw new AppError(404, 'Employee not found.');
+
+    // Check unique emails or PINCodes for other employees
+    const conflict = await prisma.employee.findFirst({
+      where: {
+        EmployeeID: { not: empId },
+        OR: [{ Email: bodyData.Email }, { PINCode: bodyData.PINCode }],
+      },
+    });
+
+    if (conflict) {
+      throw new AppError(409, 'Another employee with this Email or PIN Code already exists.');
+    }
 
     const updatePayload: any = {
       FullName: bodyData.FullName,
@@ -173,16 +185,25 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
 });
 
 // DELETE /:id - Delete an employee (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const empId = parseInt(req.params.id || '');
     if (isNaN(empId)) throw new AppError(400, 'Invalid ID format.');
 
-    await prisma.employee.delete({
-      where: { EmployeeID: empId },
-    });
-
-    return sendResponse(res, 200, true, 'Employee deleted successfully');
+    try {
+      await prisma.employee.delete({
+        where: { EmployeeID: empId },
+      });
+      return sendResponse(res, 200, true, 'Employee deleted successfully');
+    } catch (dbErr: any) {
+      if (dbErr.code === 'P2003') {
+        throw new AppError(
+          400,
+          'Không thể xóa nhân viên này vì có liên kết với dữ liệu Đơn hàng/Biên lai cũ. Hãy đổi mật khẩu và xóa thông tin nhạy cảm thay vì xóa tài khoản.'
+        );
+      }
+      throw dbErr;
+    }
   } catch (err) {
     next(err);
   }

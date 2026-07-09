@@ -152,7 +152,10 @@ router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, 
     });
 
     return sendResponse(res, 200, true, 'Drink size price layout deleted successfully');
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'P2003') {
+      return next(new AppError(400, 'Không thể xóa cấu hình Size này vì đã có đơn hàng liên quan. Vui lòng chuyển trạng thái sang Ngừng Bán.'));
+    }
     next(err);
   }
 });

@@ -43,7 +43,7 @@ export default function LiveChatPage() {
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
-      newSocket.emit('admin_join');
+      newSocket.emit('admin_join', { token: localStorage.getItem('phela_token') });
     });
 
     newSocket.on('new_message_in_session', ({ sessionId, message }) => {

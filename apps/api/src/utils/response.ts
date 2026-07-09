@@ -37,8 +37,8 @@ export const sendResponse = <T>(
 
 // Standard helper to extract query pagination parameters
 export const parsePagination = (query: any) => {
-  const page = parseInt(query.page as string) || 1;
-  const limit = parseInt(query.limit as string) || 10;
+  const page = Math.max(1, parseInt(query.page as string) || 1);
+  const limit = Math.max(1, parseInt(query.limit as string) || 10);
   const search = (query.search as string) || '';
   const sortBy = (query.sortBy as string) || 'createdAt';
   const sortDir = (query.sortDir as string)?.toLowerCase() === 'desc' ? 'desc' : 'asc';

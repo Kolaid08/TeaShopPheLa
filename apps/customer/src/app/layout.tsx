@@ -30,6 +30,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi" className={`${playfair.variable} ${dmsans.variable} light`}>
+      <head>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+      </head>
       <body className="font-sans bg-background text-foreground min-h-screen">
         <Providers>
           <main className="relative min-h-screen flex flex-col">{children}</main>

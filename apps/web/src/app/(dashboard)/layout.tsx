@@ -19,6 +19,7 @@ import {
   Menu,
   X,
   MessageCircle,
+  Gift,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -130,7 +131,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Kho nguyên liệu', path: '/inventory/ingredients', icon: Clock, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
     { name: 'Hóa đơn nhập kho', path: '/inventory/receipts', icon: FileText, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Nhà cung cấp', path: '/inventory/suppliers', icon: Users, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Hội viên (Loyalty)', path: '/customers', icon: Users, roles: ['ADMIN', 'MANAGER'] },
+    { name: 'Khách hàng (Loyalty)', path: '/customers', icon: Users, roles: ['ADMIN', 'MANAGER'] },
+    { name: 'Mã Giảm Giá (Vouchers)', path: '/vouchers', icon: DollarSign, roles: ['ADMIN', 'MANAGER'] },
+    { name: 'Combo Khuyến Mãi', path: '/promotions', icon: Gift, roles: ['ADMIN', 'MANAGER'] },
+    { name: 'Giỏ Hàng Bỏ Quên', path: '/abandoned-carts', icon: ShoppingBag, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Tài khoản Barista', path: '/employees', icon: Users, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Tính lương (Salary)', path: '/salary', icon: DollarSign, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Quản lý Rota & Công', path: '/shift-logs', icon: Calendar, roles: ['ADMIN', 'MANAGER', 'STAFF'] },

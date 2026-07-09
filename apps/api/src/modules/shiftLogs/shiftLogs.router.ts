@@ -23,7 +23,12 @@ router.get('/', async (req, res, next) => {
     const year = req.query.year ? parseInt(req.query.year as string) : undefined;
 
     const where: any = {};
-    if (employeeId) where.EmployeeID = employeeId;
+    const userRole = (req.user as any)?.Role?.RoleName;
+    if (userRole !== 'ADMIN' && userRole !== 'MANAGER') {
+      where.EmployeeID = (req.user as any)?.EmployeeID;
+    } else if (employeeId) {
+      where.EmployeeID = employeeId;
+    }
 
     if (month && year) {
       const startOfMonth = new Date(year, month - 1, 1);
@@ -81,9 +86,30 @@ router.post('/check-in', async (req, res, next) => {
     const today = new Date();
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
     const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+
+    // Prevent checking in if there is an active check-in within the last 24 hours
+    const activeCheckIn = await prisma.shiftLog.findFirst({
+      where: {
+        EmployeeID: employeeId,
+        CheckOutTime: null,
+        CheckInTime: {
+          gte: yesterday,
+        }
+      },
+      orderBy: { CheckInTime: 'desc' },
+    });
+
+    if (activeCheckIn) {
+      if (activeCheckIn.ShiftID === validatedData.ShiftID) {
+        throw new AppError(400, 'You have already checked-in for this shift and have not checked out.');
+      } else {
+        throw new AppError(400, 'You have an active shift that has not been checked out yet. Please check out first.');
+      }
+    }
 
     // Prevent checking in twice for the same shift on the same day
-    const alreadyCheckedIn = await prisma.shiftLog.findFirst({
+    const alreadyCheckedInToday = await prisma.shiftLog.findFirst({
       where: {
         EmployeeID: employeeId,
         ShiftID: validatedData.ShiftID,
@@ -94,8 +120,8 @@ router.post('/check-in', async (req, res, next) => {
       },
     });
 
-    if (alreadyCheckedIn) {
-      throw new AppError(400, 'You have already checked-in for this shift today.');
+    if (alreadyCheckedInToday) {
+      throw new AppError(400, 'You have already completed this shift today.');
     }
 
     // Evaluate dynamic late-status check
@@ -142,18 +168,16 @@ router.post('/check-out', async (req, res, next) => {
     }
 
     const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
 
-    // Find the active shift log for today that doesn't have checkOutTime yet
+    // Find the active shift log in the last 24 hours that doesn't have checkOutTime yet
     const activeLog = await prisma.shiftLog.findFirst({
       where: {
         EmployeeID: employeeId,
-        WorkDate: {
-          gte: todayStart,
-          lte: todayEnd,
-        },
         CheckOutTime: null,
+        CheckInTime: {
+          gte: yesterday,
+        }
       },
       orderBy: { CheckInTime: 'desc' },
     });
@@ -161,7 +185,7 @@ router.post('/check-out', async (req, res, next) => {
     if (!activeLog) {
       throw new AppError(
         400,
-        'No active check-in record found for today. Check-in first before checking out.',
+        'No active check-in record found in the last 24 hours. Check-in first before checking out.',
       );
     }
 

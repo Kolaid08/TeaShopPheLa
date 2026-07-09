@@ -19,6 +19,7 @@ const recipeSchema = z.object({
 
 // Protect routes
 router.use(verifyJWT);
+router.use(requireRole(['ADMIN', 'MANAGER', 'STAFF']));
 
 // GET / - List all recipes
 router.get('/', async (req, res, next) => {
@@ -93,7 +94,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a recipe + nested details in a transaction (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = recipeSchema.parse(req.body);
 
@@ -126,11 +127,16 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
         data: { DrinkSizeID: validatedData.DrinkSizeID },
       });
 
+      const groupedIngredients = validatedData.Ingredients.reduce((acc, curr) => {
+        acc[curr.IngredientID] = (acc[curr.IngredientID] || 0) + curr.Quantity;
+        return acc;
+      }, {} as Record<number, number>);
+
       await tx.recipeDetail.createMany({
-        data: validatedData.Ingredients.map((item) => ({
+        data: Object.entries(groupedIngredients).map(([ingId, qty]) => ({
           RecipeID: createdRecipe.RecipeID,
-          IngredientID: item.IngredientID,
-          Quantity: item.Quantity,
+          IngredientID: parseInt(ingId),
+          Quantity: qty,
         })),
       });
 
@@ -147,7 +153,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PUT /:id - Update a recipe and rebuild its ingredient details (Manager/Admin only)
-router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const recipeId = parseInt(req.params.id || '');
     if (isNaN(recipeId)) throw new AppError(400, 'Invalid ID format.');
@@ -158,6 +164,18 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
       where: { RecipeID: recipeId },
     });
     if (!recipeExists) throw new AppError(404, 'Recipe not found.');
+
+    if (validatedData.DrinkID !== recipeExists.DrinkID) {
+      const activeRecipeExists = await prisma.recipe.findFirst({
+        where: { DrinkID: validatedData.DrinkID },
+      });
+      if (activeRecipeExists) {
+        throw new AppError(
+          409,
+          'A recipe already exists for this drink. Update the existing recipe instead.',
+        );
+      }
+    }
 
     // Verify all ingredients exist
     const ingredientIds = validatedData.Ingredients.map((i) => i.IngredientID);
@@ -174,12 +192,16 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
         where: { RecipeID: recipeId },
       });
 
-      // 2. Re-insert new logs
+      const groupedIngredients = validatedData.Ingredients.reduce((acc, curr) => {
+        acc[curr.IngredientID] = (acc[curr.IngredientID] || 0) + curr.Quantity;
+        return acc;
+      }, {} as Record<number, number>);
+
       await tx.recipeDetail.createMany({
-        data: validatedData.Ingredients.map((item) => ({
+        data: Object.entries(groupedIngredients).map(([ingId, qty]) => ({
           RecipeID: recipeId,
-          IngredientID: item.IngredientID,
-          Quantity: item.Quantity,
+          IngredientID: parseInt(ingId),
+          Quantity: qty,
         })),
       });
 
@@ -198,7 +220,7 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
 });
 
 // DELETE /:id - Delete recipe and details (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const recipeId = parseInt(req.params.id || '');
     if (isNaN(recipeId)) throw new AppError(400, 'Invalid ID format.');

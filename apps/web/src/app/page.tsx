@@ -31,6 +31,8 @@ export default function Home() {
         const active = api.getCurrentUser();
         if (active && active.Role === 'STAFF') {
           router.push('/pos');
+        } else if (active && active.Role === 'SHIPPER') {
+          router.push('/shipper');
         } else {
           setIsAuthenticated(true);
         }

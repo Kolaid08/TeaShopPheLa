@@ -17,6 +17,10 @@ const drinkSchema = z.object({
     SizeID: z.number(),
     UnitPrice: z.number().positive(),
   })).min(1, 'Phải có ít nhất 1 size'),
+  RecipeDetails: z.array(z.object({
+    IngredientID: z.number(),
+    Quantity: z.number().positive(),
+  })).optional(),
 });
 
 // GET / - List drinks (Public)
@@ -46,6 +50,11 @@ router.get('/', async (req, res, next) => {
           },
           Reviews: {
             select: { Rating: true }
+          },
+          Recipes: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            include: { RecipeDetails: { include: { Ingredient: true } } }
           }
         },
       }),
@@ -100,6 +109,11 @@ router.get('/:id', async (req, res, next) => {
         },
         Reviews: {
           select: { Rating: true }
+        },
+        Recipes: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: { RecipeDetails: { include: { Ingredient: true } } }
         }
       },
     });
@@ -133,23 +147,41 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, 
   try {
     const validatedData = drinkSchema.parse(req.body);
 
-    const drink = await prisma.drink.create({
-      data: {
-        DrinkName: validatedData.DrinkName,
-        DrinkDescription: validatedData.DrinkDescription,
-        DrinkImageURL: validatedData.DrinkImageURL,
-        DrinkStatus: validatedData.DrinkStatus,
-        DrinkSizes: {
-          create: validatedData.sizes.map((s) => ({
-            SizeID: s.SizeID,
-            UnitPrice: s.UnitPrice,
-            DrinkSizeStatus: 'AVAILABLE',
-          })),
+    const drink = await prisma.$transaction(async (tx) => {
+      const newDrink = await tx.drink.create({
+        data: {
+          DrinkName: validatedData.DrinkName,
+          DrinkDescription: validatedData.DrinkDescription,
+          DrinkImageURL: validatedData.DrinkImageURL,
+          DrinkStatus: validatedData.DrinkStatus,
+          DrinkSizes: {
+            create: validatedData.sizes.map((s) => ({
+              SizeID: s.SizeID,
+              UnitPrice: s.UnitPrice,
+              DrinkSizeStatus: 'AVAILABLE',
+            })),
+          },
         },
-      },
-      include: {
-        DrinkSizes: true,
-      },
+        include: {
+          DrinkSizes: true,
+        },
+      });
+
+      if (validatedData.RecipeDetails && validatedData.RecipeDetails.length > 0) {
+        await tx.recipe.create({
+          data: {
+            DrinkID: newDrink.DrinkID,
+            RecipeDetails: {
+              create: validatedData.RecipeDetails.map(rd => ({
+                IngredientID: rd.IngredientID,
+                Quantity: rd.Quantity
+              }))
+            }
+          }
+        });
+      }
+
+      return newDrink;
     });
 
     return sendResponse(res, 201, true, 'Drink created successfully', drink);
@@ -213,6 +245,28 @@ router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res
         }
       }
 
+      // Update Recipes if provided
+      if (validatedData.RecipeDetails && validatedData.RecipeDetails.length > 0) {
+        // Remove existing recipes to maintain 1-to-1 mapping
+        const existingRecipes = await tx.recipe.findMany({ where: { DrinkID: drinkId } });
+        for (const er of existingRecipes) {
+           await tx.recipeDetail.deleteMany({ where: { RecipeID: er.RecipeID } });
+        }
+        await tx.recipe.deleteMany({ where: { DrinkID: drinkId } });
+
+        await tx.recipe.create({
+          data: {
+            DrinkID: drinkId,
+            RecipeDetails: {
+              create: validatedData.RecipeDetails.map(rd => ({
+                IngredientID: rd.IngredientID,
+                Quantity: rd.Quantity
+              }))
+            }
+          }
+        });
+      }
+
       return drink;
     });
 
@@ -259,7 +313,7 @@ router.post(
 );
 
 // DELETE /:id - Delete a drink (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const drinkId = parseInt(req.params.id || '');
     if (isNaN(drinkId)) throw new AppError(400, 'Invalid ID format.');
@@ -269,7 +323,10 @@ router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) 
     });
 
     return sendResponse(res, 200, true, 'Drink deleted successfully');
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'P2003') {
+      return next(new AppError(400, 'Không thể xóa Đồ uống này vì đã có dữ liệu liên quan (công thức, kích cỡ hoặc đơn đặt hàng). Vui lòng chuyển trạng thái sang Ngừng Bán.'));
+    }
     next(err);
   }
 });

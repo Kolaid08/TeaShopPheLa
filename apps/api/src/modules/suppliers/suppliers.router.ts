@@ -20,6 +20,7 @@ const supplierSchema = z.object({
 
 // Protect routes
 router.use(verifyJWT);
+router.use(requireRole(['ADMIN', 'MANAGER', 'STAFF']));
 
 // GET / - List suppliers with optional pagination
 router.get('/', async (req, res, next) => {
@@ -82,7 +83,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // POST / - Create a supplier with nested phone numbers (Manager/Admin only)
-router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const validatedData = supplierSchema.parse(req.body);
 
@@ -119,7 +120,7 @@ router.post('/', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
 });
 
 // PUT /:id - Update supplier details and rebuild phone list (Manager/Admin only)
-router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const supId = parseInt(req.params.id || '');
     if (isNaN(supId)) throw new AppError(400, 'Invalid ID format.');
@@ -170,7 +171,7 @@ router.put('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => 
 });
 
 // DELETE /:id - Delete supplier and phone numbers (Manager/Admin only)
-router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+router.delete('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
     const supId = parseInt(req.params.id || '');
     if (isNaN(supId)) throw new AppError(400, 'Invalid ID format.');
@@ -182,7 +183,10 @@ router.delete('/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) 
     });
 
     return sendResponse(res, 200, true, 'Supplier deleted successfully');
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'P2003') {
+      return next(new AppError(400, 'Không thể xóa Nhà Cung Cấp này vì họ đã có lịch sử nhập kho.'));
+    }
     next(err);
   }
 });

@@ -177,11 +177,11 @@ export const TableRow = ({ className, ...props }: React.HTMLAttributes<HTMLTable
   />
 );
 
-export const TableHead = ({ className, ...props }: React.HTMLAttributes<HTMLTableCellElement>) => (
+export const TableHead = ({ className, ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) => (
   <th className={cn('px-4 py-3.5 align-middle select-none font-medium', className)} {...props} />
 );
 
-export const TableCell = ({ className, ...props }: React.HTMLAttributes<HTMLTableCellElement>) => (
+export const TableCell = ({ className, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) => (
   <td className={cn('px-4 py-3.5 align-middle', className)} {...props} />
 );
 

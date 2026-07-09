@@ -17,6 +17,7 @@ export interface Drink {
   DrinkSizes?: DrinkSize[];
   AverageRating?: number;
   SalesCount?: number;
+  Recipes?: Recipe[];
 }
 
 export interface Size {
@@ -92,9 +93,14 @@ export interface Supplier {
 export interface IngredientReceipt {
   IngredientReceiptID: number;
   SupplierID: number;
+  ShipperID?: number;
   ReceivedDate: string;
-  IngredientReceiptStatus: 'PENDING' | 'CONFIRMED';
+  IngredientReceiptStatus: 'PENDING' | 'SHIPPING' | 'CONFIRMED';
+  ShippingAddress?: string;
+  Latitude?: number;
+  Longitude?: number;
   Supplier?: { SupplierName: string };
+  Shipper?: { FullName: string; PhoneNumber: string };
   IngredientReceiptDetails?: IngredientReceiptDetail[];
 }
 
@@ -134,17 +140,20 @@ export interface Order {
   ShopTableID?: number;
   EmployeeID: number;
   CreatedTime: string;
-  OrderStatus: 'PENDING' | 'PREPARING' | 'SHIPPING' | 'COMPLETED' | 'CANCELLED' | 'DELIVERY_FAILED';
+  OrderStatus: 'PENDING' | 'PREPARING' | 'SHIPPING' | 'COMPLETED' | 'CANCELLED';
   TotalPrice: number;
   OrderNote?: string;
-  DeliveryType?: string;
-  RecipientName?: string;
-  RecipientPhone?: string;
-  DeliveryAddress?: string;
-  GHN_OrderCode?: string;
-  RefundStatus?: string;
-  RefundAmount?: number;
-  RefundReason?: string;
+  OrderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
+  ShippingAddress?: string;
+  Latitude?: number;
+  Longitude?: number;
+  ReceiverName?: string;
+  ReceiverPhone?: string;
+  DeliveryMethod?: 'INTERNAL' | 'THIRD_PARTY';
+  ShipperID?: number;
+  ThirdPartyShipperName?: string;
+  ThirdPartyShipperPhone?: string;
+  TrackingURL?: string;
   Customer?: { CustomerName: string; PhoneNumber: string };
   ShopTable?: { ShopTableNumber: number };
   Employee?: { FullName: string };
@@ -434,6 +443,38 @@ class LocalDatabase {
   ];
 
   shiftLogs: ShiftLog[] = [];
+  ingredientReceipts: IngredientReceipt[] = [];
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      try {
+        const storedOrders = localStorage.getItem('phela_offline_orders');
+        if (storedOrders) this.orders = JSON.parse(storedOrders);
+
+        const storedCustomers = localStorage.getItem('phela_offline_customers');
+        if (storedCustomers) this.customers = JSON.parse(storedCustomers);
+
+        const storedTables = localStorage.getItem('phela_offline_tables');
+        if (storedTables) this.tables = JSON.parse(storedTables);
+      } catch (e) {
+        console.error('Failed to parse offline data', e);
+      }
+
+      // Persist periodically
+      setInterval(() => this.save(), 3000);
+      
+      // Persist on beforeunload
+      window.addEventListener('beforeunload', () => this.save());
+    }
+  }
+
+  save() {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('phela_offline_orders', JSON.stringify(this.orders));
+      localStorage.setItem('phela_offline_customers', JSON.stringify(this.customers));
+      localStorage.setItem('phela_offline_tables', JSON.stringify(this.tables));
+    }
+  }
 }
 
 const db = new LocalDatabase();
@@ -447,6 +488,20 @@ const getSessionUser = (): any => {
 };
 
 // Strongly-typed api handlers
+export interface Promotion {
+  PromotionID: number;
+  Name: string;
+  Description?: string;
+  Type: 'PERCENT' | 'AMOUNT' | 'FREE_ITEM';
+  Value: number;
+  MinQuantity: number;
+  TargetDrinkIDs?: string; // JSON string
+  StartDate?: string;
+  EndDate?: string;
+  IsActive: boolean;
+  IsCombo?: boolean;
+}
+
 export const api = {
   // Authentication
   login: async (PINCode: string, password?: string): Promise<any> => {
@@ -472,7 +527,7 @@ export const api = {
         employee: {
           EmployeeID: emp.EmployeeID,
           FullName: emp.FullName,
-          Role: emp.RoleID === 1 ? 'ADMIN' : emp.RoleID === 2 ? 'MANAGER' : 'STAFF',
+          Role: emp.RoleID === 1 ? 'ADMIN' : emp.RoleID === 2 ? 'MANAGER' : emp.RoleID === 4 ? 'SHIPPER' : 'STAFF',
         },
       };
       if (typeof window !== 'undefined') {
@@ -623,17 +678,7 @@ export const api = {
     }
   },
 
-  // INGREDIENTS
-  getIngredients: async (): Promise<Ingredient[]> => {
-    try {
-      return await api.request('/ingredients');
-    } catch {
-      return db.ingredients.map((ing) => ({
-        ...ing,
-        Unit: db.units.find((u) => u.UnitID === ing.UnitID),
-      }));
-    }
-  },
+
   getLowStockIngredients: async (threshold = 10): Promise<Ingredient[]> => {
     try {
       return await api.request(`/ingredients/low-stock?threshold=${threshold}`);
@@ -644,6 +689,17 @@ export const api = {
           ...ing,
           Unit: db.units.find((u) => u.UnitID === ing.UnitID),
         }));
+    }
+  },
+  // INGREDIENTS
+  getIngredients: async (): Promise<Ingredient[]> => {
+    try {
+      return await api.request('/ingredients?limit=1000');
+    } catch {
+      return db.ingredients.map(ing => ({
+        ...ing,
+        Unit: db.units.find(u => u.UnitID === ing.UnitID)
+      }));
     }
   },
   createIngredient: async (data: any): Promise<Ingredient> => {
@@ -1011,6 +1067,95 @@ export const api = {
       return db.orders[idx]!;
     }
   },
+  assignInternalShipper: async (orderId: number, shipperId: number): Promise<Order> => {
+    try {
+      return await api.request(`/shipper/assign-shipper`, {
+        method: 'POST',
+        body: JSON.stringify({ OrderID: orderId, ShipperID: shipperId }),
+      });
+    } catch (err: any) {
+      const idx = db.orders.findIndex((o) => o.OrderID === orderId);
+      if (idx === -1) throw err;
+      db.orders[idx]!.OrderStatus = 'SHIPPING';
+      db.orders[idx]!.DeliveryMethod = 'INTERNAL';
+      db.orders[idx]!.ShipperID = shipperId;
+      return db.orders[idx]!;
+    }
+  },
+  bookThirdPartyShipper: async (orderId: number): Promise<Order> => {
+    try {
+      return await api.request(`/shipper/book-third-party`, {
+        method: 'POST',
+        body: JSON.stringify({ OrderID: orderId }),
+      });
+    } catch (err: any) {
+      const idx = db.orders.findIndex((o) => o.OrderID === orderId);
+      if (idx === -1) throw err;
+      db.orders[idx]!.OrderStatus = 'SHIPPING';
+      db.orders[idx]!.DeliveryMethod = 'THIRD_PARTY';
+      db.orders[idx]!.ThirdPartyShipperName = 'Nguyễn Văn Grab (Mock)';
+      db.orders[idx]!.ThirdPartyShipperPhone = '0911222333';
+      db.orders[idx]!.TrackingURL = 'https://mock-tracking.phela.vn/TRACK-123';
+      return db.orders[idx]!;
+    }
+  },
+  getMyAssignedOrders: async (): Promise<Order[]> => {
+    try {
+      const res = await api.request(`/shipper/my-orders`);
+      return Array.isArray(res) ? res : res.data || [];
+    } catch {
+      const user = getSessionUser();
+      if (!user) return [];
+      return db.orders.filter(o => o.ShipperID === user.EmployeeID && ['SHIPPING', 'COMPLETED'].includes(o.OrderStatus)).map((o) => ({
+        ...o,
+        Customer: db.customers.find((c) => c.CustomerID === o.CustomerID),
+      }));
+    }
+  },
+  assignReceiptShipper: async (receiptId: number, shipperId: number, address?: string, lat?: number, lng?: number): Promise<IngredientReceipt> => {
+    try {
+      return await api.request(`/ingredient-receipts/${receiptId}/assign-shipper`, {
+        method: 'PATCH',
+        body: JSON.stringify({ ShipperID: shipperId, ShippingAddress: address, Latitude: lat, Longitude: lng }),
+      });
+    } catch (err: any) {
+      const idx = db.ingredientReceipts.findIndex((r: IngredientReceipt) => r.IngredientReceiptID === receiptId);
+      if (idx === -1) throw err;
+      db.ingredientReceipts[idx]!.IngredientReceiptStatus = 'SHIPPING';
+      db.ingredientReceipts[idx]!.ShipperID = shipperId;
+      db.ingredientReceipts[idx]!.ShippingAddress = address;
+      db.ingredientReceipts[idx]!.Latitude = lat;
+      db.ingredientReceipts[idx]!.Longitude = lng;
+      return db.ingredientReceipts[idx]!;
+    }
+  },
+  getShipperReceipts: async (): Promise<IngredientReceipt[]> => {
+    try {
+      const res = await api.request(`/shipper/my-receipts`);
+      return Array.isArray(res) ? res : res.data || [];
+    } catch {
+      const user = getSessionUser();
+      if (!user) return [];
+      return db.ingredientReceipts.filter((r: IngredientReceipt) => r.ShipperID === user.EmployeeID && ['SHIPPING', 'CONFIRMED'].includes(r.IngredientReceiptStatus)).map((r: IngredientReceipt) => ({
+        ...r,
+        Supplier: db.suppliers.find((s) => s.SupplierID === r.SupplierID),
+      }));
+    }
+  },
+  updateShipperReceiptStatus: async (receiptId: number, status: 'CONFIRMED'): Promise<IngredientReceipt> => {
+    try {
+      const res = await api.request(`/shipper/update-receipt-status`, {
+        method: 'POST',
+        body: JSON.stringify({ IngredientReceiptID: receiptId, Status: status }),
+      });
+      return res;
+    } catch (err: any) {
+      const idx = db.ingredientReceipts.findIndex((r: IngredientReceipt) => r.IngredientReceiptID === receiptId);
+      if (idx === -1) throw err;
+      db.ingredientReceipts[idx]!.IngredientReceiptStatus = status;
+      return db.ingredientReceipts[idx]!;
+    }
+  },
 
   refundOrder: async (id: number, amount: number, reason: string): Promise<Order> => {
     try {
@@ -1269,4 +1414,306 @@ export const api = {
       };
     }
   },
+
+  checkVoucher: async (code: string, customerId?: number, targetProductId?: number): Promise<any> => {
+    try {
+      return await api.request('/vouchers/check', {
+        method: 'POST',
+        body: JSON.stringify({ Code: code, CustomerID: customerId, TargetProductID: targetProductId }),
+      });
+    } catch (e: any) {
+      throw new Error(e.message || 'Mã giảm giá không hợp lệ');
+    }
+  },
+
+  getVouchers: async (): Promise<any[]> => {
+    try {
+      return await api.request('/vouchers');
+    } catch {
+      return [];
+    }
+  },
+
+  createVoucher: async (data: any): Promise<any> => {
+    try {
+      return await api.request('/vouchers', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi tạo voucher');
+    }
+  },
+  createShift: async (data: any): Promise<Shift> => {
+    try {
+      return await api.request('/shifts', { method: 'POST', body: JSON.stringify(data) });
+    } catch {
+      const newS = { ShiftID: db.shifts.length + 1, ...data };
+      db.shifts.push(newS);
+      return newS;
+    }
+  },
+  updateShift: async (id: number, data: any): Promise<Shift> => {
+    try {
+      return await api.request(`/shifts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    } catch {
+      const idx = db.shifts.findIndex((s) => s.ShiftID === id);
+      if (idx === -1) throw new Error('Shift not found');
+      db.shifts[idx] = { ...db.shifts[idx], ...data } as Shift;
+      return db.shifts[idx]!;
+    }
+  },
+  deleteShift: async (id: number): Promise<void> => {
+    try {
+      await api.request(`/shifts/${id}`, { method: 'DELETE' });
+    } catch {
+      db.shifts = db.shifts.filter((s) => s.ShiftID !== id);
+    }
+  },
+
+  // SHIFT LOGS (ATTENDANCE)
+  getShiftLogs: async (): Promise<ShiftLog[]> => {
+    try {
+      return await api.request('/shift-logs');
+    } catch {
+      return db.shiftLogs.map((l) => ({
+        ...l,
+        Employee: db.employees.find((e) => e.EmployeeID === l.EmployeeID),
+        Shift: db.shifts.find((s) => s.ShiftID === l.ShiftID),
+      }));
+    }
+  },
+  checkIn: async (shiftId: number): Promise<ShiftLog> => {
+    try {
+      return await api.request('/shift-logs/check-in', {
+        method: 'POST',
+        body: JSON.stringify({ ShiftID: shiftId }),
+      });
+    } catch {
+      const user = getSessionUser();
+      const today = new Date().toISOString().split('T')[0]!;
+      const newLog: ShiftLog = {
+        ShiftLogID: db.shiftLogs.length + 1,
+        EmployeeID: user.EmployeeID,
+        ShiftID: shiftId,
+        WorkDate: today,
+        CheckInTime: new Date().toISOString(),
+        ShiftStatus: 'PRESENT',
+      };
+      db.shiftLogs.push(newLog);
+      return newLog;
+    }
+  },
+  checkOut: async (): Promise<ShiftLog> => {
+    try {
+      return await api.request('/shift-logs/check-out', { method: 'POST' });
+    } catch {
+      const user = getSessionUser();
+      const log = db.shiftLogs.find((l) => l.EmployeeID === user.EmployeeID && !l.CheckOutTime);
+      if (!log) throw new Error('Bạn chưa Check-in ngày hôm nay.');
+      log.CheckOutTime = new Date().toISOString();
+      return log;
+    }
+  },
+
+  // SALARY
+  getSalaries: async (): Promise<Salary[]> => {
+    try {
+      return await api.request('/salary');
+    } catch {
+      return db.salaries.map((s) => ({
+        ...s,
+        Employee: db.employees.find((e) => e.EmployeeID === s.EmployeeID),
+      }));
+    }
+  },
+  generateSalaries: async (month: number, year: number): Promise<Salary[]> => {
+    try {
+      return await api.request('/salary/generate', {
+        method: 'POST',
+        body: JSON.stringify({ Month: month, Year: year }),
+      });
+    } catch {
+      const list: Salary[] = [];
+      db.employees.forEach((emp) => {
+        const role = db.roles.find((r) => r.RoleID === emp.RoleID);
+        const base = role?.DefaultBaseSalary || 5000000;
+        const exists = db.salaries.find(
+          (s) => s.EmployeeID === emp.EmployeeID && s.Month === month && s.Year === year,
+        );
+        if (exists) return;
+
+        const newSal: Salary = {
+          SalaryID: db.salaries.length + 1,
+          EmployeeID: emp.EmployeeID,
+          Month: month,
+          Year: year,
+          BaseSalary: base,
+          TotalHours: 160, // standard hours
+          Bonus: 200000,
+          Deduction: 50000,
+          RealSalary: base + 200000 - 50000,
+        };
+        db.salaries.push(newSal);
+        list.push(newSal);
+      });
+      return list;
+    }
+  },
+  paySalary: async (id: number): Promise<Salary> => {
+    try {
+      return await api.request(`/salary/${id}/pay`, { method: 'PATCH' });
+    } catch {
+      const sal = db.salaries.find((s) => s.SalaryID === id);
+      if (!sal) throw new Error('Salary sheet not found');
+      sal.PaidDate = new Date().toISOString();
+      return sal;
+    }
+  },
+
+  // DASHBOARD Operational stats
+  getDashboardStats: async (): Promise<any> => {
+    try {
+      return await api.request('/dashboard');
+    } catch {
+      // Return high-quality mock data curves
+      const todayRev =
+        db.orders
+          .filter((o) => o.OrderStatus === 'COMPLETED')
+          .reduce((acc, curr) => acc + curr.TotalPrice, 0) || 1285000;
+      const todayOrd = db.orders.length || 18;
+      const lowS = db.ingredients.filter((i) => i.QuantityStock < 10).length;
+      return {
+        todayRevenue: todayRev,
+        todayOrdersCount: todayOrd,
+        lowStockCount: lowS,
+        lowStockAlerts: db.ingredients
+          .filter((i) => i.QuantityStock < 10)
+          .map((i) => ({ ...i, Unit: db.units.find((u) => u.UnitID === i.UnitID) })),
+        bestSellers: db.drinkSizes.slice(0, 3).map((ds, i) => {
+          const d = db.drinks.find((dr) => dr.DrinkID === ds.DrinkID);
+          return {
+            DrinkName: d?.DrinkName || 'Artisanal Tea',
+            TotalSold: 28 - i * 5,
+          };
+        }),
+        monthlyRevenueChart: [
+          { month: 'Jan', revenue: 45000000 },
+          { month: 'Feb', revenue: 52000000 },
+          { month: 'Mar', revenue: 49000000 },
+          { month: 'Apr', revenue: 61000000 },
+          { month: 'May', revenue: 68000000 },
+          { month: 'Jun', revenue: 75000000 },
+        ],
+        abandonedCarts: [],
+      };
+    }
+  },
+
+  checkVoucher: async (code: string, customerId?: number, targetProductId?: number): Promise<any> => {
+    try {
+      return await api.request('/vouchers/check', {
+        method: 'POST',
+        body: JSON.stringify({ Code: code, CustomerID: customerId, TargetProductID: targetProductId }),
+      });
+    } catch (e: any) {
+      throw new Error(e.message || 'Mã giảm giá không hợp lệ');
+    }
+  },
+
+  getVouchers: async (): Promise<any[]> => {
+    try {
+      return await api.request('/vouchers');
+    } catch {
+      return [];
+    }
+  },
+
+  createVoucher: async (data: any): Promise<any> => {
+    try {
+      return await api.request('/vouchers', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi tạo voucher');
+    }
+  },
+
+  getAbandonedCarts: async (): Promise<any[]> => {
+    try {
+      return await api.request('/carts/admin/abandoned');
+    } catch {
+      return [];
+    }
+  },
+
+  mockAbandonedCarts: async (): Promise<any> => {
+    try {
+      return await api.request('/carts/admin/abandoned/mock', { method: 'POST' });
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi mock carts');
+    }
+  },
+
+  // PROMOTIONS
+  getPromotions: async () => await api.request('/promotions'),
+  createPromotion: async (data: any) => await api.request('/promotions', { method: 'POST', body: JSON.stringify(data) }),
+  updatePromotion: async (id: number, data: any) => await api.request(`/promotions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePromotion: async (id: number) => await api.request(`/promotions/${id}`, { method: 'DELETE' }),
+  
+  getChatboxCombos: async () => {
+    const res = await fetch(`${API_BASE}/promotions/chatbox-combos`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    return data;
+  },
+
+  syncOfflineOrders: async () => {
+    if (typeof window === 'undefined') return;
+    if (db.orders.length === 0) return;
+
+    for (let i = db.orders.length - 1; i >= 0; i--) {
+      const o = db.orders[i];
+      try {
+        const payload = {
+          CustomerID: o.CustomerID,
+          ShopTableID: o.ShopTableID,
+          OrderNote: o.OrderNote,
+          TotalPrice: o.TotalPrice,
+          Items: o.OrderDetails?.map(od => ({
+            DrinkSizeID: od.DrinkSizeID,
+            Quantity: od.Quantity,
+            Sugar: od.Sugar,
+            Ice: od.Ice,
+            Toppings: od.Toppings,
+          })) || []
+        };
+        const createdOrder = await api.request('/orders', { method: 'POST', body: JSON.stringify(payload) });
+        
+        if (o.OrderStatus !== 'PENDING') {
+          await api.request(`/orders/${createdOrder.OrderID}/status`, { 
+            method: 'PATCH', 
+            body: JSON.stringify({ OrderStatus: o.OrderStatus }) 
+          });
+        }
+        
+        // Remove from offline DB
+        db.orders.splice(i, 1);
+        db.save();
+      } catch (err) {
+        // Stop syncing on first failure to maintain order and avoid hammering the offline server
+        break; 
+      }
+    }
+  }
 };
+
+// Start background job for syncing offline orders
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    api.syncOfflineOrders().catch(console.error);
+  }, 10000);
+}

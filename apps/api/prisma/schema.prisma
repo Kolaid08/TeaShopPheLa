@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,10 +6,6 @@ datasource db {
   provider = "sqlserver"
   url      = env("DATABASE_URL")
 }
-
-// ==========================================
-// Models & Entity Definitions
-// ==========================================
 
 model Drink {
   DrinkID          Int         @id @default(autoincrement())
@@ -23,8 +16,6 @@ model Drink {
   IsFeatured       Boolean     @default(false)
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
-
-  // Relationships
   DrinkSizes       DrinkSize[]
   Reviews          Review[]
 
@@ -39,28 +30,24 @@ model Size {
   WeightGram  Int         @default(500) // Trọng lượng ước tính (gram) dùng cho GHN
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
-
-  // Relationships
   DrinkSizes  DrinkSize[]
 
   @@map("Size")
 }
 
 model DrinkSize {
-  DrinkSizeID     Int      @id @default(autoincrement())
+  DrinkSizeID     Int           @id @default(autoincrement())
   DrinkID         Int
   SizeID          Int
-  UnitPrice       Decimal  @db.Decimal(10, 2)
-  DrinkSizeStatus String   @default("AVAILABLE") @db.VarChar(50) // Handled as String for SQL Server
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  // Relationships
-  Drink           Drink    @relation(fields: [DrinkID], references: [DrinkID], onUpdate: Cascade, onDelete: Cascade, map: "FK_DrinkSize_Drink")
-  Size            Size     @relation(fields: [SizeID], references: [SizeID], onUpdate: Cascade, onDelete: Cascade, map: "FK_DrinkSize_Size")
+  UnitPrice       Decimal       @db.Decimal(10, 2)
+  DrinkSizeStatus String        @default("AVAILABLE") @db.VarChar(50)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  Drink           Drink         @relation(fields: [DrinkID], references: [DrinkID], onDelete: Cascade, map: "FK_DrinkSize_Drink")
+  Size            Size          @relation(fields: [SizeID], references: [SizeID], onDelete: Cascade, map: "FK_DrinkSize_Size")
   OrderDetails    OrderDetail[]
-  Recipes         Recipe[]
   CartItems       CartItem[]
+  Vouchers        Voucher[]
 
   @@map("DrinkSize")
 }
@@ -70,9 +57,7 @@ model Recipe {
   DrinkSizeID   Int
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-
-  // Relationships
-  DrinkSize     DrinkSize      @relation(fields: [DrinkSizeID], references: [DrinkSizeID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Recipe_DrinkSize")
+  Drink         Drink          @relation(fields: [DrinkID], references: [DrinkID], onDelete: Cascade, map: "FK_Recipe_Drink")
   RecipeDetails RecipeDetail[]
 
   @@map("Recipe")
@@ -85,12 +70,9 @@ model Ingredient {
   UnitID                   Int
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
-
-  // Relationships
-  Unit                     Unit                      @relation(fields: [UnitID], references: [UnitID], onUpdate: Cascade, onDelete: NoAction, map: "FK_Ingredient_Unit") // SQL Server uses NoAction instead of Restrict
-  RecipeDetails            RecipeDetail[]
-  ToppingRecipeDetails     ToppingRecipeDetail[]
+  Unit                     Unit                      @relation(fields: [UnitID], references: [UnitID], map: "FK_Ingredient_Unit")
   IngredientReceiptDetails IngredientReceiptDetail[]
+  RecipeDetails            RecipeDetail[]
 
   @@map("Ingredient")
 }
@@ -100,8 +82,6 @@ model Unit {
   UnitName    String       @db.NVarChar(50)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
-
-  // Relationships
   Ingredients Ingredient[]
 
   @@map("Unit")
@@ -113,10 +93,8 @@ model RecipeDetail {
   Quantity     Decimal    @db.Decimal(10, 2)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
-
-  // Relationships
-  Recipe       Recipe     @relation(fields: [RecipeID], references: [RecipeID], onUpdate: Cascade, onDelete: Cascade, map: "FK_RecipeDetail_Recipe")
-  Ingredient   Ingredient @relation(fields: [IngredientID], references: [IngredientID], onUpdate: Cascade, onDelete: NoAction, map: "FK_RecipeDetail_Ingredient") // SQL Server uses NoAction
+  Ingredient   Ingredient @relation(fields: [IngredientID], references: [IngredientID], map: "FK_RecipeDetail_Ingredient")
+  Recipe       Recipe     @relation(fields: [RecipeID], references: [RecipeID], onDelete: Cascade, map: "FK_RecipeDetail_Recipe")
 
   @@id([RecipeID, IngredientID])
   @@map("RecipeDetail")
@@ -159,10 +137,8 @@ model Supplier {
   Ward               String?             @db.NVarChar(100)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
-
-  // Relationships
-  SupplierPhones     SupplierPhone[]
   IngredientReceipts IngredientReceipt[]
+  SupplierPhones     SupplierPhone[]
 
   @@map("Supplier")
 }
@@ -173,23 +149,24 @@ model SupplierPhone {
   PhoneNumber     String   @db.VarChar(20)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
-  // Relationships
-  Supplier        Supplier @relation(fields: [SupplierID], references: [SupplierID], onUpdate: Cascade, onDelete: Cascade, map: "FK_SupplierPhone_Supplier")
+  Supplier        Supplier @relation(fields: [SupplierID], references: [SupplierID], onDelete: Cascade, map: "FK_SupplierPhone_Supplier")
 
   @@map("SupplierPhone")
 }
 
 model IngredientReceipt {
-  IngredientReceiptID     Int                       @id @default(autoincrement())
-  SupplierID              Int
-  ReceivedDate            DateTime
-  IngredientReceiptStatus String                    @db.VarChar(50)
-  createdAt               DateTime                  @default(now())
-  updatedAt               DateTime                  @updatedAt
-
-  // Relationships
-  Supplier                Supplier                  @relation(fields: [SupplierID], references: [SupplierID], onUpdate: Cascade, onDelete: NoAction, map: "FK_IngredientReceipt_Supplier") // SQL Server uses NoAction
+  IngredientReceiptID      Int                       @id @default(autoincrement())
+  SupplierID               Int
+  ShipperID                Int?
+  ReceivedDate             DateTime
+  IngredientReceiptStatus  String                    @db.VarChar(50)
+  ShippingAddress          String?                   @db.NVarChar(255)
+  Latitude                 Float?
+  Longitude                Float?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  Supplier                 Supplier                  @relation(fields: [SupplierID], references: [SupplierID], map: "FK_IngredientReceipt_Supplier")
+  Shipper                  Employee?                 @relation("ReceiptShipper", fields: [ShipperID], references: [EmployeeID], onDelete: NoAction, onUpdate: NoAction, map: "FK_IngredientReceipt_Shipper")
   IngredientReceiptDetails IngredientReceiptDetail[]
 
   @@map("IngredientReceipt")
@@ -202,10 +179,8 @@ model IngredientReceiptDetail {
   CostPrice           Decimal           @db.Decimal(10, 2)
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
-
-  // Relationships
-  IngredientReceipt   IngredientReceipt @relation(fields: [IngredientReceiptID], references: [IngredientReceiptID], onUpdate: Cascade, onDelete: Cascade, map: "FK_IngredientReceiptDetail_IngredientReceipt")
-  Ingredient          Ingredient        @relation(fields: [IngredientID], references: [IngredientID], onUpdate: Cascade, onDelete: NoAction, map: "FK_IngredientReceiptDetail_Ingredient") // SQL Server uses NoAction
+  Ingredient          Ingredient        @relation(fields: [IngredientID], references: [IngredientID], map: "FK_IngredientReceiptDetail_Ingredient")
+  IngredientReceipt   IngredientReceipt @relation(fields: [IngredientReceiptID], references: [IngredientReceiptID], onDelete: Cascade, map: "FK_IngredientReceiptDetail_IngredientReceipt")
 
   @@id([IngredientReceiptID, IngredientID])
   @@map("IngredientReceiptDetail")
@@ -218,8 +193,6 @@ model MemberShipLevel {
   RequiredMoney Decimal    @db.Decimal(15, 2)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
-
-  // Relationships
   Customers     Customer[]
 
   @@map("MemberShipLevel")
@@ -234,68 +207,61 @@ model Customer {
   LevelID            Int
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
-
-  // Relationships
-  MemberShipLevel    MemberShipLevel @relation(fields: [LevelID], references: [LevelID], onUpdate: Cascade, onDelete: NoAction, map: "FK_Customer_MemberShipLevel") // SQL Server uses NoAction
-  Orders             Orders[]
-  Reviews            Review[]
   Carts              Cart[]
   ChatSessions       ChatSession[]
+  MemberShipLevel    MemberShipLevel @relation(fields: [LevelID], references: [LevelID], map: "FK_Customer_MemberShipLevel")
+  Orders             Orders[]
+  Reviews            Review[]
+  Vouchers           Voucher[]
 
   @@map("Customer")
 }
 
 model ShopTable {
-  ShopTableID      Int      @id @default(autoincrement())
-  ShopTableNumber  Int
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  // Relationships
-  Orders           Orders[]
+  ShopTableID     Int      @id @default(autoincrement())
+  ShopTableNumber Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  Orders          Orders[]
 
   @@map("ShopTable")
 }
 
 model Orders {
-  OrderID      Int           @id @default(autoincrement())
-  CustomerID   Int?
-  ShopTableID  Int?
-  EmployeeID   Int
-  CreatedTime  DateTime      @default(now())
-  OrderStatus  String        @default("PENDING") @db.VarChar(50) // Handled as String for SQL Server
-  TotalPrice   Decimal       @db.Decimal(10, 2)
-  OrderNote    String?       @db.NVarChar(500)
-  PaymentMethod String?      @db.VarChar(50)
-  PaymentStatus String?      @db.VarChar(50)
-  AppTransId   String?       @db.VarChar(100)
-  
-  // GHN Shipping Info
-  DeliveryType   String        @default("DINE_IN") @db.VarChar(50)
-  RecipientName  String?       @db.NVarChar(255)
-  RecipientPhone String?       @db.VarChar(20)
-  DeliveryAddress String?      @db.NVarChar(500)
-  ProvinceID     Int?
-  DistrictID     Int?
-  WardCode       String?       @db.VarChar(50)
-  ShippingFee    Decimal?      @db.Decimal(10, 2)
-  DiscountAmount Decimal?      @db.Decimal(10, 2)
-  GHN_OrderCode  String?       @db.VarChar(100)
-
-  // Refund Info
-  RefundStatus   String        @default("NONE") @db.VarChar(50) // NONE, REQUESTED, PARTIAL, FULL
-  RefundAmount   Decimal?      @db.Decimal(10, 2)
-  RefundReason   String?       @db.NVarChar(500)
-
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  // Relationships
-  Customer     Customer?     @relation(fields: [CustomerID], references: [CustomerID], onUpdate: Cascade, onDelete: SetNull, map: "FK_Orders_Customer")
-  ShopTable    ShopTable?    @relation(fields: [ShopTableID], references: [ShopTableID], onUpdate: Cascade, onDelete: SetNull, map: "FK_Orders_ShopTable")
-  Employee     Employee      @relation(fields: [EmployeeID], references: [EmployeeID], onUpdate: Cascade, onDelete: NoAction, map: "FK_Orders_Employee") // SQL Server uses NoAction
-  OrderDetails OrderDetail[]
-  Reviews      Review[]
+  OrderID         Int           @id @default(autoincrement())
+  CustomerID      Int?
+  ShopTableID     Int?
+  EmployeeID      Int
+  ShipperID       Int?
+  OrderType       String        @default("DINE_IN") @db.VarChar(50)
+  ShippingAddress String?       @db.NVarChar(255)
+  Latitude        Float?
+  Longitude       Float?
+  Distance        Float?
+  ReceiverName    String?       @db.NVarChar(255)
+  ReceiverPhone   String?       @db.VarChar(20)
+  ShippingFee     Decimal?      @default(0) @db.Decimal(10, 2)
+  DeliveryMethod  String?       @db.VarChar(50)
+  ThirdPartyShipperName String? @db.NVarChar(255)
+  ThirdPartyShipperPhone String? @db.VarChar(20)
+  TrackingURL     String?       @db.VarChar(500)
+  CreatedTime     DateTime      @default(now())
+  OrderStatus     String        @default("PENDING") @db.VarChar(50)
+  TotalPrice      Decimal       @db.Decimal(10, 2)
+  OrderNote       String?       @db.NVarChar(500)
+  PaymentMethod   String?       @db.VarChar(50)
+  PaymentStatus   String?       @db.VarChar(50)
+  AppTransId      String?       @db.VarChar(100)
+  RefundReason    String?       @db.NVarChar(500)
+  RefundStatus    String?       @db.VarChar(50)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  OrderDetails    OrderDetail[]
+  Customer        Customer?     @relation(fields: [CustomerID], references: [CustomerID], onDelete: SetNull, map: "FK_Orders_Customer")
+  Employee        Employee      @relation("OrderCreator", fields: [EmployeeID], references: [EmployeeID], map: "FK_Orders_Employee")
+  Shipper         Employee?     @relation("OrderShipper", fields: [ShipperID], references: [EmployeeID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Orders_Shipper")
+  ShopTable       ShopTable?    @relation(fields: [ShopTableID], references: [ShopTableID], map: "FK_Orders_ShopTable")
+  Reviews         Review[]
 
   @@map("Orders")
 }
@@ -309,34 +275,32 @@ model OrderDetail {
   Ice           String    @default("100%") @db.VarChar(20)
   Toppings      String?   @db.NVarChar(500)
   UnitPrice     Decimal   @db.Decimal(10, 2)
-  createdAt     DateTime  @db.DateTime2 @default(now())
+  createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-
-  // Relationships
-  Orders        Orders    @relation(fields: [OrderID], references: [OrderID], onUpdate: Cascade, onDelete: Cascade, map: "FK_OrderDetail_Orders")
-  DrinkSize     DrinkSize @relation(fields: [DrinkSizeID], references: [DrinkSizeID], onUpdate: Cascade, onDelete: NoAction, map: "FK_OrderDetail_DrinkSize") // SQL Server uses NoAction
+  DrinkSize     DrinkSize @relation(fields: [DrinkSizeID], references: [DrinkSizeID], map: "FK_OrderDetail_DrinkSize")
+  Orders        Orders    @relation(fields: [OrderID], references: [OrderID], onDelete: Cascade, map: "FK_OrderDetail_Orders")
 
   @@map("OrderDetail")
 }
 
 model Employee {
-  EmployeeID  Int          @id @default(autoincrement())
-  FullName    String       @db.NVarChar(255)
-  PhoneNumber String       @db.VarChar(20)
-  Email       String       @db.VarChar(255)
-  Birth       DateTime
-  Sex         String       @db.VarChar(20) // Handled as String for SQL Server
-  PINCode     String       @db.VarChar(10)
-  password    String       @db.VarChar(255)
-  RoleID      Int
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-
-  // Relationships
-  Role        EmployeeRole @relation(fields: [RoleID], references: [RoleID], onUpdate: Cascade, onDelete: NoAction, map: "FK_Employee_EmployeeRole") // SQL Server uses NoAction
-  Orders      Orders[]
-  Salaries    Salary[]
-  ShiftLogs   ShiftLog[]
+  EmployeeID    Int          @id @default(autoincrement())
+  FullName      String       @db.NVarChar(255)
+  PhoneNumber   String       @db.VarChar(20)
+  Email         String       @db.VarChar(255)
+  Birth         DateTime
+  Sex           String       @db.VarChar(20)
+  PINCode       String       @db.VarChar(10)
+  password      String       @db.VarChar(255)
+  RoleID        Int
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  Role          EmployeeRole @relation(fields: [RoleID], references: [RoleID], map: "FK_Employee_EmployeeRole")
+  Orders        Orders[]     @relation("OrderCreator")
+  ShippedOrders Orders[]     @relation("OrderShipper")
+  ShippedReceipts IngredientReceipt[] @relation("ReceiptShipper")
+  Salaries      Salary[]
+  ShiftLogs     ShiftLog[]
 
   @@map("Employee")
 }
@@ -348,29 +312,25 @@ model EmployeeRole {
   DefaultBaseSalary Decimal    @db.Decimal(15, 2)
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
-
-  // Relationships
   Employees         Employee[]
 
   @@map("EmployeeRole")
 }
 
 model Salary {
-  SalaryID     Int       @id @default(autoincrement())
-  EmployeeID   Int
-  Month        Int
-  Year         Int
-  BaseSalary   Decimal   @db.Decimal(15, 2)
-  TotalHours   Decimal   @db.Decimal(6, 2)
-  Bonus        Decimal   @db.Decimal(15, 2)
-  Deduction    Decimal   @db.Decimal(15, 2)
-  RealSalary   Decimal   @db.Decimal(15, 2)
-  PaidDate     DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  // Relationships
-  Employee     Employee  @relation(fields: [EmployeeID], references: [EmployeeID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Salary_Employee")
+  SalaryID   Int       @id @default(autoincrement())
+  EmployeeID Int
+  Month      Int
+  Year       Int
+  BaseSalary Decimal   @db.Decimal(15, 2)
+  TotalHours Decimal   @db.Decimal(6, 2)
+  Bonus      Decimal   @db.Decimal(15, 2)
+  Deduction  Decimal   @db.Decimal(15, 2)
+  RealSalary Decimal   @db.Decimal(15, 2)
+  PaidDate   DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  Employee   Employee  @relation(fields: [EmployeeID], references: [EmployeeID], onDelete: Cascade, map: "FK_Salary_Employee")
 
   @@map("Salary")
 }
@@ -383,101 +343,129 @@ model Shift {
   Note      String?    @db.NVarChar(255)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
-
-  // Relationships
   ShiftLogs ShiftLog[]
 
   @@map("Shift")
 }
 
 model ShiftLog {
-  ShiftLogID   Int      @id @default(autoincrement())
+  ShiftLogID   Int       @id @default(autoincrement())
   EmployeeID   Int
   ShiftID      Int
   WorkDate     DateTime
   CheckInTime  DateTime?
   CheckOutTime DateTime?
-  ShiftStatus  String   @db.VarChar(50) // Handled as String for SQL Server
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  // Relationships
-  Employee     Employee @relation(fields: [EmployeeID], references: [EmployeeID], onUpdate: Cascade, onDelete: Cascade, map: "FK_ShiftLog_Employee")
-  Shift        Shift    @relation(fields: [ShiftID], references: [ShiftID], onUpdate: Cascade, onDelete: NoAction, map: "FK_ShiftLog_Shift") // SQL Server uses NoAction
+  ShiftStatus  String    @db.VarChar(50)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  Employee     Employee  @relation(fields: [EmployeeID], references: [EmployeeID], onDelete: Cascade, map: "FK_ShiftLog_Employee")
+  Shift        Shift     @relation(fields: [ShiftID], references: [ShiftID], map: "FK_ShiftLog_Shift")
 
   @@map("ShiftLog")
 }
 
 model Cart {
-  CartID      Int        @id @default(autoincrement())
-  SessionID   String?    @db.VarChar(100)
-  CustomerID  Int?
-  Status      String     @default("ACTIVE") @db.VarChar(50)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  Customer    Customer?  @relation(fields: [CustomerID], references: [CustomerID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Cart_Customer")
-  CartItems   CartItem[]
+  CartID     Int        @id @default(autoincrement())
+  SessionID  String?    @db.VarChar(100)
+  CustomerID Int?
+  Status     String     @default("ACTIVE") @db.VarChar(50)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  Customer   Customer?  @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade, map: "FK_Cart_Customer")
+  CartItems  CartItem[]
 
   @@map("Cart")
 }
 
 model CartItem {
-  CartItemID  Int        @id @default(autoincrement())
+  CartItemID  Int      @id @default(autoincrement())
   CartID      Int
   DrinkSizeID Int
   Quantity    Int
-  Sugar       String     @default("100%") @db.VarChar(20)
-  Ice         String     @default("100%") @db.VarChar(20)
-  Toppings    String?    @db.NVarChar(500)
-  UnitPrice   Decimal    @db.Decimal(10, 2)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  Cart        Cart       @relation(fields: [CartID], references: [CartID], onUpdate: Cascade, onDelete: Cascade, map: "FK_CartItem_Cart")
-  DrinkSize   DrinkSize  @relation(fields: [DrinkSizeID], references: [DrinkSizeID], onUpdate: Cascade, onDelete: Cascade, map: "FK_CartItem_DrinkSize")
+  Sugar       String   @default("100%") @db.VarChar(20)
+  Ice         String   @default("100%") @db.VarChar(20)
+  Toppings    String?  @db.NVarChar(500)
+  UnitPrice   Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  Cart        Cart      @relation(fields: [CartID], references: [CartID], onDelete: Cascade, map: "FK_CartItem_Cart")
+  DrinkSize   DrinkSize @relation(fields: [DrinkSizeID], references: [DrinkSizeID], map: "FK_CartItem_DrinkSize")
 
   @@map("CartItem")
 }
 
 model Review {
-  ReviewID    Int        @id @default(autoincrement())
-  CustomerID  Int
-  DrinkID     Int
-  OrderID     Int?
-  Rating      Int        @db.TinyInt
-  Comment     String?    @db.NVarChar(500)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  Customer    Customer   @relation(fields: [CustomerID], references: [CustomerID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Review_Customer")
-  Drink       Drink      @relation(fields: [DrinkID], references: [DrinkID], onUpdate: Cascade, onDelete: Cascade, map: "FK_Review_Drink")
-  Order       Orders?    @relation(fields: [OrderID], references: [OrderID], onUpdate: NoAction, onDelete: NoAction, map: "FK_Review_Order")
+  ReviewID   Int      @id @default(autoincrement())
+  CustomerID Int
+  DrinkID    Int
+  OrderID    Int?
+  Rating     Int      @db.TinyInt
+  Comment    String?  @db.NVarChar(500)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  Customer   Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade, map: "FK_Review_Customer")
+  Drink      Drink    @relation(fields: [DrinkID], references: [DrinkID], onDelete: Cascade, map: "FK_Review_Drink")
+  Order      Orders?  @relation(fields: [OrderID], references: [OrderID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Review_Order")
 
   @@map("Review")
 }
 
 model ChatSession {
-  SessionID   String        @id @default(uuid()) @db.UniqueIdentifier
-  CustomerID  Int?
-  Status      String        @default("AI_HANDLING") @db.VarChar(50) // AI_HANDLING, WAITING_FOR_ADMIN, ADMIN_HANDLING, CLOSED
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-
-  Customer    Customer?     @relation(fields: [CustomerID], references: [CustomerID], onUpdate: Cascade, onDelete: Cascade, map: "FK_ChatSession_Customer")
-  Messages    ChatMessage[]
+  SessionID  String        @id @default(uuid()) @db.UniqueIdentifier
+  CustomerID Int?
+  Status     String        @default("AI_HANDLING") @db.VarChar(50)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  Messages   ChatMessage[]
+  Customer   Customer?     @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade, map: "FK_ChatSession_Customer")
 
   @@map("ChatSession")
 }
 
 model ChatMessage {
-  MessageID   Int         @id @default(autoincrement())
-  SessionID   String      @db.UniqueIdentifier
-  SenderType  String      @db.VarChar(20) // CUSTOMER, AI, ADMIN
-  Content     String      @db.NVarChar(Max)
-  createdAt   DateTime    @default(now())
-
-  Session     ChatSession @relation(fields: [SessionID], references: [SessionID], onUpdate: Cascade, onDelete: Cascade, map: "FK_ChatMessage_ChatSession")
+  MessageID  Int         @id @default(autoincrement())
+  SessionID  String      @db.UniqueIdentifier
+  SenderType String      @db.VarChar(20)
+  Content    String      @db.NVarChar(Max)
+  createdAt  DateTime    @default(now())
+  Session    ChatSession @relation(fields: [SessionID], references: [SessionID], onDelete: Cascade, map: "FK_ChatMessage_ChatSession")
 
   @@map("ChatMessage")
+}
+
+model Voucher {
+  VoucherID       Int         @id @default(autoincrement())
+  Code            String      @unique @db.VarChar(50)
+  DiscountType    String      @default("PERCENT") @db.VarChar(20)
+  DiscountValue   Decimal     @db.Decimal(15, 2)
+  TargetProductID Int?
+  OwnerID         Int?
+  Creator         String      @default("ADMIN") @db.VarChar(20)
+  IsUsed          Boolean     @default(false)
+  ValidUntil      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  Customer        Customer?   @relation(fields: [OwnerID], references: [CustomerID], onDelete: Cascade, map: "FK_Voucher_Customer")
+  DrinkSize       DrinkSize?  @relation(fields: [TargetProductID], references: [DrinkSizeID], onDelete: Cascade, map: "FK_Voucher_DrinkSize")
+
+  @@map("Voucher")
+}
+
+model Promotion {
+  PromotionID    Int         @id @default(autoincrement())
+  Name           String      @db.NVarChar(255)
+  Description    String?     @db.NVarChar(500)
+  Type           String      @default("PERCENT") @db.VarChar(20)
+  Value          Decimal     @db.Decimal(15, 2)
+  MinQuantity    Int         @default(2)
+  TargetDrinkIDs String?     @db.NVarChar(500)
+  IsActive       Boolean     @default(true)
+  IsCombo        Boolean     @default(false)
+  StartDate      DateTime?
+  EndDate        DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@map("Promotion")
 }

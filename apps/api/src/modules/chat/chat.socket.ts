@@ -1,8 +1,10 @@
 import { Server, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
-import { createSession, getSessionById, addMessage, updateSessionStatus } from './chat.service';
+import { createSession, getSessionById, addMessage, updateSessionStatus, updateSessionCustomer } from './chat.service';
 import { generateAIResponse } from './ai.service';
 import { config } from '../../config';
+import jwt from 'jsonwebtoken';
+import { UserPayload } from '../../middleware/auth';
 
 let io: Server;
 
@@ -19,18 +21,32 @@ export const initSocketIo = (server: HttpServer) => {
     console.log(`New socket connection: ${socket.id}`);
 
     // Customer joins their own session room
-    socket.on('join_session', async ({ sessionId, customerId }: { sessionId: string, customerId?: number }) => {
-      let session: any = await getSessionById(sessionId);
+    socket.on('join_session', async ({ sessionId, customerId, token }: { sessionId: string, customerId?: number, token?: string }) => {
+      if (customerId) {
+        if (!token) return; // Unauthorized
+        try {
+          const decoded = jwt.verify(token, config.jwt.accessSecret) as UserPayload;
+          if (decoded.CustomerID !== customerId) return; // Forbid joining someone else's chat
+        } catch { return; }
+      }
+
+      let session = await getSessionById(sessionId);
       
       if (!session) {
-        session = await createSession(sessionId, customerId);
-        session.Messages = [];
+        await createSession(sessionId, customerId);
+        session = await getSessionById(sessionId);
+      } else if (customerId && session.CustomerID !== customerId) {
+        // Link anonymous session to logged-in customer
+        await updateSessionCustomer(sessionId, customerId);
+        session = await getSessionById(sessionId);
+      } else if (session.CustomerID && session.CustomerID !== customerId) {
+        // Prevent anonymous users from joining a logged-in user's session
+        return;
       }
       
-      if (session) {
-        socket.join(session.SessionID);
-        socket.emit('session_joined', session);
-      }
+      if (!session) return;
+      socket.join(session.SessionID);
+      socket.emit('session_joined', session);
     });
 
     // Customer sends a message
@@ -47,8 +63,8 @@ export const initSocketIo = (server: HttpServer) => {
 
       if (session.Status === 'AI_HANDLING') {
         try {
-          // Format history for Gemini as a simple array of objects
-          const history = session.Messages.map(m => ({
+          // Format history for Gemini as a simple array of objects (limit to last 20 messages for context)
+          const history = session.Messages.slice(-21).map(m => ({
             sender: m.SenderType,
             text: m.Content
           }));
@@ -56,7 +72,7 @@ export const initSocketIo = (server: HttpServer) => {
           // Remove the latest customer message from history since it's passed as newMessage
           history.pop(); 
 
-          let aiText = await generateAIResponse(history, content);
+          let aiText = await generateAIResponse(history, content, session.CustomerID);
           
           let isHandoff = false;
           if (aiText.includes('[HANDOFF_TO_HUMAN]')) {
@@ -93,13 +109,37 @@ export const initSocketIo = (server: HttpServer) => {
     });
 
     // Admin joins global admins room
-    socket.on('admin_join', () => {
-      socket.join('admins');
-      console.log(`Socket ${socket.id} joined admins room`);
+    socket.on('admin_join', (payload?: { token?: string }) => {
+      const token = payload?.token;
+      if (!token) return;
+      try {
+        if (token.startsWith('mock_token_') && process.env.NODE_ENV === 'development') {
+          socket.data.user = { RoleName: 'ADMIN' } as UserPayload;
+          socket.join('admins');
+          console.log(`Socket ${socket.id} joined admins room (mock)`);
+          return;
+        }
+        
+        const decoded = jwt.verify(token, config.jwt.accessSecret) as UserPayload;
+        if (decoded.RoleName === 'ADMIN' || decoded.RoleName === 'MANAGER') {
+          socket.data.user = decoded;
+          socket.join('admins');
+          console.log(`Socket ${socket.id} joined admins room`);
+        }
+      } catch (err) {
+        console.error(`Invalid token for admin_join from socket ${socket.id}`);
+      }
     });
 
     // Admin sends a message to customer
-    socket.on('admin_message', async ({ sessionId, content }: { sessionId: string, content: string }) => {
+    socket.on('admin_message', async (payload?: { sessionId: string, content: string }) => {
+      if (!payload || !payload.sessionId || !payload.content) return;
+      const { sessionId, content } = payload;
+      // Authenticate socket for admin
+      if (!socket.data.user || (socket.data.user.RoleName !== 'ADMIN' && socket.data.user.RoleName !== 'MANAGER')) {
+        return; // Unauthorized
+      }
+
       // If admin replies, automatically change status to ADMIN_HANDLING
       const session = await getSessionById(sessionId);
       if (session && session.Status !== 'ADMIN_HANDLING') {
@@ -117,7 +157,13 @@ export const initSocketIo = (server: HttpServer) => {
     });
 
     // Admin closes session
-    socket.on('close_session', async ({ sessionId }: { sessionId: string }) => {
+    socket.on('close_session', async (payload?: { sessionId: string }) => {
+      if (!payload || !payload.sessionId) return;
+      const { sessionId } = payload;
+      // Authenticate socket for admin
+      if (!socket.data.user || (socket.data.user.RoleName !== 'ADMIN' && socket.data.user.RoleName !== 'MANAGER')) {
+        return; // Unauthorized
+      }
       await updateSessionStatus(sessionId, 'CLOSED');
       io.to(sessionId).emit('session_status_changed', { status: 'CLOSED' });
       io.to('admins').emit('refresh_sessions');

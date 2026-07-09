@@ -4,8 +4,9 @@ import { config } from '../config/index';
 import { AppError } from './errorHandler';
 
 export interface UserPayload {
-  EmployeeID: number;
-  Email: string;
+  EmployeeID?: number;
+  CustomerID?: number;
+  Email?: string;
   RoleName: string;
 }
 
@@ -33,8 +34,8 @@ export const verifyJWT = (req: Request, _res: Response, next: NextFunction) => {
     return next(new AppError(401, 'Unauthorized: Access token missing.'));
   }
 
-  // Gracefully accept mock tokens in development/fallback mode
-  if (token.startsWith('mock_token_')) {
+  // Gracefully accept mock tokens only in development/fallback mode
+  if (token.startsWith('mock_token_') && process.env.NODE_ENV === 'development') {
     req.user = {
       EmployeeID: 1,
       Email: 'giang@phela.vn',
