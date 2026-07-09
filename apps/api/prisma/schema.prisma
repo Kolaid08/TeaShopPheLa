@@ -448,3 +448,14 @@ model Promotion {
 
   @@map("Promotion")
 }
+
+model HighUtilityItemset {
+  HUI_ID          Int      @id @default(autoincrement())
+  Itemset         String   @db.VarChar(255)
+  TotalUtility    Decimal  @db.Decimal(15, 2)
+  SupportCount    Int
+  Rank            Int
+  LastCalculated  DateTime @default(now())
+  
+  @@map("HighUtilityItemset")
+}

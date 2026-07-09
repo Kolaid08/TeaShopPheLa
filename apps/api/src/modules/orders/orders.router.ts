@@ -123,53 +123,55 @@ router.post('/customer-combos', async (req, res, next) => {
       return sendResponse(res, 200, true, 'No combos', []);
     }
 
+    // Lấy danh sách High Utility Itemsets đã được cache
+    const huiCache = await prisma.highUtilityItemset.findMany({
+        orderBy: { Rank: 'asc' },
+        take: 100
+    });
 
-      // Fetch recent 500 orders containing these items to prevent SQL Server parameter limits (>2100)
-      const ordersWithItems = await prisma.orderDetail.findMany({
-        where: { DrinkSizeID: { in: drinkSizeIds } },
-        select: { OrderID: true },
-        orderBy: { OrderID: 'desc' },
-        take: 500,
-      });
-
-      if (ordersWithItems.length === 0) {
-        return sendResponse(res, 200, true, 'No combos', []);
-      }
-
-      const orderIds = Array.from(new Set(ordersWithItems.map(o => o.OrderID)));
-
-      const otherItems = await prisma.orderDetail.findMany({
-        where: {
-          OrderID: { in: orderIds },
-          DrinkSizeID: { notIn: drinkSizeIds }
-        },
-        include: {
-          DrinkSize: { include: { Drink: true, Size: true } }
-        }
-      });
-
-      const freqMap = new Map<number, { count: number, item: any }>();
-      for (const item of otherItems) {
-        if (!freqMap.has(item.DrinkSizeID)) {
-          freqMap.set(item.DrinkSizeID, { count: 0, item });
-        }
-        freqMap.get(item.DrinkSizeID)!.count++;
-      }
-
-    // duplicate block removed
-
-    const sorted = Array.from(freqMap.values()).sort((a, b) => b.count - a.count).slice(0, 3);
+    const recommendedItemIds = new Set<number>();
     
-    const result = sorted.map(s => ({
-      DrinkSizeID: s.item.DrinkSizeID,
-      DrinkName: s.item.DrinkSize.Drink.DrinkName,
-      SizeName: s.item.DrinkSize.Size.SizeName,
-      UnitPrice: s.item.DrinkSize.UnitPrice,
-      DrinkImageURL: s.item.DrinkSize.Drink.DrinkImageURL,
-      FrequencyCount: s.count
-    }));
+    // Tìm các tập HUI có chứa tất cả các món khách hàng đang chọn
+    for (const hui of huiCache) {
+        try {
+            const itemset: number[] = JSON.parse(hui.Itemset);
+            const containsAll = drinkSizeIds.every(id => itemset.includes(id));
+            if (containsAll) {
+                // Thêm các món MỚI (chưa có trong giỏ) từ tập HUI này vào danh sách gợi ý
+                for (const id of itemset) {
+                    if (!drinkSizeIds.includes(id)) {
+                        recommendedItemIds.add(id);
+                    }
+                }
+            }
+        } catch (e) {}
 
-    return sendResponse(res, 200, true, 'Combo suggestions', result);
+        if (recommendedItemIds.size >= 3) break; // Giới hạn gợi ý tối đa 3 món
+    }
+
+    if (recommendedItemIds.size === 0) {
+        return sendResponse(res, 200, true, 'No combos', []);
+    }
+
+    const recommendedArray = Array.from(recommendedItemIds).slice(0, 3);
+    const drinks = await prisma.drinkSize.findMany({
+        where: { DrinkSizeID: { in: recommendedArray } },
+        include: { Drink: true, Size: true }
+    });
+
+    const result = recommendedArray.map(id => {
+        const d = drinks.find(drink => drink.DrinkSizeID === id);
+        if (!d) return null;
+        return {
+            DrinkSizeID: d.DrinkSizeID,
+            DrinkName: d.Drink.DrinkName,
+            SizeName: d.Size.SizeName,
+            UnitPrice: d.UnitPrice,
+            DrinkImageURL: d.Drink.DrinkImageURL,
+        };
+    }).filter(d => d !== null);
+
+    return sendResponse(res, 200, true, 'Combo suggestions based on High Utility Itemsets', result);
   } catch (err) {
     next(err);
   }
@@ -706,45 +708,16 @@ router.patch('/customer-cancel/:id', verifyJWT, async (req, res, next) => {
       const updatedOrder = await prisma.$transaction(async (tx) => {
         const updated = await tx.orders.update({
             where: { OrderID: orderId },
-            data: { OrderStatus: validatedData.OrderStatus },
+            data: { OrderStatus: 'CANCELLED' },
           });
 
           // Refund voucher if cancelled
-          if (validatedData.OrderStatus === 'CANCELLED' && order.VoucherID && order.OrderStatus !== 'CANCELLED') {
+          if (order.VoucherID) {
             await tx.voucher.update({
               where: { VoucherID: order.VoucherID },
               data: { IsUsed: false },
             });
           }
-
-        // 2. If status moves to COMPLETED and customer is present, add to Customer spending
-        if (validatedData.OrderStatus === 'COMPLETED' && order.CustomerID) {
-          await tx.customer.update({
-            where: { CustomerID: order.CustomerID },
-            data: {
-              TotalMoneySpending: {
-                increment: order.TotalPrice,
-              },
-            },
-          });
-
-          // 3. Evaluate & upgrade membership levels
-          await upgradeCustomerLevel(order.CustomerID, tx);
-        }
-
-        // 4. Trừ nguyên liệu khi đơn hàng hoàn thành (COMPLETED)
-        if (validatedData.OrderStatus === 'COMPLETED' && order.OrderStatus !== 'COMPLETED') {
-          const orderDetails = await tx.orderDetail.findMany({
-            where: { OrderID: orderId },
-          });
-          
-          const itemsToDeduct = orderDetails.map((od: any) => ({
-            DrinkSizeID: od.DrinkSizeID,
-            Quantity: od.Quantity
-          }));
-          
-          await processOrderIngredients(tx, itemsToDeduct, 'deduct');
-        }
 
         return updated;
       });
@@ -753,7 +726,7 @@ router.patch('/customer-cancel/:id', verifyJWT, async (req, res, next) => {
         res,
         200,
         true,
-        `Order status updated to ${validatedData.OrderStatus}`,
+        `Order status updated to CANCELLED`,
         updatedOrder,
       );
     } catch (dbErr: any) {
@@ -803,6 +776,176 @@ router.patch('/:id/assign-shipper', verifyJWT, requireRole(['ADMIN', 'MANAGER'])
       'Đã gán tài xế và chuyển trạng thái đơn hàng sang Đang giao (SHIPPING).',
       updatedOrder,
     );
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET / - Admin/Staff get all orders
+router.get('/', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF', 'SHIPPER']), async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 1000;
+    const sortDir = req.query.sortDir === 'asc' ? 'asc' : 'desc';
+
+    const orders = await prisma.orders.findMany({
+      take: limit,
+      orderBy: { OrderID: sortDir },
+      include: {
+        Customer: { select: { CustomerName: true, PhoneNumber: true } },
+        ShopTable: { select: { ShopTableNumber: true } },
+        Employee: { select: { FullName: true } },
+        OrderDetails: {
+          include: {
+            DrinkSize: {
+              include: {
+                Drink: { select: { DrinkName: true, DrinkImageURL: true } },
+                Size: { select: { SizeName: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return sendResponse(res, 200, true, 'Lấy danh sách đơn hàng thành công', orders);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST / - Admin/Staff place order (POS)
+router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF']), async (req, res, next) => {
+  try {
+    const validatedData = createOrderSchema.parse(req.body);
+    const employeeId = req.user?.EmployeeID;
+    if (!employeeId) throw new AppError(401, 'Unauthorized');
+
+    let baseTotal = 0;
+    for (const item of validatedData.Items) {
+      baseTotal += item.UnitPrice * item.Quantity;
+    }
+    const finalPrice = validatedData.TotalPrice || baseTotal;
+
+    const newOrder = await prisma.$transaction(async (tx) => {
+      const order = await tx.orders.create({
+        data: {
+          CustomerID: validatedData.CustomerID || null,
+          ShopTableID: validatedData.ShopTableID || null,
+          EmployeeID: employeeId,
+          OrderStatus: 'PENDING',
+          TotalPrice: finalPrice,
+          OrderNote: validatedData.OrderNote || null,
+          OrderType: validatedData.OrderType || (validatedData.ShopTableID ? 'DINE_IN' : 'TAKEAWAY'),
+        },
+      });
+
+      await tx.orderDetail.createMany({
+        data: validatedData.Items.map((item) => ({
+          OrderID: order.OrderID,
+          DrinkSizeID: item.DrinkSizeID,
+          Quantity: item.Quantity,
+          Sugar: item.Sugar || '100%',
+          Ice: item.Ice || '100%',
+          Toppings: item.Toppings || null,
+          UnitPrice: item.UnitPrice,
+        })),
+      });
+
+      return tx.orders.findUnique({
+        where: { OrderID: order.OrderID },
+        include: {
+          Customer: { select: { CustomerName: true, PhoneNumber: true } },
+          ShopTable: { select: { ShopTableNumber: true } },
+          Employee: { select: { FullName: true } },
+          OrderDetails: {
+            include: {
+              DrinkSize: {
+                include: {
+                  Drink: { select: { DrinkName: true } },
+                  Size: { select: { SizeName: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    return sendResponse(res, 201, true, 'Tạo đơn hàng thành công', newOrder);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /:id/status - Update order status
+router.patch('/:id/status', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF', 'SHIPPER']), async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id || '');
+    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
+
+    const validatedData = updateStatusSchema.parse(req.body);
+
+    const order = await prisma.orders.findUnique({
+      where: { OrderID: orderId },
+      include: { OrderDetails: true },
+    });
+
+    if (!order) throw new AppError(404, 'Order not found.');
+
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      // Logic dedu trừ nguyên liệu / hoàn lại
+      if (order.OrderStatus !== 'COMPLETED' && validatedData.OrderStatus === 'COMPLETED') {
+        // Hoàn tất đơn -> trừ nguyên liệu
+        await processOrderIngredients(tx, order.OrderDetails, 'deduct');
+
+        // Check level upgrade
+        if (order.CustomerID) {
+          const cust = await tx.customer.findUnique({ where: { CustomerID: order.CustomerID } });
+          if (cust) {
+             const newTotal = cust.TotalMoneySpending + order.TotalPrice;
+             await tx.customer.update({ where: { CustomerID: order.CustomerID }, data: { TotalMoneySpending: newTotal }});
+             await upgradeCustomerLevel(tx, order.CustomerID, newTotal);
+          }
+        }
+      } else if (order.OrderStatus === 'COMPLETED' && validatedData.OrderStatus === 'CANCELLED') {
+        // Hủy đơn đã hoàn tất -> hoàn nguyên liệu
+        await processOrderIngredients(tx, order.OrderDetails, 'refund');
+        
+        // Reverse spend
+        if (order.CustomerID) {
+          const cust = await tx.customer.findUnique({ where: { CustomerID: order.CustomerID } });
+          if (cust) {
+             const newTotal = Math.max(0, cust.TotalMoneySpending - order.TotalPrice);
+             await tx.customer.update({ where: { CustomerID: order.CustomerID }, data: { TotalMoneySpending: newTotal }});
+             await upgradeCustomerLevel(tx, order.CustomerID, newTotal);
+          }
+        }
+      }
+
+      // Update the status
+      const updated = await tx.orders.update({
+        where: { OrderID: orderId },
+        data: { OrderStatus: validatedData.OrderStatus },
+        include: {
+          Customer: { select: { CustomerName: true, PhoneNumber: true } },
+          ShopTable: { select: { ShopTableNumber: true } },
+          Employee: { select: { FullName: true } },
+          OrderDetails: {
+            include: {
+              DrinkSize: {
+                include: {
+                  Drink: { select: { DrinkName: true, DrinkImageURL: true } },
+                  Size: { select: { SizeName: true } },
+                },
+              },
+            },
+          },
+        }
+      });
+      return updated;
+    });
+
+    return sendResponse(res, 200, true, `Cập nhật trạng thái thành ${validatedData.OrderStatus}`, updatedOrder);
   } catch (err) {
     next(err);
   }
