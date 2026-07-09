@@ -630,7 +630,9 @@ export default function CustomerHome() {
           Quantity: item.Quantity,
           Sugar: item.Sugar,
           Ice: item.Ice,
-          Toppings: item.Toppings && item.Toppings.length > 0 ? item.Toppings.map(t => t.name).join(', ') : undefined,
+          Toppings: Array.isArray(item.Toppings) 
+            ? (item.Toppings.length > 0 ? item.Toppings.map((t: any) => t.name || t).join(', ') : undefined)
+            : (typeof item.Toppings === 'string' && item.Toppings.trim() !== '' ? item.Toppings : undefined),
           UnitPrice: Number(item.UnitPrice),
         })),
         TotalPrice: getTotalPrice(),

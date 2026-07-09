@@ -427,8 +427,9 @@ export const api = {
 
   // ORDER SUBMISSIONS & HISTORY
   getCustomerOrders: async (): Promise<Order[]> => {
+    const cust = getSessionCustomer();
     try {
-      const token = localStorage.getItem('access_token');
+      const token = localStorage.getItem('phela_customer_token');
       const res = await fetch(`${API_BASE}/orders/customer-history`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
@@ -474,7 +475,7 @@ export const api = {
     const cust = getSessionCustomer();
     
     try {
-      const token = localStorage.getItem('access_token');
+      const token = localStorage.getItem('phela_customer_token');
       const res = await fetch(`${API_BASE}/orders/customer-place`, {
         method: 'POST',
         headers: { 
@@ -586,7 +587,7 @@ export const api = {
 
   cancelCustomerOrder: async (orderId: number): Promise<any> => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = localStorage.getItem('phela_customer_token');
       const res = await fetch(`${API_BASE}/orders/customer-cancel/${orderId}`, {
         method: 'PATCH',
         headers: token ? { Authorization: `Bearer ${token}` } : {}

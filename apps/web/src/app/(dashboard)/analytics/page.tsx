@@ -19,12 +19,25 @@ import {
   CardHeader,
   CardTitle,
   Badge,
+  Button,
 } from '@/components/ui/core';
 import { api } from '@/lib/api';
 
 export default function DashboardHome() {
   const [stats, setStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTriggering, setIsTriggering] = useState(false);
+
+  const handleTriggerHUI = async () => {
+    setIsTriggering(true);
+    try {
+      await api.triggerHUI();
+      alert('Đã chạy quá trình khai phá dữ liệu HUI ngầm thành công!');
+    } catch (e: any) {
+      alert(e.message || 'Có lỗi xảy ra khi gọi HUI');
+    }
+    setIsTriggering(false);
+  };
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -70,12 +83,23 @@ export default function DashboardHome() {
             Phêla Café Location #1
           </p>
         </div>
-        <div className="text-sm font-semibold px-4 py-2 rounded-xl bg-card border border-border flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-          </span>
-          Luồng dữ liệu đồng bộ
+        <div className="flex items-center gap-3">
+          <div className="text-sm font-semibold px-4 py-2 rounded-xl bg-card border border-border flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            Luồng dữ liệu đồng bộ
+          </div>
+          <Button 
+            variant="primary" 
+            onClick={handleTriggerHUI}
+            disabled={isTriggering}
+            className="shadow-primary/20 gap-2"
+          >
+            <Sparkles className="w-4 h-4" />
+            {isTriggering ? 'Đang phân tích...' : 'Cập nhật HUI AI'}
+          </Button>
         </div>
       </div>
 

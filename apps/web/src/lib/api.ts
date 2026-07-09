@@ -565,6 +565,14 @@ export const api = {
     return payload.data;
   },
 
+  triggerHUI: async (): Promise<any> => {
+    try {
+      return await api.request('/analytics/hui/trigger', { method: 'POST' });
+    } catch (err) {
+      throw err;
+    }
+  },
+
   // DRINKS
   getDrinks: async (): Promise<Drink[]> => {
     try {
