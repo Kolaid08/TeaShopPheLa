@@ -66,7 +66,7 @@ router.post('/calculate-fee', async (req, res, next) => {
       });
 
       if (drinkSize) {
-        totalWeight += 500 * item.Quantity; // Mặc định 500g mỗi ly vì schema Size không có WeightGram
+        totalWeight += (drinkSize.Size.WeightGram || 500) * item.Quantity;
         insuranceValue += drinkSize.UnitPrice.toNumber() * item.Quantity;
       }
     }

@@ -114,6 +114,9 @@ export const deletePromotion = async (req: Request, res: Response) => {
 
 export const getChatboxCombos = async (req: Request, res: Response) => {
   try {
+    const customerId = req.query.customerId ? parseInt(req.query.customerId as string) : null;
+    
+    // 1. Fetch all active combos
     const promotions = await prisma.promotion.findMany({
       where: {
         IsActive: true,
@@ -121,7 +124,94 @@ export const getChatboxCombos = async (req: Request, res: Response) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-    sendResponse(res, 200, true, 'Lấy danh sách combo chatbox thành công', promotions);
+
+    if (!customerId || isNaN(customerId)) {
+      return sendResponse(res, 200, true, 'Lấy danh sách combo chatbox thành công', promotions);
+    }
+
+    // 2. Determine user preference
+    const details = await prisma.orderDetail.findMany({
+      where: {
+        Orders: {
+          CustomerID: customerId,
+          OrderStatus: { in: ['COMPLETED', 'PENDING', 'PREPARING', 'READY'] },
+        },
+      },
+      include: {
+        DrinkSize: {
+          include: { Drink: true },
+        },
+      },
+      take: 100, // sample recent 100 items
+    });
+
+    const coffeeKeywords = ['cà phê', 'cafe', 'coffee', 'espresso', 'americano', 'latte', 'cappuccino', 'bạc xỉu', 'phin', 'cold brew', 'mocha'];
+    let coffeeCount = 0;
+    let milkTeaCount = 0;
+    
+    for (const d of details) {
+       const name = d.DrinkSize?.Drink?.DrinkName?.toLowerCase() || '';
+       const isCoffee = coffeeKeywords.some(kw => name.includes(kw));
+       if (isCoffee) {
+         coffeeCount++;
+       } else {
+         milkTeaCount++;
+       }
+    }
+    
+    let userPref = 'NEUTRAL';
+    const totalDrinks = coffeeCount + milkTeaCount;
+    if (totalDrinks > 0) {
+      const coffeeRatio = coffeeCount / totalDrinks;
+      if (coffeeRatio >= 0.6) userPref = 'COFFEE_LOVER';
+      else if (coffeeRatio <= 0.4) userPref = 'MILK_TEA_LOVER';
+    }
+
+    // 3. Filter combos based on target drink names and user preference matrix
+    const filteredPromotions = [];
+    for (const promo of promotions) {
+       let promoType = 'ALL_COMBO';
+       
+       if (promo.TargetDrinkIDs) {
+          try {
+            const targetIds: number[] = JSON.parse(promo.TargetDrinkIDs);
+            if (targetIds.length > 0) {
+              const drinks = await prisma.drinkSize.findMany({
+                where: { DrinkSizeID: { in: targetIds } },
+                include: { Drink: true }
+              });
+              
+              let isAllCoffee = true;
+              let isAllMilkTea = true;
+              
+              for (const ds of drinks) {
+                const name = ds.Drink?.DrinkName?.toLowerCase() || '';
+                const isCoffee = coffeeKeywords.some(kw => name.includes(kw));
+                if (isCoffee) {
+                  isAllMilkTea = false;
+                } else {
+                  isAllCoffee = false;
+                }
+              }
+              
+              if (isAllCoffee && !isAllMilkTea) promoType = 'COFFEE_COMBO';
+              else if (isAllMilkTea && !isAllCoffee) promoType = 'MILK_TEA_COMBO';
+              else promoType = 'MIXED_COMBO';
+            }
+          } catch(e) {}
+       }
+       
+       // RECOMMENDATION MATRIX
+       if (userPref === 'NEUTRAL') {
+         filteredPromotions.push(promo); // Thấy TẤT CẢ
+       } else if (userPref === 'COFFEE_LOVER') {
+         if (promoType !== 'MILK_TEA_COMBO') filteredPromotions.push(promo); // Ẩn combo 100% Trà
+       } else if (userPref === 'MILK_TEA_LOVER') {
+         if (promoType !== 'COFFEE_COMBO') filteredPromotions.push(promo); // Ẩn combo 100% Cà phê
+       }
+    }
+
+    sendResponse(res, 200, true, 'Lấy danh sách combo chatbox thành công', filteredPromotions);
   } catch (error) {
     sendResponse(res, 500, false, 'Lỗi máy chủ', error);
   }

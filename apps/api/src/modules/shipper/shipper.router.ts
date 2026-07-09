@@ -6,6 +6,7 @@ import { verifyJWT, requireRole } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import { upgradeCustomerLevel } from '../customers/customers.router';
 import { processOrderIngredients } from '../orders/orders.router';
+import { GhnService } from '../shipping/ghn.service';
 
 const router = Router();
 
@@ -31,6 +32,11 @@ router.post('/book-third-party', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'ST
 
     const order = await prisma.orders.findUnique({
       where: { OrderID },
+      include: {
+        OrderDetails: {
+          include: { DrinkSize: { include: { Drink: true } } }
+        }
+      }
     });
 
     if (!order) {
@@ -40,24 +46,44 @@ router.post('/book-third-party', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'ST
     if (order.OrderType !== 'DELIVERY') {
       throw new AppError(400, 'Chỉ có đơn giao hàng mới có thể gọi shipper.');
     }
+    
+    if (!order.DistrictID || !order.WardCode) {
+      throw new AppError(400, 'Đơn hàng thiếu thông tin địa chỉ GHN (Quận/Huyện, Phường/Xã).');
+    }
 
-    // Simulate finding a driver (delay 2 seconds)
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const items = order.OrderDetails.map((detail: any) => ({
+      name: detail.DrinkSize.Drink.DrinkName,
+      quantity: detail.Quantity,
+      price: Number(detail.UnitPrice),
+      weight: 500, // 500g per cup default
+    }));
 
-    // Generate Mock Driver Info
-    const driverNames = ['Nguyễn Văn Grab', 'Trần Thị Ahamove', 'Lê Be', 'Phạm XanhSM'];
-    const randomName = driverNames[Math.floor(Math.random() * driverNames.length)];
-    const randomPhone = `09${Math.floor(Math.random() * 100000000).toString().padStart(8, '0')}`;
-    const trackingCode = `TRACK-${Math.floor(Math.random() * 1000000)}`;
+    const totalWeight = items.reduce((acc, curr) => acc + (curr.quantity * curr.weight), 0);
+    const codAmount = order.PaymentMethod === 'COD' && order.PaymentStatus !== 'PAID' ? Number(order.TotalPrice) : 0;
+
+    // Call GHN Create Order
+    const ghnOrderCode = await GhnService.createOrder({
+      to_name: order.ReceiverName || 'Khách hàng Phê La',
+      to_phone: order.ReceiverPhone || '0901234567',
+      to_address: order.ShippingAddress || '',
+      to_ward_code: order.WardCode,
+      to_district_id: order.DistrictID,
+      weight: totalWeight,
+      insurance_value: Number(order.TotalPrice),
+      cod_amount: codAmount,
+      content: `Phê La Order #${order.OrderID}`,
+      items: items,
+    });
+
+    const trackingURL = `https://tracking.ghn.vn/?bicode=${ghnOrderCode}`;
 
     const updatedOrder = await prisma.orders.update({
       where: { OrderID },
       data: {
         OrderStatus: 'SHIPPING',
         DeliveryMethod: 'THIRD_PARTY',
-        ThirdPartyShipperName: randomName,
-        ThirdPartyShipperPhone: randomPhone,
-        TrackingURL: `https://mock-tracking.phela.vn/${trackingCode}`,
+        GHN_OrderCode: ghnOrderCode,
+        TrackingURL: trackingURL,
       },
     });
 

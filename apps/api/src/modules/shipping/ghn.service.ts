@@ -121,8 +121,15 @@ export const GhnService = {
       );
       return res.data.data.order_code; // Mã vận đơn của GHN
     } catch (error: any) {
-      console.error('GHN createOrder Error:', JSON.stringify(error.response?.data) || error.message);
-      throw new AppError(500, 'Có lỗi xảy ra khi đồng bộ đơn hàng sang hệ thống vận chuyển GHN.');
+      const errData = error.response?.data;
+      console.error('GHN createOrder Error:', JSON.stringify(errData) || error.message);
+      let errorMsg = 'Có lỗi xảy ra khi đồng bộ đơn hàng sang hệ thống vận chuyển GHN.';
+      if (errData && errData.code_message_value) {
+        errorMsg = errData.code_message_value;
+      } else if (errData && errData.message) {
+        errorMsg = errData.message;
+      }
+      throw new AppError(400, `Lỗi GHN: ${errorMsg}`);
     }
   },
 };
