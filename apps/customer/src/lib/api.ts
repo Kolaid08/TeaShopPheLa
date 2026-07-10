@@ -429,7 +429,8 @@ export const api = {
     try {
       const token = localStorage.getItem('phela_customer_token');
       const res = await fetch(`${API_BASE}/orders/customer-history`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        cache: 'no-store'
       });
       const payload = await res.json();
       if (res.ok) return payload.data;
