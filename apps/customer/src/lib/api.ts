@@ -434,8 +434,19 @@ export const api = {
       });
       const payload = await res.json();
       if (res.ok) return payload.data;
-      throw new Error();
-    } catch {
+      
+      if (res.status === 401) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('phela_customer_token');
+          localStorage.removeItem('phela_customer_user');
+          window.location.href = '/login';
+        }
+        throw new Error('Phiên đăng nhập hết hạn');
+      }
+      throw new Error(payload.message || 'Error');
+    } catch (e: any) {
+      if (e.message === 'Phiên đăng nhập hết hạn') throw e;
+      
       return db.orders
         .filter((o) => o.CustomerID === cust.CustomerID)
         .map((o) => ({
@@ -508,7 +519,8 @@ export const api = {
       });
       const payload = await res.json();
       if (res.ok) return payload.data;
-      throw new Error();
+      console.error('Backend Error Payload:', payload);
+      throw new Error(payload.message || 'Error');
     } catch {
       const newO: Order = {
         OrderID: db.orders.length + 1,
