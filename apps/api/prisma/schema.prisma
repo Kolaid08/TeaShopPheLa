@@ -231,6 +231,9 @@ model Orders {
   AppTransId      String?       @db.VarChar(100)
   RefundReason    String?       @db.NVarChar(500)
   RefundStatus    String?       @db.VarChar(50)
+  RefundBankCode  String?       @db.VarChar(50)
+  RefundAccountNumber String?   @db.VarChar(50)
+  RefundAccountName String?     @db.NVarChar(255)
   VoucherID       Int?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt

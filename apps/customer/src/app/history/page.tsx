@@ -33,6 +33,13 @@ export default function HistoryPage() {
   const [comment, setComment] = useState<string>('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
+  // Cancel state
+  const [cancelOrder, setCancelOrder] = useState<Order | null>(null);
+  const [refundBankCode, setRefundBankCode] = useState('');
+  const [refundAccountNumber, setRefundAccountNumber] = useState('');
+  const [refundAccountName, setRefundAccountName] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
+
   useEffect(() => {
     // Authenticate check
     const active = api.getCurrentCustomer();
@@ -237,15 +244,39 @@ export default function HistoryPage() {
     }
   };
 
-  const handleCancelOrder = async (order: Order) => {
-    if (confirm('Bạn có chắc chắn muốn hủy đơn hàng này không? Hành động này không thể hoàn tác.')) {
-      try {
-        const cancelledOrder = await api.cancelCustomerOrder(order.OrderID);
-        setOrders(prev => prev.map(o => o.OrderID === order.OrderID ? { ...o, OrderStatus: 'CANCELLED' } : o));
-        toast.success('Hủy đơn hàng thành công.');
-      } catch (err: any) {
-        toast.error(err.message || 'Lỗi hủy đơn hàng.');
+  const openCancelModal = (order: Order) => {
+    setCancelOrder(order);
+    setRefundBankCode('');
+    setRefundAccountNumber('');
+    setRefundAccountName('');
+  };
+
+  const submitCancelOrder = async () => {
+    if (!cancelOrder) return;
+    
+    let refundInfo = undefined;
+    if (cancelOrder.PaymentStatus === 'PAID') {
+      if (!refundBankCode || !refundAccountNumber || !refundAccountName) {
+        toast.error('Vui lòng nhập đầy đủ thông tin ngân hàng để hoàn tiền.');
+        return;
       }
+      refundInfo = {
+        RefundBankCode: refundBankCode,
+        RefundAccountNumber: refundAccountNumber,
+        RefundAccountName: refundAccountName,
+      };
+    }
+
+    setIsCancelling(true);
+    try {
+      await api.cancelCustomerOrder(cancelOrder.OrderID, refundInfo);
+      setOrders(prev => prev.map(o => o.OrderID === cancelOrder.OrderID ? { ...o, OrderStatus: 'CANCELLED', RefundStatus: refundInfo ? 'PENDING' : o.RefundStatus } : o));
+      toast.success('Hủy đơn hàng thành công.');
+      setCancelOrder(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi hủy đơn hàng.');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -528,7 +559,7 @@ export default function HistoryPage() {
                     <div className="flex flex-wrap gap-2 justify-end">
                       {order.OrderStatus === 'PENDING' && (
                         <Button
-                          onClick={() => handleCancelOrder(order)}
+                          onClick={() => openCancelModal(order)}
                           size="sm"
                           variant="outline"
                           className="rounded-xl text-xs font-serif uppercase tracking-wider font-bold gap-1 border-red-500/40 text-red-500 hover:bg-red-500 hover:text-white"
@@ -544,6 +575,16 @@ export default function HistoryPage() {
                       >
                         <Ticket className="w-3.5 h-3.5" /> In PDF
                       </Button>
+                      {order.RefundStatus === 'COMPLETED' && (
+                        <div className="text-xs font-bold text-red-600 bg-red-100 px-3 py-1.5 rounded-xl flex items-center">
+                          Đã hoàn tiền
+                        </div>
+                      )}
+                      {order.RefundStatus === 'PENDING' && (
+                        <div className="text-xs font-bold text-orange-600 bg-orange-100 px-3 py-1.5 rounded-xl flex items-center">
+                          Đang chờ hoàn tiền
+                        </div>
+                      )}
                       <Button
                         onClick={() => handleReorder(order)}
                         size="sm"
@@ -606,6 +647,61 @@ export default function HistoryPage() {
               </Button>
               <Button onClick={submitReview} disabled={isSubmittingReview}>
                 {isSubmittingReview ? 'Đang gửi...' : 'Gửi Đánh Giá'}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
+
+      {/* CANCEL MODAL */}
+      {cancelOrder && (
+        <Dialog
+          isOpen={!!cancelOrder}
+          onClose={() => setCancelOrder(null)}
+          title="Hủy đơn hàng"
+        >
+          <div className="space-y-4">
+            <p className="text-sm font-medium">Bạn có chắc chắn muốn hủy đơn hàng #{cancelOrder?.OrderID}?</p>
+            
+            {cancelOrder?.PaymentStatus === 'PAID' && (
+              <div className="bg-red-50 p-4 rounded-xl flex flex-col gap-3 border border-red-100 mt-2">
+                <p className="text-xs text-red-600 font-semibold mb-1">
+                  Đơn hàng đã được thanh toán. Vui lòng nhập thông tin tài khoản ngân hàng để nhận hoàn tiền:
+                </p>
+                <input
+                  type="text"
+                  placeholder="Tên ngân hàng (VD: Vietcombank, MB, Techcombank)"
+                  className="w-full text-sm border-b border-red-200 bg-transparent py-2 outline-none focus:border-red-500"
+                  value={refundBankCode}
+                  onChange={(e) => setRefundBankCode(e.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="Số tài khoản"
+                  className="w-full text-sm border-b border-red-200 bg-transparent py-2 outline-none focus:border-red-500"
+                  value={refundAccountNumber}
+                  onChange={(e) => setRefundAccountNumber(e.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="Tên chủ tài khoản"
+                  className="w-full text-sm border-b border-red-200 bg-transparent py-2 outline-none focus:border-red-500 uppercase"
+                  value={refundAccountName}
+                  onChange={(e) => setRefundAccountName(e.target.value)}
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-border">
+              <Button variant="outline" onClick={() => setCancelOrder(null)} disabled={isCancelling}>
+                Đóng
+              </Button>
+              <Button 
+                onClick={submitCancelOrder} 
+                disabled={isCancelling} 
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                Xác nhận hủy
               </Button>
             </div>
           </div>

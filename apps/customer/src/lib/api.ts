@@ -90,6 +90,13 @@ export interface Order {
   ReceiverPhone?: string;
   TotalPrice: number;
   OrderNote?: string;
+  PaymentMethod?: string;
+  PaymentStatus?: string;
+  RefundStatus?: string;
+  RefundReason?: string;
+  RefundBankCode?: string;
+  RefundAccountNumber?: string;
+  RefundAccountName?: string;
   Customer?: Customer;
   ShopTable?: ShopTable;
   OrderDetails?: OrderDetail[];
@@ -589,12 +596,16 @@ export const api = {
     }
   },
 
-  cancelCustomerOrder: async (orderId: number): Promise<any> => {
+  cancelCustomerOrder: async (orderId: number, refundInfo?: { RefundBankCode: string, RefundAccountNumber: string, RefundAccountName: string }): Promise<any> => {
     try {
       const token = localStorage.getItem('phela_customer_token');
       const res = await fetch(`${API_BASE}/orders/customer-cancel/${orderId}`, {
         method: 'PATCH',
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: refundInfo ? JSON.stringify(refundInfo) : JSON.stringify({}),
       });
       const payload = await res.json();
       if (res.ok && payload.success) return payload.data;

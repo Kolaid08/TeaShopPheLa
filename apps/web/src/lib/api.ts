@@ -140,6 +140,13 @@ export interface Order {
   ShipperID?: number;
   GHN_OrderCode?: string;
   TrackingURL?: string;
+  PaymentMethod?: string;
+  PaymentStatus?: string;
+  RefundStatus?: string;
+  RefundReason?: string;
+  RefundBankCode?: string;
+  RefundAccountNumber?: string;
+  RefundAccountName?: string;
   Customer?: { CustomerName: string; PhoneNumber: string };
   ShopTable?: { ShopTableNumber: number };
   Employee?: { FullName: string };
@@ -1014,6 +1021,23 @@ export const api = {
       };
       db.orders.push(newO);
       return newO;
+    }
+  },
+  getPendingRefunds: async (): Promise<Order[]> => {
+    try {
+      return await api.request('/orders/refunds', { method: 'GET' });
+    } catch {
+      return db.orders.filter(o => o.RefundStatus === 'PENDING') as any;
+    }
+  },
+  markAsRefunded: async (id: number): Promise<Order> => {
+    try {
+      return await api.request(`/orders/${id}/refund`, { method: 'PUT' });
+    } catch {
+      const idx = db.orders.findIndex(o => o.OrderID === id);
+      if (idx === -1) throw new Error('Order not found');
+      (db.orders[idx] as any).RefundStatus = 'COMPLETED';
+      return db.orders[idx] as any;
     }
   },
   updateOrderStatus: async (id: number, status: string): Promise<Order> => {
