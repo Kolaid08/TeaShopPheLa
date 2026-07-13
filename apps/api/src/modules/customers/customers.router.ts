@@ -58,7 +58,7 @@ router.post('/public/login', async (req, res, next) => {
     const token = jwt.sign(
       { CustomerID: customer.CustomerID, RoleName: 'CUSTOMER' },
       config.jwt.accessSecret,
-      { expiresIn: config.jwt.accessExpiry as any }
+      { expiresIn: '30d' }
     );
 
     return sendResponse(res, 200, true, 'Customer logged in successfully', {
