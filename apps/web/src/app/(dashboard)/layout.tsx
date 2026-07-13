@@ -20,6 +20,7 @@ import {
   X,
   MessageCircle,
   Gift,
+  Undo2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -126,6 +127,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Hoạt động cửa hàng', path: '/analytics', icon: TrendingUp, roles: ['ADMIN', 'MANAGER'] },
     { name: 'POS bán hàng', path: '/pos', icon: Coffee, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
     { name: 'Hóa đơn & Đơn hàng', path: '/orders', icon: ShoppingBag, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
+    { name: 'Yêu cầu Hoàn tiền', path: '/refunds', icon: Undo2, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Đồ uống (Menu)', path: '/menu/drinks', icon: Layers, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Topping (Menu)', path: '/menu/toppings', icon: Layers, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Kho nguyên liệu', path: '/inventory/ingredients', icon: Clock, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
