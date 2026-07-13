@@ -11,6 +11,7 @@ const receiptDetailSchema = z.object({
   IngredientID: z.number().int(),
   Quantity: z.number().positive(),
   CostPrice: z.number().nonnegative(),
+  ExpirationDate: z.string().datetime().or(z.string().date()).optional().nullable(),
 });
 
 const receiptSchema = z.object({
@@ -110,11 +111,13 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, 
     }
 
     const receipt = await prisma.$transaction(async (tx) => {
+      const totalPrice = validatedData.Ingredients.reduce((sum, item) => sum + (item.Quantity * item.CostPrice), 0);
       const createdReceipt = await tx.ingredientReceipt.create({
         data: {
           SupplierID: validatedData.SupplierID,
           ReceivedDate: new Date(validatedData.ReceivedDate),
           IngredientReceiptStatus: 'PENDING', // starts as pending
+          TotalPrice: totalPrice,
         },
       });
 
@@ -124,6 +127,7 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, 
           IngredientID: item.IngredientID,
           Quantity: item.Quantity,
           CostPrice: item.CostPrice,
+          ExpirationDate: item.ExpirationDate ? new Date(item.ExpirationDate) : null,
         })),
       });
 
@@ -205,7 +209,7 @@ router.patch('/:id/confirm', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async
     }
 
     const confirmedReceipt = await prisma.$transaction(async (tx) => {
-      // 1. Loop details and increase stocks
+      // 1. Loop details and increase stocks and set QuantityRemaining
       for (const item of receipt.IngredientReceiptDetails) {
         await tx.ingredient.update({
           where: { IngredientID: item.IngredientID },
@@ -214,6 +218,18 @@ router.patch('/:id/confirm', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async
               increment: item.Quantity,
             },
           },
+        });
+        
+        await tx.ingredientReceiptDetail.update({
+          where: {
+            IngredientReceiptID_IngredientID: {
+              IngredientReceiptID: item.IngredientReceiptID,
+              IngredientID: item.IngredientID
+            }
+          },
+          data: {
+            QuantityRemaining: item.Quantity
+          }
         });
       }
 

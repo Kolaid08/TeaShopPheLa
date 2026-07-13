@@ -68,16 +68,38 @@ router.get('/', async (req, res, next) => {
       const AverageRating = drink.Reviews.length > 0 ? Number((totalRating / drink.Reviews.length).toFixed(1)) : 0;
       
       let SalesCount = 0;
-      drink.DrinkSizes.forEach((ds) => {
+      // Calculate dynamic IsOutOfStock for each DrinkSize
+      const currentRecipe = drink.Recipes.length > 0 ? drink.Recipes[0] : null;
+      
+      const formattedSizes = drink.DrinkSizes.map((ds) => {
         SalesCount += ds._count.OrderDetails;
+        let isOutOfStock = false;
+        
+        if (currentRecipe) {
+          const multiplier = ds.Size.VolumeML / 500.0;
+          for (const detail of currentRecipe.RecipeDetails) {
+            const baseQty = Number(detail.Quantity);
+            const requiredQty = baseQty * multiplier;
+            if (Number(detail.Ingredient.QuantityStock) < requiredQty) {
+              isOutOfStock = true;
+              break;
+            }
+          }
+        }
+        
+        return {
+          ...ds,
+          IsOutOfStock: isOutOfStock
+        };
       });
 
-      const { Reviews, ...rest } = drink;
+      const { Reviews, DrinkSizes, ...rest } = drink;
 
       return {
         ...rest,
         AverageRating,
-        SalesCount
+        SalesCount,
+        DrinkSizes: formattedSizes
       };
     });
 
@@ -125,15 +147,37 @@ router.get('/:id', async (req, res, next) => {
     const AverageRating = drink.Reviews.length > 0 ? Number((totalRating / drink.Reviews.length).toFixed(1)) : 0;
     
     let SalesCount = 0;
-    drink.DrinkSizes.forEach((ds) => {
+    // Calculate dynamic IsOutOfStock for each DrinkSize
+    const currentRecipe = drink.Recipes.length > 0 ? drink.Recipes[0] : null;
+    
+    const formattedSizes = drink.DrinkSizes.map((ds) => {
       SalesCount += ds._count.OrderDetails;
+      let isOutOfStock = false;
+      
+      if (currentRecipe) {
+        const multiplier = ds.Size.VolumeML / 500.0;
+        for (const detail of currentRecipe.RecipeDetails) {
+          const baseQty = Number(detail.Quantity);
+          const requiredQty = baseQty * multiplier;
+          if (Number(detail.Ingredient.QuantityStock) < requiredQty) {
+            isOutOfStock = true;
+            break;
+          }
+        }
+      }
+      
+      return {
+        ...ds,
+        IsOutOfStock: isOutOfStock
+      };
     });
 
-    const { Reviews, ...rest } = drink;
+    const { Reviews, DrinkSizes, ...rest } = drink;
     const formattedDrink = {
       ...rest,
       AverageRating,
-      SalesCount
+      SalesCount,
+      DrinkSizes: formattedSizes
     };
 
     return sendResponse(res, 200, true, 'Drink retrieved', formattedDrink);

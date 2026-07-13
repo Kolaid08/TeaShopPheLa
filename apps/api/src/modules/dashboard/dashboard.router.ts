@@ -60,6 +60,25 @@ router.get('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, n
       },
     });
 
+    // 3.5 Expiring Ingredients (Remaining > 0 and ExpirationDate <= 30 days from now)
+    const thirtyDaysFromNow = new Date(today);
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const expiringIngredients = await prisma.ingredientReceiptDetail.findMany({
+      where: {
+        QuantityRemaining: { gt: 0 },
+        ExpirationDate: {
+          lte: thirtyDaysFromNow
+        }
+      },
+      include: {
+        Ingredient: {
+          include: { Unit: true }
+        }
+      },
+      orderBy: { ExpirationDate: 'asc' }
+    });
+
+
     // 4. Best-Selling Drinks (Top 5 all-time based on quantities sold in completed orders)
     const topSalesGroup = await prisma.orderDetail.groupBy({
       by: ['DrinkSizeID'],
@@ -171,6 +190,7 @@ router.get('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, n
       todayOrdersCount,
       lowStockCount,
       lowStockAlerts,
+      expiringIngredients,
       bestSellers,
       monthlyRevenueChart: monthlyData,
       abandonedCarts,

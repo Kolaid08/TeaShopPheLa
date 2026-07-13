@@ -293,6 +293,60 @@ export default function DashboardHome() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Expiring Ingredients alerting card */}
+      <Card className="cafe-panel mt-6">
+        <CardHeader className="flex flex-row items-center justify-between border-b border-border/60 pb-4">
+          <div>
+            <CardTitle>Cảnh báo Hạn sử dụng nguyên liệu</CardTitle>
+            <CardDescription>
+              Cảnh báo kho: các lô nguyên liệu đang đến gần hoặc đã vượt quá ngày hết hạn
+            </CardDescription>
+          </div>
+          <Badge variant="warning">Cần kiểm tra</Badge>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="divide-y divide-border">
+            {stats.expiringIngredients?.length > 0 ? (
+              stats.expiringIngredients.map((ing: any) => {
+                const daysUntilExp = Math.ceil((new Date(ing.ExpirationDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+                const isExpired = daysUntilExp < 0;
+                
+                return (
+                  <div
+                    key={ing.IngredientReceiptDetailID}
+                    className="flex items-center justify-between px-6 py-4 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center">
+                        <Clock className="w-4.5 h-4.5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-foreground">{ing.Ingredient?.IngredientName || 'Nguyên liệu'}</h4>
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">
+                          Mã lô nhập: #{ing.IngredientReceiptID}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-sm font-bold font-mono ${isExpired ? 'text-red-500' : 'text-orange-500'}`}>
+                        {new Date(ing.ExpirationDate).toLocaleDateString('vi-VN')}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground block font-semibold">
+                        Tồn đọng: {ing.QuantityRemaining} • {isExpired ? 'Đã hết hạn' : `Còn ${daysUntilExp} ngày`}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+                Không có nguyên liệu nào sắp hết hạn trong 30 ngày tới.
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
       
 
     </div>

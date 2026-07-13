@@ -46,6 +46,41 @@ export async function processOrderIngredients(tx: any, items: { DrinkSizeID: num
             if (result.count === 0) {
               throw new AppError(400, `Nguyên liệu ${ingredient.IngredientName} không đủ tồn kho (Cần thêm: ${quantityToAdjust}). Lỗi đồng bộ dữ liệu (Race Condition)!`);
             }
+
+            // Deduct FIFO from batches
+            let remainingToDeduct = quantityToAdjust;
+            const availableBatches = await tx.ingredientReceiptDetail.findMany({
+              where: {
+                IngredientID: detail.IngredientID,
+                QuantityRemaining: { gt: 0 }
+              },
+              orderBy: [
+                { ExpirationDate: 'asc' }, // Prioritize expiring first
+                { createdAt: 'asc' } // Fallback to oldest received
+              ]
+            });
+
+            for (const batch of availableBatches) {
+              if (remainingToDeduct <= 0) break;
+              
+              const batchRemaining = Number(batch.QuantityRemaining);
+              const deductAmount = Math.min(batchRemaining, remainingToDeduct);
+              
+              await tx.ingredientReceiptDetail.update({
+                where: {
+                  IngredientReceiptID_IngredientID: {
+                    IngredientReceiptID: batch.IngredientReceiptID,
+                    IngredientID: batch.IngredientID
+                  }
+                },
+                data: {
+                  QuantityRemaining: { decrement: deductAmount }
+                }
+              });
+              
+              remainingToDeduct -= deductAmount;
+            }
+
           } else {
             await tx.ingredient.update({
               where: { IngredientID: detail.IngredientID },
@@ -53,6 +88,29 @@ export async function processOrderIngredients(tx: any, items: { DrinkSizeID: num
                 QuantityStock: { increment: quantityToAdjust },
               },
             });
+
+            // Refund to the newest batch
+            const newestBatch = await tx.ingredientReceiptDetail.findFirst({
+              where: { IngredientID: detail.IngredientID },
+              orderBy: [
+                { ExpirationDate: 'desc' },
+                { createdAt: 'desc' }
+              ]
+            });
+            
+            if (newestBatch) {
+              await tx.ingredientReceiptDetail.update({
+                where: {
+                  IngredientReceiptID_IngredientID: {
+                    IngredientReceiptID: newestBatch.IngredientReceiptID,
+                    IngredientID: newestBatch.IngredientID
+                  }
+                },
+                data: {
+                  QuantityRemaining: { increment: quantityToAdjust }
+                }
+              });
+            }
           }
         }
       }
@@ -349,6 +407,40 @@ router.post('/customer-place', optionalAuth, async (req, res, next) => {
           throw new AppError(
             400,
             `Sản phẩm ${item.Drink.DrinkName} (${item.Size.SizeName}) hiện tại không khả dụng.`,
+          );
+        }
+      }
+
+      // Pre-validate ingredients for the entire cart
+      const requiredIngredients = new Map<number, number>();
+      
+      for (const item of validatedData.Items) {
+        const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
+        if (catalogItem) {
+          const multiplier = catalogItem.Size.VolumeML / 500.0;
+          const recipe = await prisma.recipe.findFirst({
+            where: { DrinkID: catalogItem.DrinkID },
+            orderBy: { createdAt: 'desc' },
+            include: { RecipeDetails: true },
+          });
+
+          if (recipe) {
+            for (const detail of recipe.RecipeDetails) {
+              const baseQty = Number(detail.Quantity);
+              const totalRequired = baseQty * multiplier * item.Quantity;
+              const currentReq = requiredIngredients.get(detail.IngredientID) || 0;
+              requiredIngredients.set(detail.IngredientID, currentReq + totalRequired);
+            }
+          }
+        }
+      }
+
+      for (const [ingredientId, totalRequired] of requiredIngredients.entries()) {
+        const ingredient = await prisma.ingredient.findUnique({ where: { IngredientID: ingredientId } });
+        if (ingredient && Number(ingredient.QuantityStock) < totalRequired) {
+          throw new AppError(
+            400,
+            `Nguyên liệu "${ingredient.IngredientName}" không đủ để pha chế toàn bộ đơn hàng (cần: ${totalRequired}, tồn kho: ${ingredient.QuantityStock}). Vui lòng giảm số lượng món.`,
           );
         }
       }
@@ -962,9 +1054,9 @@ router.patch('/:id/status', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF',
         if (order.CustomerID) {
           const cust = await tx.customer.findUnique({ where: { CustomerID: order.CustomerID } });
           if (cust) {
-             const newTotal = cust.TotalMoneySpending + order.TotalPrice;
+             const newTotal = Number(cust.TotalMoneySpending) + Number(order.TotalPrice);
              await tx.customer.update({ where: { CustomerID: order.CustomerID }, data: { TotalMoneySpending: newTotal }});
-             await upgradeCustomerLevel(tx, order.CustomerID, newTotal);
+             await upgradeCustomerLevel(order.CustomerID, tx);
           }
         }
       } else if (order.OrderStatus !== 'CANCELLED' && validatedData.OrderStatus === 'CANCELLED') {
@@ -975,9 +1067,9 @@ router.patch('/:id/status', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF',
           if (order.CustomerID) {
             const cust = await tx.customer.findUnique({ where: { CustomerID: order.CustomerID } });
             if (cust) {
-               const newTotal = Math.max(0, cust.TotalMoneySpending - order.TotalPrice);
+               const newTotal = Math.max(0, Number(cust.TotalMoneySpending) - Number(order.TotalPrice));
                await tx.customer.update({ where: { CustomerID: order.CustomerID }, data: { TotalMoneySpending: newTotal }});
-               await upgradeCustomerLevel(tx, order.CustomerID, newTotal);
+               await upgradeCustomerLevel(order.CustomerID, tx);
             }
           }
         }
