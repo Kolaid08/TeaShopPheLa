@@ -163,6 +163,7 @@ model IngredientReceipt {
   ShippingAddress          String?                   @db.NVarChar(255)
   Latitude                 Float?
   Longitude                Float?
+  TotalPrice               Decimal                   @default(0) @db.Decimal(15, 2)
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   Supplier                 Supplier                  @relation(fields: [SupplierID], references: [SupplierID], map: "FK_IngredientReceipt_Supplier")
@@ -177,6 +178,8 @@ model IngredientReceiptDetail {
   IngredientID        Int
   Quantity            Decimal           @db.Decimal(10, 2)
   CostPrice           Decimal           @db.Decimal(10, 2)
+  ExpirationDate      DateTime?
+  QuantityRemaining   Decimal           @default(0) @db.Decimal(10, 2)
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   Ingredient          Ingredient        @relation(fields: [IngredientID], references: [IngredientID], map: "FK_IngredientReceiptDetail_Ingredient")

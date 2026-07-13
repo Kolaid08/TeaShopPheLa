@@ -367,9 +367,11 @@ export default function CustomerHome() {
   const handleOpenCustomize = (drink: Drink) => {
     setSelectedDrink(drink);
     // Find first available size
-    const availableSizes = drinkSizes.filter((ds) => ds.DrinkID === drink.DrinkID && ds.DrinkSizeStatus === 'AVAILABLE');
+    const availableSizes = drinkSizes.filter((ds) => ds.DrinkID === drink.DrinkID && ds.DrinkSizeStatus === 'AVAILABLE' && !ds.IsOutOfStock);
     if (availableSizes.length > 0 && availableSizes[0]) {
       setSelectedSizeId(availableSizes[0].DrinkSizeID);
+    } else {
+      setSelectedSizeId(0); // None available
     }
     setSugarLevel('100%');
     setIceLevel('100%');
@@ -612,8 +614,14 @@ export default function CustomerHome() {
       return;
     }
 
-    if (tableId === 0 && (!selectedProvinceId || !selectedDistrictId || !selectedWardCode || !deliveryAddress)) {
-      toast.error('Vui lòng cung cấp đầy đủ thông tin địa chỉ giao hàng.');
+    const outOfStockItems = cart.filter(item => {
+      const size = drinkSizes.find(s => s.DrinkSizeID === item.DrinkSizeID);
+      return size?.IsOutOfStock;
+    });
+
+    if (outOfStockItems.length > 0) {
+      const names = outOfStockItems.map(i => `${i.DrinkName} (${i.SizeName})`).join(', ');
+      toast.error(`Rất tiếc! Món [${names}] hiện đã hết nguyên liệu. Vui lòng xoá khỏi giỏ hàng.`);
       return;
     }
 
@@ -632,7 +640,7 @@ export default function CustomerHome() {
           Ice: item.Ice,
           Toppings: Array.isArray(item.Toppings) 
             ? (item.Toppings.length > 0 ? item.Toppings.map((t: any) => t.name || t).join(', ') : undefined)
-            : (typeof item.Toppings === 'string' && item.Toppings.trim() !== '' ? item.Toppings : undefined),
+            : (typeof item.Toppings === 'string' && (item.Toppings as string).trim() !== '' ? item.Toppings : undefined),
           UnitPrice: Number(item.UnitPrice),
         })),
         TotalPrice: getTotalPrice(),
@@ -673,7 +681,7 @@ export default function CustomerHome() {
         router.push('/history');
       }
     } catch (err: any) {
-      toast.error('Lỗi gửi đơn đặt hàng.');
+      toast.error(err.message || 'Lỗi gửi đơn đặt hàng.');
     } finally {
       setIsSubmittingOrder(false);
     }
@@ -1376,17 +1384,23 @@ export default function CustomerHome() {
                   .map(ds => (
                     <button
                       key={ds.DrinkSizeID}
-                      type="button"
+                      disabled={ds.IsOutOfStock}
                       onClick={() => setSelectedSizeId(ds.DrinkSizeID)}
                       className={`border rounded-xl p-3 text-xs flex flex-col items-center justify-center transition-all ${
-                        selectedSizeId === ds.DrinkSizeID
+                        ds.IsOutOfStock
+                          ? 'border-border/50 bg-muted/50 text-muted-foreground cursor-not-allowed opacity-50'
+                          : selectedSizeId === ds.DrinkSizeID
                           ? 'border-primary bg-primary/5 text-primary font-bold'
                           : 'border-border bg-background/50 hover:bg-muted text-foreground'
                       }`}
                     >
                       <span className="text-base font-serif font-black">{ds.Size?.SizeName}</span>
-                      <span className="font-mono text-[9px] text-muted-foreground mt-0.5">{ds.Size?.VolumeML}ml</span>
-                      <span className="font-mono font-bold mt-1 text-[10px] text-primary">{ds.UnitPrice.toLocaleString('vi-VN')} đ</span>
+                      <span className="font-mono text-[9px] mt-0.5">{ds.Size?.VolumeML}ml</span>
+                      {ds.IsOutOfStock ? (
+                        <span className="font-sans font-bold mt-1 text-[10px] text-red-500">Hết nguyên liệu</span>
+                      ) : (
+                        <span className="font-mono font-bold mt-1 text-[10px] text-primary">{ds.UnitPrice.toLocaleString('vi-VN')} đ</span>
+                      )}
                     </button>
                   ))}
               </div>
@@ -1475,8 +1489,9 @@ export default function CustomerHome() {
                     key={d.DrinkID} 
                     onClick={() => {
                       setSelectedDrink(d);
-                      const sizes = drinkSizes.filter(s => s.DrinkID === d.DrinkID && s.DrinkSizeStatus === 'AVAILABLE');
+                      const sizes = drinkSizes.filter(s => s.DrinkID === d.DrinkID && s.DrinkSizeStatus === 'AVAILABLE' && !s.IsOutOfStock);
                       if (sizes.length > 0) setSelectedSizeId(sizes[0]?.DrinkSizeID!);
+                      else setSelectedSizeId(0);
                     }}
                     className="shrink-0 w-32 rounded-xl overflow-hidden border border-border hover:border-primary transition-all text-left"
                   >
@@ -1498,9 +1513,10 @@ export default function CustomerHome() {
               </div>
               <Button 
                 onClick={handleAddToCart}
-                className="py-3 px-6 rounded-xl font-serif uppercase tracking-wider font-extrabold text-sm text-white"
+                disabled={!selectedSizeId || drinkSizes.find(s => s.DrinkSizeID === selectedSizeId)?.IsOutOfStock}
+                className={`py-3 px-6 rounded-xl font-serif uppercase tracking-wider font-extrabold text-sm ${(!selectedSizeId || drinkSizes.find(s => s.DrinkSizeID === selectedSizeId)?.IsOutOfStock) ? 'bg-muted text-muted-foreground' : 'text-white'}`}
               >
-                Thêm Vào Giỏ Hàng
+                {!selectedSizeId || drinkSizes.find(s => s.DrinkSizeID === selectedSizeId)?.IsOutOfStock ? 'Hết nguyên liệu' : 'Thêm Vào Giỏ Hàng'}
               </Button>
             </div>
           </div>

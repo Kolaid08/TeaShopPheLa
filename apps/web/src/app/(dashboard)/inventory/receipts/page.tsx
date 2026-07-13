@@ -23,6 +23,7 @@ interface ReceiptItem {
   IngredientID: number;
   Quantity: number;
   CostPrice: number;
+  ExpirationDate?: string | null;
 }
 
 export default function IngredientReceipts() {
@@ -42,6 +43,7 @@ export default function IngredientReceipts() {
   const [addItemId, setAddItemId] = useState(0);
   const [addQty, setAddQty] = useState(10);
   const [addCost, setAddCost] = useState(5000);
+  const [addExpDate, setAddExpDate] = useState('');
 
   // Shipper assignment states
   const [isAssignShipperOpen, setIsAssignShipperOpen] = useState(false);
@@ -76,6 +78,7 @@ export default function IngredientReceipts() {
     setAddItemId(ingredients[0]?.IngredientID || 0);
     setAddQty(100);
     setAddCost(10000);
+    setAddExpDate('');
     setIsFormOpen(true);
   };
 
@@ -101,6 +104,7 @@ export default function IngredientReceipts() {
         IngredientID: addItemId,
         Quantity: addQty,
         CostPrice: addCost,
+        ExpirationDate: addExpDate ? addExpDate : null,
       },
     ]);
     toast.success('Đã thêm dòng vật tư nhập kho.');
@@ -213,6 +217,7 @@ export default function IngredientReceipts() {
                 <TableHead>Nhà Cung Cấp</TableHead>
                 <TableHead>Ngày Nhận</TableHead>
                 <TableHead>Chi tiết vật tư nhập</TableHead>
+                <TableHead>Tổng tiền</TableHead>
                 <TableHead>Trạng Thái</TableHead>
                 <TableHead className="text-right">Hành động</TableHead>
               </TableRow>
@@ -232,13 +237,21 @@ export default function IngredientReceipts() {
                   <TableCell>
                     <div className="space-y-1">
                       {rec.IngredientReceiptDetails?.map((det, idx) => (
-                        <div key={idx} className="text-xs text-foreground">
-                          {det.Ingredient?.IngredientName} x{' '}
-                          <span className="font-bold">{det.Quantity}</span> (Đơn giá:{' '}
-                          {det.CostPrice.toLocaleString('vi-VN')} đ)
+                        <div key={idx} className="flex flex-col text-xs text-foreground mb-1">
+                          <span>
+                            {det.Ingredient?.IngredientName} x <span className="font-bold">{det.Quantity}</span> (Đơn giá: {det.CostPrice.toLocaleString('vi-VN')} đ)
+                          </span>
+                          {det.ExpirationDate && (
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              HSD: {new Date(det.ExpirationDate).toLocaleDateString('vi-VN')} (Tồn: {det.QuantityRemaining ?? 0})
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
+                  </TableCell>
+                  <TableCell className="font-mono font-bold text-sm text-foreground">
+                    {rec.TotalPrice ? rec.TotalPrice.toLocaleString('vi-VN') : '0'} đ
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -327,7 +340,7 @@ export default function IngredientReceipts() {
             <h4 className="text-xs font-bold uppercase tracking-wide text-primary">
               Thêm vật tư nhập kho:
             </h4>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground block mb-1">
                   Nguyên liệu
@@ -343,6 +356,17 @@ export default function IngredientReceipts() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground block mb-1">
+                  Hạn sử dụng (Tùy chọn)
+                </label>
+                <Input
+                  type="date"
+                  value={addExpDate}
+                  onChange={(e) => setAddExpDate(e.target.value)}
+                  className="p-2 h-9 text-xs font-mono bg-background/40"
+                />
               </div>
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground block mb-1">
@@ -397,10 +421,15 @@ export default function IngredientReceipts() {
                   )?.IngredientName;
                   return (
                     <div key={idx} className="flex justify-between py-2 items-center">
-                      <span>
-                        {ingName} x <span className="font-bold">{item.Quantity}</span> (Đơn giá:{' '}
-                        {item.CostPrice.toLocaleString('vi-VN')} đ)
-                      </span>
+                      <div className="flex flex-col">
+                        <span>
+                          {ingName} x <span className="font-bold">{item.Quantity}</span> (Đơn giá:{' '}
+                          {item.CostPrice.toLocaleString('vi-VN')} đ)
+                        </span>
+                        {item.ExpirationDate && (
+                          <span className="text-[10px] text-muted-foreground font-mono mt-0.5">HSD: {new Date(item.ExpirationDate).toLocaleDateString('vi-VN')}</span>
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={() => handleRemoveItemFromReceipt(idx)}

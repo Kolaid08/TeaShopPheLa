@@ -32,6 +32,7 @@ export interface DrinkSize {
   SizeID: number;
   UnitPrice: number;
   DrinkSizeStatus: 'AVAILABLE' | 'UNAVAILABLE';
+  IsOutOfStock?: boolean;
   Drink?: { DrinkName: string };
   Size?: { SizeName: string; VolumeML: number };
 }
@@ -457,7 +458,7 @@ export const api = {
       if (e.message === 'Phiên đăng nhập hết hạn') throw e;
       
       return db.orders
-        .filter((o) => o.CustomerID === cust.CustomerID)
+        .filter((o) => o.CustomerID === cust?.CustomerID)
         .map((o) => ({
           ...o,
           Customer: db.customers.find((c) => c.CustomerID === o.CustomerID),
@@ -536,8 +537,11 @@ export const api = {
       const payload = await res.json();
       if (res.ok) return payload.data;
       console.error('Backend Error Payload:', payload);
-      throw new Error(payload.message || 'Error');
-    } catch {
+      const err: any = new Error(payload.message || 'Lỗi từ hệ thống (Backend).');
+      err.isBackendError = true;
+      throw err;
+    } catch (e: any) {
+      if (e.isBackendError) throw e;
       const newO: Order = {
         OrderID: db.orders.length + 1,
         CustomerID: cust?.CustomerID || 1,

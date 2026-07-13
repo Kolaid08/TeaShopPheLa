@@ -307,6 +307,17 @@ export default function PosTerminal() {
       return;
     }
 
+    const outOfStockItems = cart.filter(item => {
+      const size = drinkSizes.find(s => s.DrinkSizeID === item.DrinkSizeID);
+      return size?.IsOutOfStock;
+    });
+
+    if (outOfStockItems.length > 0) {
+      const names = outOfStockItems.map(i => `${i.DrinkName} (${i.SizeName})`).join(', ');
+      toast.error(`Món [${names}] đã hết nguyên liệu. Vui lòng xoá khỏi giỏ hàng.`);
+      return;
+    }
+
     try {
       const orderPayload = {
         CustomerID: activeCustomer?.CustomerID || null,
@@ -591,13 +602,24 @@ export default function PosTerminal() {
                     return (
                       <button
                         key={size.SizeID}
+                        disabled={priceMapping.IsOutOfStock}
                         onClick={() => handleAddToCart(drink, size)}
-                        className="flex-1 py-2 px-1 rounded-xl border border-border bg-background hover:bg-primary hover:text-white transition-all text-center flex flex-col items-center justify-center font-sans active:scale-95 group"
+                        className={`flex-1 py-2 px-1 rounded-xl border transition-all text-center flex flex-col items-center justify-center font-sans ${
+                          priceMapping.IsOutOfStock
+                            ? 'border-border/50 bg-muted/50 text-muted-foreground cursor-not-allowed opacity-50'
+                            : 'border-border bg-background hover:bg-primary hover:text-white active:scale-95 group'
+                        }`}
                       >
                         <span className="text-xs font-extrabold">{size.SizeName}</span>
-                        <span className="text-[9px] font-semibold text-muted-foreground group-hover:text-white/80 font-mono mt-0.5">
-                          {(priceMapping.UnitPrice / 1000).toFixed(0)}k
-                        </span>
+                        {priceMapping.IsOutOfStock ? (
+                          <span className="text-[9px] font-bold text-red-500 font-sans mt-0.5">
+                            Hết
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-semibold text-muted-foreground group-hover:text-white/80 font-mono mt-0.5">
+                            {(priceMapping.UnitPrice / 1000).toFixed(0)}k
+                          </span>
+                        )}
                       </button>
                     );
                   })}

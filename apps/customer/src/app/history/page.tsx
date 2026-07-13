@@ -88,19 +88,30 @@ export default function HistoryPage() {
   }, [router]);
 
   // Handle re-ordering (Add items from past order to cart)
-  const handleReorder = (order: Order) => {
+  const handleReorder = async (order: Order) => {
     if (!order.OrderDetails || order.OrderDetails.length === 0) {
       toast.error('Không tìm thấy chi tiết món nước để mua lại.');
       return;
     }
 
     try {
+      // Fetch latest drink sizes to check stock
+      const allDrinkSizes = await api.getDrinkSizes();
+
       // Get existing cart items from LocalStorage
       const savedCart = localStorage.getItem('phela_customer_cart');
       let currentCart = savedCart ? JSON.parse(savedCart) : [];
 
+      let skippedItems: string[] = [];
+
       // Map OrderDetails into CartItem structure
       order.OrderDetails.forEach((detail) => {
+        const sizeInfo = allDrinkSizes.find((s: any) => s.DrinkSizeID === detail.DrinkSizeID);
+        if (sizeInfo?.IsOutOfStock) {
+          skippedItems.push(detail.DrinkSize?.Drink?.DrinkName || 'Món nước');
+          return;
+        }
+
         const sugar = '100%'; // Default levels
         const ice = '100%';
         const toppings: { name: string; price: number }[] = [];
@@ -127,6 +138,11 @@ export default function HistoryPage() {
         }
       });
 
+      if (currentCart.length === (savedCart ? JSON.parse(savedCart).length : 0)) {
+        toast.error('Tất cả món nước trong đơn cũ đều đã hết nguyên liệu, không thể mua lại.');
+        return;
+      }
+
       // Save updated cart
       localStorage.setItem('phela_customer_cart', JSON.stringify(currentCart));
       
@@ -135,7 +151,11 @@ export default function HistoryPage() {
         console.error('Failed to sync cart to backend after reorder', err);
       });
 
-      toast.success('Đã thêm các món nước từ đơn hàng cũ vào giỏ hàng.');
+      if (skippedItems.length > 0) {
+        toast.warning(`Đã thêm vào giỏ. Đã bỏ qua: ${skippedItems.join(', ')} do hết nguyên liệu.`);
+      } else {
+        toast.success('Đã thêm các món nước từ đơn hàng cũ vào giỏ hàng.');
+      }
       router.push('/'); // Navigate to shop menu
     } catch (err) {
       toast.error('Lỗi khi mua lại đơn hàng.');

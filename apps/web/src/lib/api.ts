@@ -33,6 +33,7 @@ export interface DrinkSize {
   SizeID: number;
   UnitPrice: number;
   DrinkSizeStatus: 'AVAILABLE' | 'UNAVAILABLE';
+  IsOutOfStock?: boolean;
   Drink?: { DrinkName: string };
   Size?: { SizeName: string; VolumeML: number };
 }
@@ -99,6 +100,7 @@ export interface IngredientReceipt {
   ShippingAddress?: string;
   Latitude?: number;
   Longitude?: number;
+  TotalPrice?: number;
   Supplier?: { SupplierName: string };
   Shipper?: { FullName: string; PhoneNumber: string };
   IngredientReceiptDetails?: IngredientReceiptDetail[];
@@ -109,6 +111,8 @@ export interface IngredientReceiptDetail {
   IngredientID: number;
   Quantity: number;
   CostPrice: number;
+  ExpirationDate?: string | null;
+  QuantityRemaining?: number;
   Ingredient?: { IngredientName: string };
 }
 
@@ -568,7 +572,11 @@ export const api = {
 
     const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
     const payload = await res.json();
-    if (!res.ok) throw new Error(payload.message || 'API query failed.');
+    if (!res.ok) {
+      const err: any = new Error(payload.message || 'Lỗi từ hệ thống (Backend).');
+      err.isBackendError = true;
+      throw err;
+    }
     return payload.data;
   },
 
@@ -1029,7 +1037,8 @@ export const api = {
   createOrder: async (data: any): Promise<Order> => {
     try {
       return await api.request('/orders', { method: 'POST', body: JSON.stringify(data) });
-    } catch {
+    } catch (err: any) {
+      if (err.isBackendError) throw err;
       const user = getSessionUser();
       const newO: Order = {
         OrderID: db.orders.length + 1,
