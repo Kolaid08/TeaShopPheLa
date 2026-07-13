@@ -108,6 +108,16 @@ export default function CustomerHome() {
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [isPolling, setIsPolling] = useState(false);
 
+  // Shipping states
+  const [shippingFee, setShippingFee] = useState<number>(0);
+  const [provinces, setProvinces] = useState<any[]>([]);
+  const [districts, setDistricts] = useState<any[]>([]);
+  const [wards, setWards] = useState<any[]>([]);
+  
+  const [selectedProvinceId, setSelectedProvinceId] = useState<number>(0);
+  const [selectedDistrictId, setSelectedDistrictId] = useState<number>(0);
+  const [selectedWardCode, setSelectedWardCode] = useState<string>('');
+
   // Available options
   const toppingsList = [
     { name: 'Trân châu Hoàng Kim', price: 10000 },
@@ -294,6 +304,40 @@ export default function CustomerHome() {
       window.removeEventListener('ai_add_combo', handleAIAddCombo);
     };
   }, [router]);
+
+  useEffect(() => {
+    api.getProvinces().then(setProvinces);
+  }, []);
+
+  useEffect(() => {
+    if (selectedProvinceId) {
+      api.getDistricts(selectedProvinceId).then(setDistricts);
+      setSelectedDistrictId(0);
+      setSelectedWardCode('');
+      setWards([]);
+      setShippingFee(0);
+    }
+  }, [selectedProvinceId]);
+
+  useEffect(() => {
+    if (selectedDistrictId) {
+      api.getWards(selectedDistrictId).then(setWards);
+      setSelectedWardCode('');
+      setShippingFee(0);
+    }
+  }, [selectedDistrictId]);
+
+  useEffect(() => {
+    if (selectedDistrictId && selectedWardCode && cart.length > 0) {
+      api.calculateFee({
+        to_district_id: selectedDistrictId,
+        to_ward_code: selectedWardCode,
+        items: cart.map(c => ({ DrinkSizeID: c.DrinkSizeID, Quantity: c.Quantity }))
+      }).then(res => setShippingFee(res.fee));
+    } else {
+      setShippingFee(0);
+    }
+  }, [selectedDistrictId, selectedWardCode, cart]);
 
   const saveCartState = (updatedCart: CartItem[]) => {
     setCart(updatedCart);
@@ -1318,6 +1362,19 @@ export default function CustomerHome() {
           title={`Tùy chỉnh đồ uống: ${selectedDrink.DrinkName}`}
         >
           <div className="space-y-5">
+            {/* Drink Image in Dialog */}
+            {selectedDrink.DrinkImageURL && (
+              <div className="w-full h-48 rounded-xl overflow-hidden bg-muted mb-2">
+                <img 
+                  src={selectedDrink.DrinkImageURL} 
+                  alt={selectedDrink.DrinkName} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
             {/* 1. Size selection options */}
             <div className="space-y-2">
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Kích cỡ cốc (Sizes):</span>
@@ -1474,7 +1531,31 @@ export default function CustomerHome() {
           title="Xác nhận thanh toán đơn hàng"
         >
           <div className="space-y-6 text-center">
-            <p className="text-xs text-muted-foreground">Chọn phương thức thanh toán để kết toán hóa đơn order:</p>
+            <div className="bg-muted/30 border border-border/50 rounded-2xl p-4 text-left space-y-2">
+              <p className="font-bold text-sm mb-2 border-b border-border/50 pb-2">Chi tiết thanh toán</p>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Tạm tính ({cart.reduce((acc, curr) => acc + curr.Quantity, 0)} món)</span>
+                <span className="font-mono">{getSubtotal().toLocaleString('vi-VN')} đ</span>
+              </div>
+              {customer?.MemberShipLevel?.DiscountRate ? (
+                <div className="flex justify-between text-xs text-emerald-500 font-medium">
+                  <span>Hội viên ({customer.MemberShipLevel.DiscountRate}%)</span>
+                  <span className="font-mono">-{getDiscountAmount().toLocaleString('vi-VN')} đ</span>
+                </div>
+              ) : null}
+              {shippingFee > 0 && (
+                <div className="flex justify-between text-xs text-muted-foreground font-medium">
+                  <span>Phí giao hàng</span>
+                  <span className="font-mono">+{shippingFee.toLocaleString('vi-VN')} đ</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-bold text-primary pt-2 border-t border-border/50 mt-1">
+                <span>Tổng cộng</span>
+                <span className="font-mono text-lg">{getTotalPrice().toLocaleString('vi-VN')} đ</span>
+              </div>
+            </div>
+            
+            <p className="text-xs text-muted-foreground mt-4">Chọn phương thức thanh toán để kết toán hóa đơn order:</p>
             
             <div className="grid grid-cols-2 gap-4">
               {/* Payment Option 1: Cash/COD */}

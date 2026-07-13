@@ -17,7 +17,6 @@ model Drink {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   DrinkSizes       DrinkSize[]
-  Recipes          Recipe[]
   Reviews          Review[]
 
   @@map("Drink")
@@ -55,7 +54,7 @@ model DrinkSize {
 
 model Recipe {
   RecipeID      Int            @id @default(autoincrement())
-  DrinkID       Int
+  DrinkSizeID   Int
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   Drink         Drink          @relation(fields: [DrinkID], references: [DrinkID], onDelete: Cascade, map: "FK_Recipe_Drink")
@@ -99,6 +98,32 @@ model RecipeDetail {
 
   @@id([RecipeID, IngredientID])
   @@map("RecipeDetail")
+}
+
+model Topping {
+  ToppingID     Int                    @id @default(autoincrement())
+  ToppingName   String                 @db.NVarChar(255)
+  Price         Decimal                @db.Decimal(10, 2)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  ToppingRecipeDetails ToppingRecipeDetail[]
+
+  @@map("Topping")
+}
+
+model ToppingRecipeDetail {
+  ToppingID    Int
+  IngredientID Int
+  Quantity     Decimal    @db.Decimal(10, 2)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  Topping      Topping    @relation(fields: [ToppingID], references: [ToppingID], onDelete: Cascade)
+  Ingredient   Ingredient @relation(fields: [IngredientID], references: [IngredientID], onDelete: NoAction)
+
+  @@id([ToppingID, IngredientID])
+  @@map("ToppingRecipeDetail")
 }
 
 model Supplier {
