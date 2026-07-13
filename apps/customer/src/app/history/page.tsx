@@ -39,6 +39,19 @@ export default function HistoryPage() {
   const [refundAccountNumber, setRefundAccountNumber] = useState('');
   const [refundAccountName, setRefundAccountName] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
+  const [banks, setBanks] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Fetch bank list from vietqr for refund form
+    fetch('https://api.vietqr.io/v2/banks')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.code === '00' && data.data) {
+          setBanks(data.data);
+        }
+      })
+      .catch((err) => console.error('Failed to load banks:', err));
+  }, []);
 
   useEffect(() => {
     // Authenticate check
@@ -668,13 +681,18 @@ export default function HistoryPage() {
                 <p className="text-xs text-red-600 font-semibold mb-1">
                   Đơn hàng đã được thanh toán. Vui lòng nhập thông tin tài khoản ngân hàng để nhận hoàn tiền:
                 </p>
-                <input
-                  type="text"
-                  placeholder="Tên ngân hàng (VD: Vietcombank, MB, Techcombank)"
+                <select
                   className="w-full text-sm border-b border-red-200 bg-transparent py-2 outline-none focus:border-red-500"
                   value={refundBankCode}
                   onChange={(e) => setRefundBankCode(e.target.value)}
-                />
+                >
+                  <option value="">-- Chọn ngân hàng --</option>
+                  {banks.map((bank) => (
+                    <option key={bank.bin} value={bank.bin}>
+                      {bank.shortName} - {bank.name}
+                    </option>
+                  ))}
+                </select>
                 <input
                   type="text"
                   placeholder="Số tài khoản"

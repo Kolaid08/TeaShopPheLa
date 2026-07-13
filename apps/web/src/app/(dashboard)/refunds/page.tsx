@@ -175,27 +175,38 @@ export default function RefundsPage() {
       <Dialog isOpen={isDetailOpen} onClose={() => setIsDetailOpen(false)} title={`Hoàn tiền Hóa Đơn #${selectedOrder?.OrderID}`}>
         {selectedOrder && (
           <div className="space-y-6">
-            <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex flex-col gap-3">
-              <h3 className="text-red-700 font-bold flex items-center gap-2 border-b border-red-200 pb-2">
-                <RotateCcw className="w-5 h-5" /> Thông tin nhận tiền của khách
-              </h3>
-              <div className="grid grid-cols-1 gap-2 text-sm mt-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-2"><Building className="w-4 h-4"/> Ngân hàng:</span>
-                  <span className="font-bold text-foreground">{selectedOrder.RefundBankCode}</span>
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col md:flex-row gap-6">
+              <div className="flex-1 flex flex-col gap-3">
+                <h3 className="text-blue-800 font-bold flex items-center gap-2 border-b border-blue-200 pb-2">
+                  <RotateCcw className="w-5 h-5" /> Thông tin nhận tiền của khách
+                </h3>
+                <div className="grid grid-cols-1 gap-2 text-sm mt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground flex items-center gap-2"><Building className="w-4 h-4"/> Ngân hàng:</span>
+                    <span className="font-bold text-foreground">{selectedOrder.RefundBankCode}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground flex items-center gap-2"><Hash className="w-4 h-4"/> Số tài khoản:</span>
+                    <span className="font-bold text-lg text-primary">{selectedOrder.RefundAccountNumber}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground flex items-center gap-2"><User className="w-4 h-4"/> Tên chủ TK:</span>
+                    <span className="font-bold text-foreground uppercase">{selectedOrder.RefundAccountName}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-blue-200/50">
+                    <span className="text-blue-800 font-bold">Số tiền cần chuyển:</span>
+                    <span className="font-black text-xl text-blue-700">{selectedOrder.TotalPrice.toLocaleString('vi-VN')}đ</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-2"><Hash className="w-4 h-4"/> Số tài khoản:</span>
-                  <span className="font-bold text-lg text-primary">{selectedOrder.RefundAccountNumber}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-2"><User className="w-4 h-4"/> Tên chủ TK:</span>
-                  <span className="font-bold text-foreground uppercase">{selectedOrder.RefundAccountName}</span>
-                </div>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-red-200/50">
-                  <span className="text-red-600 font-bold">Số tiền cần chuyển:</span>
-                  <span className="font-black text-xl text-red-600">{selectedOrder.TotalPrice.toLocaleString('vi-VN')}đ</span>
-                </div>
+              </div>
+              
+              <div className="flex flex-col items-center justify-center bg-white p-3 rounded-lg border border-blue-200 shadow-sm min-w-[200px]">
+                <p className="text-xs font-bold text-blue-800 mb-2 uppercase tracking-wide">Quét mã để chuyển nhanh</p>
+                <img 
+                  src={`https://img.vietqr.io/image/${selectedOrder.RefundBankCode}-${selectedOrder.RefundAccountNumber}-compact2.png?amount=${selectedOrder.TotalPrice}&addInfo=Hoan tien DH ${selectedOrder.OrderID}&accountName=${encodeURIComponent(selectedOrder.RefundAccountName || '')}`} 
+                  alt="VietQR" 
+                  className="w-40 h-40 object-contain"
+                />
               </div>
             </div>
 
