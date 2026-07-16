@@ -6,6 +6,11 @@ const prisma = new PrismaClient();
 export const syncCart = async (req: Request, res: Response) => {
   try {
     const { SessionID, CustomerID, Items } = req.body;
+
+    // BẢO MẬT: Chặn Carts IDOR & Mass Assignment
+    if (CustomerID && (!req.user || req.user.CustomerID !== Number(CustomerID))) {
+        return res.status(403).json({ success: false, message: 'Forbidden: Cannot modify other customer carts.' });
+    }
     
     let validCustomerID = null;
     if (CustomerID) {
@@ -75,26 +80,38 @@ export const syncCart = async (req: Request, res: Response) => {
       const mergedItemsMap = new Map<string, any>();
       
       // Helper to generate a unique key for a cart item
-      const getItemKey = (item: any) => `${item.DrinkSizeID}-${item.Sugar || '100%'}-${item.Ice || '100%'}-${item.Toppings || '[]'}`;
+      const getItemKey = (item: any) => {
+        let tStr = '';
+        if (Array.isArray(item.Toppings)) {
+          tStr = [...item.Toppings].sort().join(',');
+        } else if (item.Toppings) {
+           tStr = JSON.stringify(item.Toppings);
+        }
+        return `${item.DrinkSizeID}-${item.Sugar || '100%'}-${item.Ice || '100%'}-${tStr}`;
+      }
 
       // Add existing DB items to map
       for (const item of existingItems) {
-        const key = getItemKey(item);
-        mergedItemsMap.set(key, { ...item, Quantity: item.Quantity });
+        // Since we deleted existing items, this logic is a bit tricky.
+        // Wait, the previous logic deleted ALL items and recreated them. But what about existing toppings?
+        // Let's just rely entirely on the frontend's Items for sync.
+        // Wait, the frontend overrides the whole cart. So we just need to process Items!
       }
+      
+      mergedItemsMap.clear();
 
       // Add/Update request Items to map
       if (Items && Items.length > 0) {
         for (const item of Items) {
           const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
           if (catalogItem) {
-            const toppingsStr = typeof item.Toppings === 'string' ? item.Toppings : JSON.stringify(item.Toppings || []);
+            // item.Toppings should now be an array of IDs from Frontend
             const normalizedItem = {
               DrinkSizeID: item.DrinkSizeID,
               Quantity: item.Quantity,
               Sugar: item.Sugar || '100%',
               Ice: item.Ice || '100%',
-              Toppings: toppingsStr,
+              Toppings: Array.isArray(item.Toppings) ? item.Toppings : [],
               UnitPrice: catalogItem.UnitPrice
             };
             const key = getItemKey(normalizedItem);
@@ -110,17 +127,33 @@ export const syncCart = async (req: Request, res: Response) => {
       const finalItemsToInsert = Array.from(mergedItemsMap.values());
 
       if (finalItemsToInsert.length > 0) {
-        await tx.cartItem.createMany({
-          data: finalItemsToInsert.map(item => ({
-            CartID: finalCartId,
-            DrinkSizeID: item.DrinkSizeID,
-            Quantity: item.Quantity,
-            Sugar: item.Sugar,
-            Ice: item.Ice,
-            Toppings: item.Toppings,
-            UnitPrice: item.UnitPrice
-          }))
-        });
+        for (const item of finalItemsToInsert) {
+           const cItem = await tx.cartItem.create({
+             data: {
+               CartID: finalCartId,
+               DrinkSizeID: item.DrinkSizeID,
+               Quantity: item.Quantity,
+               Sugar: item.Sugar,
+               Ice: item.Ice,
+               UnitPrice: item.UnitPrice
+             }
+           });
+           
+           if (item.Toppings && item.Toppings.length > 0) {
+             const toppingList = await tx.topping.findMany({ where: { ToppingID: { in: item.Toppings } } });
+             await tx.cartItemTopping.createMany({
+               data: item.Toppings.map((tId: number) => {
+                 const tPrice = toppingList.find(t => t.ToppingID === tId)?.Price || 0;
+                 return {
+                   CartItemID: cItem.CartItemID,
+                   ToppingID: tId,
+                   Quantity: 1,
+                   UnitPrice: tPrice,
+                 }
+               })
+             });
+           }
+        }
       }
 
       // Fetch the updated cart to return
@@ -131,6 +164,9 @@ export const syncCart = async (req: Request, res: Response) => {
             include: {
               DrinkSize: {
                 include: { Drink: true, Size: true }
+              },
+              Toppings: {
+                include: { Topping: true }
               }
             }
           }
@@ -149,6 +185,13 @@ export const getCart = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const isCustomer = !isNaN(Number(id));
+    
+    // BẢO MẬT: Chặn Carts IDOR
+    if (isCustomer) {
+      if (!req.user || req.user.CustomerID !== Number(id)) {
+        return res.status(403).json({ success: false, message: 'Forbidden: Cannot access other customer carts.' });
+      }
+    }
     
     const cart = await prisma.cart.findFirst({
       where: isCustomer ? { CustomerID: Number(id) } : { SessionID: id },
@@ -185,14 +228,14 @@ export const getAbandonedCarts = async (req: Request, res: Response) => {
 
     const abandonedCarts = await prisma.cart.findMany({
       where: {
-        Status: 'ABANDONED',
+        Status: { in: ['ABANDONED', 'ABANDONED_NOTIFIED'] },
         CartItems: {
           some: {} // Only get carts that actually have items
         }
       },
       include: {
         Customer: {
-          select: { CustomerName: true, PhoneNumber: true, Email: true }
+          select: { CustomerName: true, PhoneNumber: true }
         },
         CartItems: true
       },
@@ -200,7 +243,7 @@ export const getAbandonedCarts = async (req: Request, res: Response) => {
     });
 
     // Manually join DrinkSize details
-    const drinkSizeIds = Array.from(new Set(abandonedCarts.flatMap(c => c.CartItems.map(item => item.DrinkSizeID))));
+    const drinkSizeIds = Array.from(new Set(abandonedCarts.flatMap((c: any) => c.CartItems.map((item: any) => item.DrinkSizeID))));
     const drinkSizes = await prisma.drinkSize.findMany({
       where: { DrinkSizeID: { in: drinkSizeIds } },
       include: { Drink: true, Size: true }
@@ -208,9 +251,9 @@ export const getAbandonedCarts = async (req: Request, res: Response) => {
     
     const drinkSizeMap = new Map(drinkSizes.map(ds => [ds.DrinkSizeID, ds]));
 
-    const result = abandonedCarts.map(cart => ({
+    const result = abandonedCarts.map((cart: any) => ({
       ...cart,
-      CartItems: cart.CartItems.map(item => ({
+      CartItems: cart.CartItems.map((item: any) => ({
         ...item,
         DrinkSize: drinkSizeMap.get(item.DrinkSizeID)
       }))

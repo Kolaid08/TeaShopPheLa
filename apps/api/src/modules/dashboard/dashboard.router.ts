@@ -149,7 +149,7 @@ router.get('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, n
     // 6. Abandoned Carts (Giỏ hàng bị bỏ quên)
     const abandonedCartsRaw = await prisma.cart.findMany({
       where: {
-        Status: 'ABANDONED',
+        Status: { in: ['ABANDONED', 'ABANDONED_NOTIFIED'] },
         CartItems: { some: {} },
       },
       include: {

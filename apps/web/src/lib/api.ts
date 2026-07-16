@@ -112,7 +112,6 @@ export interface MembershipLevel {
 export interface Customer {
   CustomerID: number;
   CustomerName: string;
-  Email?: string;
   PhoneNumber: string;
   TotalMoneySpending: number;
   LevelID: number;
@@ -164,7 +163,7 @@ export interface OrderDetail {
   UnitPrice: number;
   Sugar?: string;
   Ice?: string;
-  Toppings?: string;
+  Toppings?: any[];
   DrinkSize?: {
     Drink?: { DrinkName: string };
     Size?: { SizeName: string };
@@ -373,7 +372,6 @@ class LocalDatabase {
     {
       CustomerID: 1,
       CustomerName: 'Nguyễn Văn A',
-      Email: 'ana@gmail.com',
       PhoneNumber: '0901122334',
       TotalMoneySpending: 1250000,
       LevelID: 2,
@@ -381,7 +379,6 @@ class LocalDatabase {
     {
       CustomerID: 2,
       CustomerName: 'Trần Thị B',
-      Email: 'btran@gmail.com',
       PhoneNumber: '0909988776',
       TotalMoneySpending: 3200000,
       LevelID: 3,
@@ -1042,7 +1039,8 @@ export const api = {
   markAsRefunded: async (id: number): Promise<Order> => {
     try {
       return await api.request(`/orders/${id}/refund`, { method: 'PUT' });
-    } catch {
+    } catch (err: any) {
+      if (err.isBackendError) throw err;
       const idx = db.orders.findIndex(o => o.OrderID === id);
       if (idx === -1) throw new Error('Order not found');
       (db.orders[idx] as any).RefundStatus = 'COMPLETED';
@@ -1055,7 +1053,8 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ OrderStatus: status }),
       });
-    } catch {
+    } catch (err: any) {
+      if (err.isBackendError) throw err;
       const idx = db.orders.findIndex((o) => o.OrderID === id);
       if (idx === -1) throw new Error('Order not found');
       db.orders[idx]!.OrderStatus = status as any;

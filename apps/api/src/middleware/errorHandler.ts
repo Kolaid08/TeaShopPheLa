@@ -20,6 +20,7 @@ export const errorHandler = (err: any, _req: Request, res: Response, _next: Next
       field: e.path.join('.'),
       message: e.message,
     }));
+    console.error('Validation failed details:', formattedErrors);
     return sendResponse(res, 400, false, 'Validation failed', { errors: formattedErrors });
   }
 

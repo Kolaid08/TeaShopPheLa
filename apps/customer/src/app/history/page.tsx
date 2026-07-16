@@ -18,6 +18,7 @@ import {
 import { Card, Button, Badge, Dialog } from '@/components/ui/core';
 import { api, Order, Customer } from '@/lib/api';
 import { toast } from 'sonner';
+import { VoucherWallet } from '@/components/VoucherWallet';
 
 export default function HistoryPage() {
   const router = useRouter();
@@ -112,12 +113,14 @@ export default function HistoryPage() {
           return;
         }
 
-        const sugar = '100%'; // Default levels
-        const ice = '100%';
-        const toppings: { name: string; price: number }[] = [];
+        const sugar = detail.Sugar || '100%'; 
+        const ice = detail.Ice || '100%';
+        const toppings: { name: string; price: number; id: number }[] = detail.Toppings 
+          ? detail.Toppings.map((t: any) => ({ name: t.Topping.Name, price: Number(t.UnitPrice), id: t.ToppingID })) 
+          : [];
 
         // Generate unique key
-        const itemKey = `${detail.DrinkSizeID}-${sugar}-${ice}-`;
+        const itemKey = `${detail.DrinkSizeID}-${sugar}-${ice}-${toppings.map(t=>t.name).sort().join(',')}`;
 
         // Check if item already exists in cart
         const existingIdx = currentCart.findIndex((item: any) => item.id === itemKey);
@@ -375,15 +378,18 @@ export default function HistoryPage() {
             </div>
           </Link>
 
-          <Link href="/">
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl flex items-center gap-1.5 text-xs font-bold"
-            >
-              <ArrowLeft className="w-4 h-4" /> Quay lại menu
-            </Button>
-          </Link>
+          <div className="flex items-center gap-3">
+            {customer && <VoucherWallet customerId={customer.CustomerID} />}
+            <Link href="/">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl flex items-center gap-1.5 text-xs font-bold"
+              >
+                <ArrowLeft className="w-4 h-4" /> Quay lại menu
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -464,6 +470,15 @@ export default function HistoryPage() {
                             <span className="text-[10px] block font-mono text-muted-foreground">
                               Cỡ: {detail.DrinkSize?.Size?.SizeName || 'M'} x {detail.Quantity}
                             </span>
+                            {(detail.Sugar || detail.Ice || (detail.Toppings && detail.Toppings.length > 0)) && (
+                              <div className="text-[10px] text-muted-foreground mt-0.5 space-y-0.5">
+                                {detail.Sugar && <div>Đường {detail.Sugar}</div>}
+                                {detail.Ice && <div>Đá {detail.Ice}</div>}
+                                {detail.Toppings && detail.Toppings.length > 0 && (
+                                  <div>+ {detail.Toppings.map((t: any) => t.Topping.Name).join(', ')}</div>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <div className="flex flex-col items-end gap-1">
                             <span className="font-mono font-semibold text-foreground">

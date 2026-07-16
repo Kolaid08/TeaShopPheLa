@@ -46,11 +46,19 @@ export const initSocketIo = (server: HttpServer) => {
       
       if (!session) return;
       socket.join(session.SessionID);
+      // LƯU Ý BẢO MẬT (IDOR Fix): Gắn cứng sessionId vào socket để chống giả mạo
+      socket.data.sessionId = session.SessionID; 
       socket.emit('session_joined', session);
     });
 
     // Customer sends a message
     socket.on('customer_message', async ({ sessionId, content }: { sessionId: string, content: string }) => {
+      // BẢO MẬT (IDOR Fix): Chỉ cho phép gửi tin nhắn nếu socket thực sự đã join vào đúng sessionId này
+      if (socket.data.sessionId !== sessionId) {
+        console.warn(`[Cảnh báo Bảo mật] Socket ${socket.id} cố tình giả mạo gửi tin nhắn vào session ${sessionId}`);
+        return;
+      }
+
       // 1. Save customer message
       const customerMsg = await addMessage(sessionId, 'CUSTOMER', content);
       

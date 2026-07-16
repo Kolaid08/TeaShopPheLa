@@ -15,12 +15,26 @@ const drinkSchema = z.object({
   DrinkStatus: z.string().max(50),
   sizes: z.array(z.object({
     SizeID: z.number(),
-    UnitPrice: z.number().positive(),
+    UnitPrice: z.coerce.number().nonnegative(),
   })).min(1, 'Phải có ít nhất 1 size'),
   RecipeDetails: z.array(z.object({
     IngredientID: z.number(),
     Quantity: z.number().positive(),
   })).optional(),
+});
+
+// GET /toppings - List active toppings (Public)
+router.get('/toppings', async (req, res, next) => {
+  try {
+    // @ts-ignore - Bypass Prisma Client type check until user restarts dev server
+    const toppings = await prisma.topping.findMany({
+      where: { IsActive: true },
+      orderBy: { Price: 'asc' }
+    });
+    return sendResponse(res, 200, true, 'Lấy danh sách topping thành công', toppings);
+  } catch (err) {
+    next(err);
+  }
 });
 
 // GET / - List drinks (Public)

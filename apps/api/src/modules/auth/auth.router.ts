@@ -91,10 +91,20 @@ router.post('/refresh', async (req, res, next) => {
       throw new AppError(403, 'Invalid or expired refresh token.');
     }
 
+    // BẢO MẬT: Kiểm tra xem nhân viên còn tồn tại và lấy RoleName mới nhất để chống Privilege Escalation
+    const employee = await prisma.employee.findUnique({
+      where: { EmployeeID: payload.EmployeeID },
+      include: { Role: true }
+    });
+
+    if (!employee) {
+       throw new AppError(403, 'Tài khoản không còn tồn tại hoặc đã bị khóa.');
+    }
+
     const tokenPayload = {
-      EmployeeID: payload.EmployeeID,
-      Email: payload.Email,
-      RoleName: payload.RoleName,
+      EmployeeID: employee.EmployeeID,
+      Email: employee.Email,
+      RoleName: employee.Role.RoleName.toUpperCase(),
     };
 
     const newAccessToken = jwt.sign(tokenPayload, config.jwt.accessSecret, {

@@ -84,8 +84,7 @@ export const payOSWebhook = async (req: Request, res: Response) => {
       if (orderExists) {
         // BẢO MẬT: Kiểm tra số tiền khách thanh toán có đủ không
         if (webhookData.amount >= orderExists.TotalPrice.toNumber()) {
-          // Update PaymentStatus = 'PAID'
-          await prisma.orders.update({
+          const updatedOrder = await prisma.orders.update({
             where: { OrderID: Number(orderCode) },
             data: { 
                 PaymentStatus: 'PAID',
@@ -93,6 +92,17 @@ export const payOSWebhook = async (req: Request, res: Response) => {
             }
           });
           console.log(`[PayOS Webhook] Payment confirmed for OrderID: ${orderCode}`);
+          
+          // 🔔 Emit Real-time Notification for Payment Success
+          try {
+            // Import dynamically or at top. We'll require it to avoid circular deps if any.
+            const { getIo } = require('../chat/chat.socket');
+            const io = getIo();
+            io.to('admins').emit('payment_success', updatedOrder);
+            io.emit('payment_success', updatedOrder); // Global broadcast or could use specific rooms
+          } catch (err) {
+            console.error('[Socket.io] Failed to emit payment_success:', err);
+          }
         } else {
           console.warn(`[PayOS Webhook] BẢO MẬT: Đơn hàng ${orderCode} thanh toán THIẾU TIỀN! Yêu cầu: ${orderExists.TotalPrice}, Thực trả: ${webhookData.amount}`);
         }

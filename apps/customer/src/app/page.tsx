@@ -18,6 +18,9 @@ import {
   PlusCircle,
   X,
   Gift,
+  Copy,
+  CheckCircle2,
+  Share2,
 } from 'lucide-react';
 import {
   Card,
@@ -26,10 +29,15 @@ import {
   Badge,
   Dialog,
 } from '@/components/ui/core';
+
+import { VoucherWallet } from '@/components/VoucherWallet';
 import { api, Drink, DrinkSize, Customer, ShopTable } from '@/lib/api';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
 import AddressAutocomplete from '@/components/AddressAutocomplete';
+import { CustomizeDialog } from '@/components/CustomizeDialog';
+import { CheckoutModal } from '@/components/CheckoutModal';
+import { ProductCatalog } from '@/components/ProductCatalog';
 
 const MapPicker = dynamic(() => import('@/components/MapPicker'), { ssr: false });
 
@@ -46,7 +54,7 @@ interface CartItem {
   Quantity: number;
   Sugar: string;
   Ice: string;
-  Toppings: { name: string; price: number }[];
+  Toppings: { id: number; name: string; price: number }[];
 }
 
 export default function CustomerHome() {
@@ -77,7 +85,7 @@ export default function CustomerHome() {
   const [selectedSizeId, setSelectedSizeId] = useState<number>(0);
   const [sugarLevel, setSugarLevel] = useState('100%');
   const [iceLevel, setIceLevel] = useState('100%');
-  const [selectedToppings, setSelectedToppings] = useState<{ name: string; price: number }[]>([]);
+  const [selectedToppings, setSelectedToppings] = useState<{ id: number; name: string; price: number }[]>([]);
 
   // Cart & Checkout states
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -109,11 +117,15 @@ export default function CustomerHome() {
   const [isPolling, setIsPolling] = useState(false);
 
   // Available options
-  const toppingsList = [
-    { name: 'Trân châu Hoàng Kim', price: 10000 },
-    { name: 'Kem Phô Mai Phêla', price: 15000 },
-    { name: 'Thạch Ô Long Giòn', price: 10000 },
-  ];
+  const [toppingsList, setToppingsList] = useState<{ id: number; name: string; price: number }[]>([]);
+
+  useEffect(() => {
+    api.getToppings().then((data) => {
+      if (data && data.length > 0) {
+        setToppingsList(data.map((t: any) => ({ id: t.ToppingID, name: t.Name, price: Number(t.Price) })));
+      }
+    });
+  }, []);
 
   // Voucher states
   const [voucherInput, setVoucherInput] = useState('');
@@ -121,6 +133,10 @@ export default function CustomerHome() {
   const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
   const [comboSuggestions, setComboSuggestions] = useState<any[]>([]);
   const [activePromotions, setActivePromotions] = useState<any[]>([]);
+
+  // Share states
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
     api.getActivePromotions().then(setActivePromotions);
@@ -334,12 +350,12 @@ export default function CustomerHome() {
     setSelectedToppings([]);
   };
 
-  const toggleTopping = (topping: { name: string; price: number }) => {
-    const idx = selectedToppings.findIndex((t) => t.name === topping.name);
+  const toggleTopping = (topping: { id: number; name: string; price: number }) => {
+    const idx = selectedToppings.findIndex((t) => t.id === topping.id);
     if (idx === -1) {
       setSelectedToppings((prev) => [...prev, topping]);
     } else {
-      setSelectedToppings((prev) => prev.filter((t) => t.name !== topping.name));
+      setSelectedToppings((prev) => prev.filter((t) => t.id !== topping.id));
     }
   };
 
@@ -595,10 +611,11 @@ export default function CustomerHome() {
           Sugar: item.Sugar,
           Ice: item.Ice,
           Toppings: Array.isArray(item.Toppings) 
-            ? (item.Toppings.length > 0 ? item.Toppings.map((t: any) => t.name || t).join(', ') : undefined)
-            : (typeof item.Toppings === 'string' && (item.Toppings as string).trim() !== '' ? item.Toppings : undefined),
+            ? item.Toppings.map((t: any) => typeof t === 'object' ? (t.id || t.ToppingID) : t)
+            : undefined,
           UnitPrice: Number(item.UnitPrice),
         })),
+        SessionID: localStorage.getItem('phela_session_id') || '',
         TotalPrice: getTotalPrice(),
         ShopTableID: tableId > 0 ? tableId : undefined,
         OrderNote: `${deliveryAddress ? `Giao hàng: ${deliveryAddress}` : ''}${orderNote ? ` | Ghi chú: ${orderNote}` : ''}`,
@@ -770,6 +787,10 @@ export default function CustomerHome() {
                     <History className="w-4 h-4" /> Lịch sử đơn
                   </Button>
                 </Link>
+                <VoucherWallet customerId={customer.CustomerID} />
+                <Button onClick={() => setIsShareModalOpen(true)} variant="outline" size="sm" className="rounded-xl flex items-center gap-1.5 text-xs text-primary font-bold border-primary/20">
+                  <Gift className="w-4 h-4" /> Chia sẻ & Nhận Quà
+                </Button>
                 <Button onClick={handleLogout} variant="ghost" size="sm" className="rounded-xl p-2 text-red-500 hover:bg-red-500/10">
                   <LogOut className="w-4.5 h-4.5" />
                 </Button>
@@ -788,247 +809,42 @@ export default function CustomerHome() {
       {/* Main portal catalog grid */}
       <main className="flex-1 container max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Left 2 cols: Menu Catalog list */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center">
-            <div>
-              <h2 className="font-serif font-black text-2xl md:text-3xl text-foreground tracking-tight flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" /> {timeGreeting}{customer ? `, ${customer.CustomerName.split(' ').pop()}!` : '! Hôm nay uống gì?'}
-              </h2>
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest font-sans mt-0.5">Đặt trực tuyến giao tận tay hoặc phục vụ tại quầy trong 15 phút</p>
-            </div>
 
-            {/* Category selection filters */}
-            <div className="flex bg-muted/60 p-1 rounded-xl border border-border/40 gap-1 text-xs font-bold self-start">
-              <button 
-                onClick={() => setActiveCategory('ALL')}
-                className={`px-3 py-1.5 rounded-lg transition-all ${activeCategory === 'ALL' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                Tất cả
-              </button>
-              <button 
-                onClick={() => setActiveCategory('MILK_TEA')}
-                className={`px-3 py-1.5 rounded-lg transition-all ${activeCategory === 'MILK_TEA' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                Trà sữa
-              </button>
-              <button 
-                onClick={() => setActiveCategory('COFFEE')}
-                className={`px-3 py-1.5 rounded-lg transition-all ${activeCategory === 'COFFEE' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                Cà phê
-              </button>
-            </div>
-          </div>
-          {/* Frequent Orders */}
-          {frequentOrders.length > 0 && (
-            <div className="bg-primary/5 p-4 rounded-2xl border border-primary/20 space-y-3">
-              <h3 className="font-serif font-bold text-primary flex items-center gap-2">
-                <Sparkles className="w-4 h-4" /> Món tủ của bạn
-              </h3>
-              <div className="flex gap-3 overflow-x-auto pb-2 snap-x hide-scrollbar">
-                {frequentOrders.map((f: any, idx: number) => (
-                  <div key={idx} className="min-w-[200px] bg-background rounded-xl p-3 shadow-sm border border-border/50 snap-start shrink-0 cursor-pointer hover:border-primary/50 hover:shadow-md transition-all flex flex-col justify-between" 
-                    onClick={() => {
-                      const drinkObj = drinks.find(d => d.DrinkName === f.DrinkName);
-                      if (drinkObj) {
-                        setSelectedDrink(drinkObj);
-                        setSelectedSizeId(f.DrinkSizeID);
-                        setSugarLevel(f.PreferredConfig.Sugar);
-                        setIceLevel(f.PreferredConfig.Ice);
-                        const tps = f.PreferredConfig.Toppings ? f.PreferredConfig.Toppings.split(',') : [];
-                        const tArr = tps.map((t:string) => toppingsList.find(x => x.name.trim() === t.trim())).filter(Boolean) as any;
-                        setSelectedToppings(tArr);
-                      }
-                    }}
-                  >
-                    <div>
-                      <div className="text-sm font-bold text-foreground line-clamp-1">{f.DrinkName}</div>
-                      <div className="text-[10px] font-semibold text-primary mt-0.5">Size {f.SizeName}</div>
-                      <div className="text-[10px] text-muted-foreground mt-1 line-clamp-2">
-                        {f.PreferredConfig.Sugar} đường, {f.PreferredConfig.Ice} đá
-                        {f.PreferredConfig.Toppings && `, ${f.PreferredConfig.Toppings}`}
-                      </div>
-                    </div>
-                    <div className="mt-2 text-xs font-bold flex justify-between items-center">
-                      <span>{f.UnitPrice.toLocaleString()}đ</span>
-                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 rounded-full bg-primary/10 text-primary">
-                        <PlusCircle className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {/* Search Bar input */}
-          <div className="relative w-full">
-            <Search className="w-4.5 h-4.5 text-muted-foreground/60 absolute left-4 top-1/2 -translate-y-1/2" />
-            <Input 
-              type="text"
-              placeholder="Tìm kiếm trà sữa oolong, cà phê cốt dừa..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-11 pr-4 bg-card/60 rounded-xl"
-            />
-          </div>
-
-          {/* Advanced Filters */}
-          <div className="flex flex-wrap gap-3 bg-muted/30 p-3 rounded-xl border border-border/40">
-            <select 
-              value={sortOption} 
-              onChange={(e) => setSortOption(e.target.value as any)}
-              className="text-xs p-2 rounded-lg border border-border bg-background"
-            >
-              <option value="NEWEST">Mới nhất</option>
-              <option value="BEST_SELLING">Bán chạy nhất</option>
-              <option value="REVIEWS">Đánh giá cao</option>
-              <option value="PRICE_ASC">Giá: Thấp đến Cao</option>
-              <option value="PRICE_DESC">Giá: Cao đến Thấp</option>
-            </select>
-            <select 
-              value={minRating} 
-              onChange={(e) => setMinRating(Number(e.target.value))}
-              className="text-xs p-2 rounded-lg border border-border bg-background"
-            >
-              <option value={0}>Tất cả đánh giá</option>
-              <option value={4}>Từ 4 sao trở lên</option>
-              <option value={5}>Chỉ 5 sao</option>
-            </select>
-            <div className="flex items-center gap-2">
-              <Input 
-                type="number" 
-                min="0"
-                placeholder="Giá từ..." 
-                value={minPrice} 
-                onChange={(e) => {
-                  const val = parseInt(e.target.value);
-                  if (val < 0) setMinPrice('0');
-                  else setMinPrice(e.target.value);
-                }} 
-                onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
-                className="w-24 h-8 text-xs" 
-              />
-              <span className="text-muted-foreground">-</span>
-              <Input 
-                type="number" 
-                min="0"
-                placeholder="Đến..." 
-                value={maxPrice} 
-                onChange={(e) => {
-                  const val = parseInt(e.target.value);
-                  if (val < 0) setMaxPrice('0');
-                  else setMaxPrice(e.target.value);
-                }} 
-                onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
-                className="w-24 h-8 text-xs" 
-              />
-            </div>
-          </div>
-
-          {/* Menu Catalog item cards grid */}
-          {isLoadingMenu ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 animate-pulse">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="h-40 bg-muted rounded-2xl" />
-              ))}
-            </div>
-          ) : filteredDrinks.length === 0 ? (
-            <Card className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center gap-3">
-              <Coffee className="w-12 h-12 text-muted-foreground/30" />
-              <p className="font-serif font-black text-lg">Không tìm thấy món nước phù hợp</p>
-              <p className="text-xs">Hãy thử đổi bộ lọc tìm kiếm sản phẩm khác bạn nhé!</p>
-            </Card>
-          ) : (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {paginatedDrinks.map((drink) => {
-                // Find all pricing options for display range
-                const prices = drinkSizes.filter(ds => ds.DrinkID === drink.DrinkID).map(ds => ds.UnitPrice);
-                const minPrice = prices.length > 0 ? Math.min(...prices) : 45000;
-                
-                return (
-                  <Card key={drink.DrinkID} className="p-0 flex flex-col justify-between hover:border-primary/50 transition-all duration-300 group overflow-hidden bg-card/50">
-                    <div className="h-44 w-full bg-muted relative overflow-hidden">
-                      {drink.DrinkImageURL ? (
-                        <img src={drink.DrinkImageURL} alt={drink.DrinkName} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center"><Coffee className="w-8 h-8 text-muted-foreground/30" /></div>
-                      )}
-                      {drink.IsFeatured && <Badge variant="warning" className="absolute top-2 right-2 text-[9px] font-bold shadow-md uppercase">Nổi Bật</Badge>}
-                    </div>
-                    <div className="p-4 flex flex-col justify-between flex-1">
-                      <div className="space-y-1.5">
-                        <h3 className="font-serif font-black text-lg text-foreground group-hover:text-primary transition-colors">{drink.DrinkName}</h3>
-                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{drink.DrinkDescription || 'Món uống đặc sản chè thô Phêla.'}</p>
-                        {drink.AverageRating && drink.AverageRating > 0 ? (
-                          <p className="text-xs text-amber-500 font-bold flex items-center gap-1">
-                            ⭐ {drink.AverageRating} <span className="text-muted-foreground font-medium">({drink.SalesCount || 0} đã bán)</span>
-                          </p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-                            ⭐ Chưa có đánh giá <span className="text-muted-foreground/70">({drink.SalesCount || 0} đã bán)</span>
-                          </p>
-                        )}
-                      </div>
-
-                    <div className="flex items-center justify-between mt-5 pt-3 border-t border-border/30">
-                      <span className="text-sm font-bold text-primary font-mono">Từ {minPrice.toLocaleString('vi-VN')} đ</span>
-                      <Button 
-                        onClick={() => handleOpenCustomize(drink)}
-                        size="sm" 
-                        className="rounded-lg text-xs font-serif uppercase tracking-wider font-bold gap-1 text-white"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5" /> Thêm món
-                      </Button>
-                    </div>
-                    </div>
-                  </Card>
-                );
-              })}
-              </div>
-
-              {/* Pagination Controls */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 pt-4 border-t border-border/40">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="rounded-xl"
-                  >
-                    Trước
-                  </Button>
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }).map((_, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setCurrentPage(i + 1)}
-                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all ${
-                          currentPage === i + 1 
-                            ? 'bg-primary text-white shadow-md' 
-                            : 'bg-muted/50 hover:bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                    className="rounded-xl"
-                  >
-                    Sau
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+        {/* Left 2 cols: Menu list */}
+        <div className="lg:col-span-2 flex flex-col gap-8">
+          <ProductCatalog
+            timeGreeting={timeGreeting}
+            customer={customer}
+            activeCategory={activeCategory}
+            setActiveCategory={setActiveCategory}
+            frequentOrders={frequentOrders}
+            drinks={drinks}
+            drinkSizes={drinkSizes}
+            toppingsList={toppingsList}
+            setSelectedDrink={setSelectedDrink}
+            setSelectedSizeId={setSelectedSizeId}
+            setSugarLevel={setSugarLevel}
+            setIceLevel={setIceLevel}
+            setSelectedToppings={setSelectedToppings as any}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            sortOption={sortOption}
+            setSortOption={setSortOption}
+            minRating={minRating}
+            setMinRating={setMinRating}
+            minPrice={minPrice}
+            setMinPrice={setMinPrice}
+            maxPrice={maxPrice}
+            setMaxPrice={setMaxPrice}
+            isLoadingMenu={isLoadingMenu}
+            filteredDrinks={filteredDrinks}
+            paginatedDrinks={paginatedDrinks}
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            totalPages={totalPages}
+            handleOpenCustomize={handleOpenCustomize}
+          />
         </div>
 
         {/* Right 1 col: Checkout Cart manager */}
@@ -1311,258 +1127,94 @@ export default function CustomerHome() {
       </main>
 
       {/* A. Options Customize dialog modal */}
-      {selectedDrink && (
-        <Dialog 
-          isOpen={!!selectedDrink}
-          onClose={() => setSelectedDrink(null)}
-          title={`Tùy chỉnh đồ uống: ${selectedDrink.DrinkName}`}
-        >
-          <div className="space-y-5">
-            {/* 1. Size selection options */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Kích cỡ cốc (Sizes):</span>
-              <div className="grid grid-cols-3 gap-3">
-                {drinkSizes
-                  .filter(ds => ds.DrinkID === selectedDrink.DrinkID && ds.DrinkSizeStatus === 'AVAILABLE')
-                  .map(ds => (
-                    <button
-                      key={ds.DrinkSizeID}
-                      disabled={ds.IsOutOfStock}
-                      onClick={() => setSelectedSizeId(ds.DrinkSizeID)}
-                      className={`border rounded-xl p-3 text-xs flex flex-col items-center justify-center transition-all ${
-                        ds.IsOutOfStock
-                          ? 'border-border/50 bg-muted/50 text-muted-foreground cursor-not-allowed opacity-50'
-                          : selectedSizeId === ds.DrinkSizeID
-                          ? 'border-primary bg-primary/5 text-primary font-bold'
-                          : 'border-border bg-background/50 hover:bg-muted text-foreground'
-                      }`}
-                    >
-                      <span className="text-base font-serif font-black">{ds.Size?.SizeName}</span>
-                      <span className="font-mono text-[9px] mt-0.5">{ds.Size?.VolumeML}ml</span>
-                      {ds.IsOutOfStock ? (
-                        <span className="font-sans font-bold mt-1 text-[10px] text-red-500">Hết nguyên liệu</span>
-                      ) : (
-                        <span className="font-mono font-bold mt-1 text-[10px] text-primary">{ds.UnitPrice.toLocaleString('vi-VN')} đ</span>
-                      )}
-                    </button>
-                  ))}
-              </div>
-            </div>
-
-            {/* 2. Sugar customization levels */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Mức độ ngọt (Sugar):</span>
-              <div className="grid grid-cols-5 gap-2 text-center text-xs font-bold">
-                {['0%', '30%', '50%', '70%', '100%'].map(sugar => (
-                  <button
-                    key={sugar}
-                    type="button"
-                    onClick={() => setSugarLevel(sugar)}
-                    className={`py-2 rounded-lg border transition-all ${
-                      sugarLevel === sugar
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border bg-background/30 hover:bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    {sugar}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 3. Ice customization levels */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Mức độ đá (Ice):</span>
-              <div className="grid grid-cols-3 gap-3 text-center text-xs font-bold">
-                {['Nóng (Hot)', '50% đá', '100% đá'].map(ice => (
-                  <button
-                    key={ice}
-                    type="button"
-                    onClick={() => setIceLevel(ice)}
-                    className={`py-2.5 rounded-xl border transition-all ${
-                      iceLevel === ice
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border bg-background/30 hover:bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    {ice}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 4. Extra toppings list selection */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Thêm Toppings cao cấp:</span>
-              <div className="space-y-2.5">
-                {toppingsList.map(topping => {
-                  const isChecked = selectedToppings.some(t => t.name === topping.name);
-                  return (
-                    <label 
-                      key={topping.name}
-                      onClick={() => toggleTopping(topping)}
-                      className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer text-xs transition-all ${
-                        isChecked 
-                          ? 'border-primary/50 bg-primary/5 font-semibold text-primary' 
-                          : 'border-border bg-background/30 hover:bg-muted text-foreground'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className={`w-4 h-4 rounded border flex items-center justify-center font-mono ${isChecked ? 'bg-primary border-primary text-white' : 'border-border'}`}>
-                          {isChecked ? '✓' : ''}
-                        </span>
-                        {topping.name}
-                      </span>
-                      <span className="font-mono text-primary font-bold">+{topping.price.toLocaleString('vi-VN')} đ</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Similar Products */}
-            <div className="space-y-2 mt-4">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Sản phẩm tương tự:</span>
-              <div className="flex gap-3 overflow-x-auto pb-2">
-                {drinks.filter(d => d.DrinkID !== selectedDrink.DrinkID && (
-                    (selectedDrink.DrinkName.toLowerCase().includes('cà phê') && d.DrinkName.toLowerCase().includes('cà phê')) ||
-                    (!selectedDrink.DrinkName.toLowerCase().includes('cà phê') && !d.DrinkName.toLowerCase().includes('cà phê'))
-                  )).slice(0, 3).map(d => (
-                  <button 
-                    key={d.DrinkID} 
-                    onClick={() => {
-                      setSelectedDrink(d);
-                      const sizes = drinkSizes.filter(s => s.DrinkID === d.DrinkID && s.DrinkSizeStatus === 'AVAILABLE' && !s.IsOutOfStock);
-                      if (sizes.length > 0) setSelectedSizeId(sizes[0]?.DrinkSizeID!);
-                      else setSelectedSizeId(0);
-                    }}
-                    className="shrink-0 w-32 rounded-xl overflow-hidden border border-border hover:border-primary transition-all text-left"
-                  >
-                    <div className="h-20 bg-muted relative">
-                      {d.DrinkImageURL && <img src={d.DrinkImageURL} className="w-full h-full object-cover" />}
-                    </div>
-                    <div className="p-2 bg-background">
-                      <p className="text-[10px] font-bold truncate text-foreground">{d.DrinkName}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-border flex items-center justify-between gap-4">
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase font-bold text-muted-foreground">Giá tùy chọn nước:</span>
-                <span className="text-xl font-bold font-mono text-primary">{getCurrentCustomPrice().toLocaleString('vi-VN')} đ</span>
-              </div>
-              <Button 
-                onClick={handleAddToCart}
-                disabled={!selectedSizeId || drinkSizes.find(s => s.DrinkSizeID === selectedSizeId)?.IsOutOfStock}
-                className={`py-3 px-6 rounded-xl font-serif uppercase tracking-wider font-extrabold text-sm ${(!selectedSizeId || drinkSizes.find(s => s.DrinkSizeID === selectedSizeId)?.IsOutOfStock) ? 'bg-muted text-muted-foreground' : 'text-white'}`}
-              >
-                {!selectedSizeId || drinkSizes.find(s => s.DrinkSizeID === selectedSizeId)?.IsOutOfStock ? 'Hết nguyên liệu' : 'Thêm Vào Giỏ Hàng'}
-              </Button>
-            </div>
-          </div>
-        </Dialog>
-      )}
+      <CustomizeDialog
+        selectedDrink={selectedDrink}
+        setSelectedDrink={setSelectedDrink}
+        drinkSizes={drinkSizes}
+        selectedSizeId={selectedSizeId}
+        setSelectedSizeId={setSelectedSizeId}
+        sugarLevel={sugarLevel}
+        setSugarLevel={setSugarLevel}
+        iceLevel={iceLevel}
+        setIceLevel={setIceLevel}
+        toppingsList={toppingsList}
+        selectedToppings={selectedToppings}
+        toggleTopping={toggleTopping}
+        drinks={drinks}
+        getCurrentCustomPrice={getCurrentCustomPrice}
+        handleAddToCart={handleAddToCart}
+      />
 
       {/* B. Simulated Payment sheet dialog modal */}
-      {isCheckoutOpen && (
+      <CheckoutModal
+        isCheckoutOpen={isCheckoutOpen}
+        setIsCheckoutOpen={setIsCheckoutOpen}
+        paymentMethod={paymentMethod}
+        setPaymentMethod={setPaymentMethod}
+        payOsQrCode={payOsQrCode}
+        setPayOsQrCode={setPayOsQrCode}
+        payOsDetails={payOsDetails}
+        setPayOsDetails={setPayOsDetails}
+        isPolling={isPolling}
+        setIsPolling={setIsPolling}
+        isSubmittingOrder={isSubmittingOrder}
+        handlePlaceOrder={handlePlaceOrder}
+        customer={customer}
+        getTotalPrice={getTotalPrice}
+      />
+
+      {/* Referral Share Modal */}
+      {isShareModalOpen && customer && (
         <Dialog
-          isOpen={isCheckoutOpen}
-          onClose={() => setIsCheckoutOpen(false)}
-          title="Xác nhận thanh toán đơn hàng"
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          title="Chia sẻ bạn bè, nhận ngay ưu đãi!"
         >
-          <div className="space-y-6 text-center">
-            <p className="text-xs text-muted-foreground">Chọn phương thức thanh toán để kết toán hóa đơn order:</p>
-            
-            <div className="grid grid-cols-2 gap-4">
-              {/* Payment Option 1: Cash/COD */}
-              <button
-                onClick={() => setPaymentMethod('COD')}
-                className={`border rounded-2xl p-5 flex flex-col items-center justify-between gap-3 transition-all ${
-                  paymentMethod === 'COD' 
-                    ? 'border-orange-500 bg-orange-500/10 shadow-sm' 
-                    : 'border-border bg-background/50 hover:bg-muted/30'
-                }`}
-              >
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${paymentMethod === 'COD' ? 'bg-orange-500 text-white' : 'bg-orange-500/10 text-orange-600'}`}>
-                  <ShoppingBag className="w-6 h-6" />
-                </div>
-                <div>
-                  <span className={`font-bold text-sm block ${paymentMethod === 'COD' ? 'text-orange-600' : 'text-foreground'}`}>Thanh Toán Tiền Mặt</span>
-                  <span className="text-[10px] text-muted-foreground block mt-1">Trả tiền tại quầy</span>
-                </div>
-              </button>
-
-              {/* Payment Option 2: Bank Transfer (QR) */}
-              <button 
-                onClick={() => setPaymentMethod('QR_CODE')}
-                className={`border rounded-2xl p-5 flex flex-col items-center justify-between gap-3 transition-all ${
-                  paymentMethod === 'QR_CODE' 
-                    ? 'border-primary bg-primary/10 shadow-sm' 
-                    : 'border-border bg-background/50 hover:bg-muted/30'
-                }`}
-              >
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${paymentMethod === 'QR_CODE' ? 'bg-primary text-white' : 'bg-primary/20 text-primary'}`}>
-                  <span className="font-black text-xl">QR</span>
-                </div>
-                <div>
-                  <span className={`font-bold text-sm block ${paymentMethod === 'QR_CODE' ? 'text-primary' : 'text-foreground'}`}>Chuyển khoản VietQR</span>
-                  <span className="text-[10px] text-muted-foreground block mt-1">Quét mã nhận đơn ngay</span>
-                </div>
-              </button>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground mb-4">Giới thiệu Phêla cho bạn bè chưa từng mua hàng để cả hai cùng nhận quà.</p>
+            <div className="p-4 bg-primary/10 border border-primary/20 rounded-2xl text-center">
+              <Gift className="w-12 h-12 text-primary mx-auto mb-2 animate-bounce" />
+              <h3 className="font-bold text-foreground mb-1">Tặng 10% cho bạn & người ấy</h3>
+              <p className="text-xs text-muted-foreground">Khi người bạn giới thiệu hoàn thành đơn hàng ĐẦU TIÊN, cả 2 sẽ nhận được Voucher giảm 10%.</p>
             </div>
-
-            {/* VietQR Dynamic QR code visual mockup */}
-            {paymentMethod === 'QR_CODE' && (
-              <div className="mt-4 p-4 border border-border/50 rounded-2xl bg-muted/20 flex items-center gap-4 text-left animate-in fade-in zoom-in-95">
-                <div className="w-24 h-24 bg-white rounded-xl p-2 border border-border flex items-center justify-center shrink-0">
-                  <img src={payOsQrCode ? (payOsQrCode.startsWith('http') ? payOsQrCode : `https://quickchart.io/qr?text=${encodeURIComponent(payOsQrCode)}&size=200`) : `https://img.vietqr.io/image/mbbank-7414012005-compact2.png?amount=${getTotalPrice()}&addInfo=PHELA${customer?.PhoneNumber?.slice(-4) || '9999'}&accountName=NGUYEN%20VAN%20KHOA`} alt="VietQR" className="w-full h-full object-contain" />
-                </div>
-                <div className="text-xs space-y-1.5 flex-1">
-                  {isPolling ? (
-                    <div className="flex flex-col items-center justify-center h-full space-y-2 py-2">
-                      <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                      <p className="font-bold text-primary animate-pulse">Đang chờ quét mã...</p>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="font-bold text-foreground">Thông tin chuyển khoản nhanh:</p>
-                      <p>Ngân hàng: <span className="font-mono text-primary font-bold">{payOsDetails?.bin === '970422' ? 'MBBank' : (payOsDetails?.bin || 'MBBank')}</span></p>
-                      <p>Số tài khoản: <span className="font-mono text-primary font-bold">{payOsDetails?.accountNumber || '7414012005'}</span></p>
-                      <p>Chủ tài khoản: <span className="font-mono text-primary font-bold">NGUYEN VAN KHOA</span></p>
-                      <p>Số tiền: <span className="font-mono text-primary font-bold">{(payOsDetails?.amount || getTotalPrice()).toLocaleString('vi-VN')} đ</span></p>
-                      <p>Nội dung CK: <span className="font-mono text-primary font-bold">{payOsDetails?.description || `PHELA${customer?.PhoneNumber?.slice(-4) || '9999'}`}</span></p>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-4">
-              <Button 
-                variant="outline" 
-                className="flex-1 py-3.5 rounded-xl text-xs font-bold"
-                onClick={() => {
-                  setIsCheckoutOpen(false);
-                  setIsPolling(false);
-                  setPayOsQrCode('');
-                  setPayOsDetails(null);
-                }}
-              >
-                {isPolling ? 'Hủy giao dịch' : 'Hủy'}
-              </Button>
-              {!isPolling && (
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Link chia sẻ của bạn</label>
+              <div className="flex items-center gap-2">
+                <Input 
+                  readOnly 
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/login?ref=${customer.CustomerID}`}
+                  className="bg-muted font-mono text-xs flex-1"
+                />
                 <Button 
-                  className="flex-[2] py-3.5 rounded-xl text-xs font-bold text-white font-serif uppercase tracking-wider"
-                  onClick={() => handlePlaceOrder(paymentMethod)}
-                  disabled={isSubmittingOrder}
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}/login?ref=${customer.CustomerID}`);
+                    setCopiedLink(true);
+                    toast.success('Đã copy link chia sẻ!');
+                    setTimeout(() => setCopiedLink(false), 2000);
+                  }}
+                  variant="primary" 
+                  className="px-3"
                 >
-                  {isSubmittingOrder ? 'Đang tạo đơn...' : 'Xác nhận Đơn hàng'}
+                  {copiedLink ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 </Button>
-              )}
+              </div>
             </div>
+            <Button 
+              className="w-full font-bold uppercase tracking-wider text-xs flex items-center gap-2 justify-center"
+              onClick={() => {
+                if (navigator.share) {
+                  navigator.share({
+                    title: 'Đăng ký Hội Viên Phêla',
+                    text: 'Đăng ký tài khoản và nhận ưu đãi từ Phêla qua link giới thiệu của tôi!',
+                    url: `${window.location.origin}/login?ref=${customer.CustomerID}`
+                  }).catch(console.error);
+                } else {
+                  toast.error('Trình duyệt không hỗ trợ Web Share API. Vui lòng copy link.');
+                }
+              }}
+            >
+              <Share2 className="w-4 h-4" /> Chia sẻ qua Ứng dụng khác
+            </Button>
           </div>
         </Dialog>
       )}

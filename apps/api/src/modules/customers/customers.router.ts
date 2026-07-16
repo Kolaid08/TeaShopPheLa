@@ -5,13 +5,13 @@ import { sendResponse, parsePagination } from '../../utils/response';
 import { verifyJWT, requireRole } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
 import { config } from '../../config/index';
 
 const router = Router();
 
 const customerSchema = z.object({
   CustomerName: z.string().min(1).max(255),
-  Email: z.string().email().optional().nullable(),
   PhoneNumber: z.string().min(8).max(20),
   TotalMoneySpending: z.number().nonnegative().optional(),
 });
@@ -26,33 +26,83 @@ router.get('/public/profile/:phone', async (req, res, next) => {
       include: { MemberShipLevel: true },
     });
     if (!customer) throw new AppError(404, 'Customer not found.');
-    return sendResponse(res, 200, true, 'Customer retrieved', customer);
+    const { PasswordHash, ...safeCustomer } = customer;
+    return sendResponse(res, 200, true, 'Customer retrieved', safeCustomer);
   } catch (err) {
     next(err);
   }
 });
 
-// POST /public/login - Public login/registration for customer site
-router.post('/public/login', async (req, res, next) => {
+// POST /public/register - Register new customer account
+router.post('/public/register', async (req, res, next) => {
   try {
-    const { phoneNumber, fullName } = req.body;
-    if (!phoneNumber) throw new AppError(400, 'Phone number is required.');
+    const { phoneNumber, fullName, password, referrerId } = req.body;
+    if (!phoneNumber || !password) throw new AppError(400, 'SĐT và Mật khẩu là bắt buộc.');
     
     let customer = await prisma.customer.findFirst({
+      where: { PhoneNumber: phoneNumber },
+    });
+    
+    if (customer) throw new AppError(400, 'Số điện thoại đã được đăng ký.');
+
+    let refId = undefined;
+    if (referrerId) {
+      const parsedRefId = parseInt(referrerId);
+      if (!isNaN(parsedRefId)) {
+        const refExists = await prisma.customer.findUnique({ where: { CustomerID: parsedRefId } });
+        if (refExists) refId = parsedRefId;
+      }
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    customer = await prisma.customer.create({
+      data: {
+        PhoneNumber: phoneNumber,
+        CustomerName: fullName || `Hội Viên Phêla ${phoneNumber.slice(-4)}`,
+        PasswordHash: passwordHash,
+        TotalMoneySpending: 0,
+        LevelID: 1, // Bronze Level
+        ReferredBy: refId,
+      },
+      include: { MemberShipLevel: true },
+    });
+
+    const token = jwt.sign(
+      { CustomerID: customer.CustomerID, RoleName: 'CUSTOMER' },
+      config.jwt.accessSecret,
+      { expiresIn: '30d' }
+    );
+
+    const { PasswordHash, ...safeCustomer } = customer;
+    return sendResponse(res, 201, true, 'Đăng ký thành công', { customer: safeCustomer, token });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /public/login - Public login for customer site
+router.post('/public/login', async (req, res, next) => {
+  try {
+    const { phoneNumber, password } = req.body;
+    if (!phoneNumber || !password) throw new AppError(400, 'Vui lòng nhập SĐT và Mật khẩu.');
+
+    const customer = await prisma.customer.findFirst({
       where: { PhoneNumber: phoneNumber },
       include: { MemberShipLevel: true },
     });
 
-    if (!customer) {
-      customer = await prisma.customer.create({
-        data: {
-          PhoneNumber: phoneNumber,
-          CustomerName: fullName || `Hội Viên Phêla ${phoneNumber.slice(-4)}`,
-          TotalMoneySpending: 0,
-          LevelID: 1, // Bronze Level
-        },
-        include: { MemberShipLevel: true },
-      });
+    if (!customer) throw new AppError(404, 'Tài khoản không tồn tại. Vui lòng đăng ký.');
+
+    if (customer.PasswordHash) {
+      const isMatch = await bcrypt.compare(password, customer.PasswordHash);
+      if (!isMatch) throw new AppError(401, 'Mật khẩu không chính xác.');
+    } else {
+      // Hỗ trợ tài khoản cũ (chưa có PasswordHash) dùng pass mặc định 123456
+      if (password !== '123456') {
+        throw new AppError(401, 'Mật khẩu không chính xác.');
+      }
     }
 
     const token = jwt.sign(
@@ -61,7 +111,7 @@ router.post('/public/login', async (req, res, next) => {
       { expiresIn: '30d' }
     );
 
-    return sendResponse(res, 200, true, 'Customer logged in successfully', {
+    return sendResponse(res, 200, true, 'Đăng nhập thành công', {
       customer,
       token,
     });
@@ -117,7 +167,6 @@ router.get('/', async (req, res, next) => {
           OR: [
             { CustomerName: { contains: search } },
             { PhoneNumber: { contains: search } },
-            { Email: { contains: search } },
           ],
         }
       : {};
@@ -137,7 +186,12 @@ router.get('/', async (req, res, next) => {
 
     const totalPages = Math.ceil(totalItems / limit);
 
-    return sendResponse(res, 200, true, 'Customers list retrieved', customers, {
+    const safeCustomers = customers.map(c => {
+      const { PasswordHash, ...safeCustomer } = c;
+      return safeCustomer;
+    });
+
+    return sendResponse(res, 200, true, 'Customers list retrieved', safeCustomers, {
       page,
       limit,
       totalItems,
@@ -161,7 +215,8 @@ router.get('/:id', async (req, res, next) => {
 
     if (!customer) throw new AppError(404, 'Customer not found.');
 
-    return sendResponse(res, 200, true, 'Customer retrieved', customer);
+    const { PasswordHash, ...safeCustomer } = customer;
+    return sendResponse(res, 200, true, 'Customer retrieved', safeCustomer);
   } catch (err) {
     next(err);
   }
@@ -191,7 +246,6 @@ router.post('/', async (req, res, next) => {
       const createdCustomer = await tx.customer.create({
         data: {
           CustomerName: validatedData.CustomerName,
-          Email: validatedData.Email,
           PhoneNumber: validatedData.PhoneNumber,
           TotalMoneySpending: validatedData.TotalMoneySpending || 0,
           LevelID: baseLevel.LevelID,
@@ -209,7 +263,8 @@ router.post('/', async (req, res, next) => {
       });
     });
 
-    return sendResponse(res, 201, true, 'Customer created successfully', customer);
+    const safeCustomer = customer ? (({ PasswordHash, ...rest }) => rest)(customer) : null;
+    return sendResponse(res, 201, true, 'Customer created successfully', safeCustomer);
   } catch (err) {
     next(err);
   }
@@ -231,7 +286,6 @@ router.put('/:id', async (req, res, next) => {
         where: { CustomerID: custId },
         data: {
           CustomerName: validatedData.CustomerName,
-          Email: validatedData.Email,
           PhoneNumber: validatedData.PhoneNumber,
           TotalMoneySpending:
             validatedData.TotalMoneySpending !== undefined
@@ -249,7 +303,8 @@ router.put('/:id', async (req, res, next) => {
       });
     });
 
-    return sendResponse(res, 200, true, 'Customer updated successfully', customer);
+    const safeCustomer = customer ? (({ PasswordHash, ...rest }) => rest)(customer) : null;
+    return sendResponse(res, 200, true, 'Customer updated successfully', safeCustomer);
   } catch (err) {
     next(err);
   }

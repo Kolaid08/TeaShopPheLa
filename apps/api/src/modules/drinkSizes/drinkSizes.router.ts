@@ -10,7 +10,7 @@ const router = Router();
 const drinkSizeSchema = z.object({
   DrinkID: z.number().int(),
   SizeID: z.number().int(),
-  UnitPrice: z.number().positive(),
+  UnitPrice: z.coerce.number().nonnegative(),
   DrinkSizeStatus: z.enum(['AVAILABLE', 'UNAVAILABLE']).optional(),
 });
 

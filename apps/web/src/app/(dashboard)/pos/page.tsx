@@ -96,12 +96,27 @@ export default function PosTerminal() {
     loadCatalog();
   }, []);
 
-  // Poll active orders list or sync status every 5 seconds (mocked, keeps cart synchrony)
+  // Real-time socket updates for Admin POS
   useEffect(() => {
-    const timer = setInterval(() => {
-      // Keeps cart live
-    }, 5000);
-    return () => clearInterval(timer);
+    import('socket.io-client').then(({ io }) => {
+      const socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3001');
+      const token = localStorage.getItem('token');
+      socket.emit('admin_join', { token: token || 'mock_token_admin' });
+
+      socket.on('new_order', (order) => {
+        toast.success(`Đơn hàng mới #${order?.OrderID} vừa được tạo!`, {
+          description: 'Cửa hàng có đơn mới qua khách hàng quét mã.',
+        });
+      });
+
+      socket.on('payment_success', (order) => {
+        toast.success(`Đơn hàng #${order?.OrderID} đã được thanh toán (PayOS QR)!`);
+      });
+
+      return () => {
+        socket.disconnect();
+      };
+    });
   }, []);
 
   // Filter drinks
@@ -321,6 +336,8 @@ export default function PosTerminal() {
     try {
       const orderPayload = {
         CustomerID: activeCustomer?.CustomerID || null,
+        CustomerPhoneNumber: phoneSearch || undefined,
+        CustomerName: activeCustomer?.CustomerName || undefined,
         ShopTableID: selectedTable || null,
         Items: cart.map((item) => ({
           DrinkSizeID: item.DrinkSizeID,
@@ -336,11 +353,8 @@ export default function PosTerminal() {
       };
 
       const order = await api.createOrder(orderPayload);
-
-      // Auto complete for demo convenience, updating levels
-      await api.updateOrderStatus(order.OrderID, 'COMPLETED');
-
-      toast.success(`Hóa đơn #${order.OrderID} đã thanh toán & hoàn thành thành công!`);
+  
+      toast.success(`Hóa đơn #${order.OrderID} đã được tạo và gửi tới Quầy Pha Chế!`);
 
       // Calculate true total discount from backend response to cover promotions not calculated by frontend
       const trueTotalDiscount = baseTotal - order.TotalPrice;

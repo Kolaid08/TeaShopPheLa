@@ -154,8 +154,8 @@ export default function AbandonedCartsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
-                    <Badge variant={cart.Status === 'ABANDONED' ? 'danger' : 'warning'} className="text-[10px]">
-                      {cart.Status === 'ABANDONED' ? 'Đã bỏ quên (>24h)' : 'Đang do dự'}
+                    <Badge variant={cart.Status === 'ABANDONED_NOTIFIED' ? 'success' : cart.Status === 'ABANDONED' ? 'danger' : 'warning'} className="text-[10px]">
+                      {cart.Status === 'ABANDONED_NOTIFIED' ? 'Đã gửi mã tự động' : cart.Status === 'ABANDONED' ? 'Đã bỏ quên (>24h)' : 'Đang do dự'}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -165,15 +165,17 @@ export default function AbandonedCartsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      className="h-8 text-xs font-bold border-primary text-primary hover:bg-primary/10 gap-1.5"
-                      onClick={() => handleOpenVoucherModal(cart)}
-                      disabled={!cart.CustomerID}
-                    >
-                      <Gift className="w-3.5 h-3.5" /> Tặng Mã
-                    </Button>
+                    {cart.Status !== 'ABANDONED_NOTIFIED' && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="h-8 text-xs font-bold border-primary text-primary hover:bg-primary/10 gap-1.5"
+                        onClick={() => handleOpenVoucherModal(cart)}
+                        disabled={!cart.CustomerID}
+                      >
+                        <Gift className="w-3.5 h-3.5" /> Tặng Mã
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

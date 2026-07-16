@@ -28,7 +28,6 @@ export default function CustomersLoyalty() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedCust, setSelectedCust] = useState<Customer | null>(null);
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [spending, setSpending] = useState(0);
 
@@ -48,7 +47,6 @@ export default function CustomersLoyalty() {
   const openCreateForm = () => {
     setSelectedCust(null);
     setName('');
-    setEmail('');
     setPhone('');
     setSpending(0);
     setIsFormOpen(true);
@@ -57,7 +55,6 @@ export default function CustomersLoyalty() {
   const openUpdateForm = (c: Customer) => {
     setSelectedCust(c);
     setName(c.CustomerName);
-    setEmail(c.Email || '');
     setPhone(c.PhoneNumber);
     setSpending(c.TotalMoneySpending);
     setIsFormOpen(true);
@@ -73,7 +70,6 @@ export default function CustomersLoyalty() {
     try {
       const payload = {
         CustomerName: name,
-        Email: email || null,
         PhoneNumber: phone,
         TotalMoneySpending: spending,
       };
@@ -151,7 +147,6 @@ export default function CustomersLoyalty() {
               <TableRow>
                 <TableHead>Hội Viên</TableHead>
                 <TableHead>Số Điện Thoại</TableHead>
-                <TableHead>Email Liên Hệ</TableHead>
                 <TableHead>Tổng Chi Tiêu</TableHead>
                 <TableHead>Hạng Hội Viên</TableHead>
                 <TableHead className="text-right">Hành động</TableHead>
@@ -165,9 +160,6 @@ export default function CustomersLoyalty() {
                   </TableCell>
                   <TableCell className="font-mono text-sm font-bold text-foreground">
                     {c.PhoneNumber}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground font-mono">
-                    {c.Email || 'N/A'}
                   </TableCell>
                   <TableCell className="font-bold font-mono text-primary flex items-center gap-0.5">
                     <Award className="w-4 h-4" /> {c.TotalMoneySpending.toLocaleString('vi-VN')} đ
@@ -210,7 +202,7 @@ export default function CustomersLoyalty() {
               className="bg-background/40"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">
                 Số điện thoại hội viên *
@@ -219,18 +211,6 @@ export default function CustomersLoyalty() {
                 placeholder="e.g. 0901234567"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="bg-background/40 font-mono"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">
-                Địa chỉ Email
-              </label>
-              <Input
-                type="email"
-                placeholder="e.g. thang@gmail.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
                 className="bg-background/40 font-mono"
               />
             </div>

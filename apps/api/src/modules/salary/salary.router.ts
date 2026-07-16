@@ -7,6 +7,8 @@ import { AppError } from '../../middleware/errorHandler';
 
 const router = Router();
 
+let isGeneratingSalary = false;
+
 const generateSalarySchema = z.object({
   Month: z.number().int().min(1).max(12),
   Year: z.number().int().min(2000).max(2100),

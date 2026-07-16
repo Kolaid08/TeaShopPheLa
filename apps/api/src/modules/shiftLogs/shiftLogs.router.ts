@@ -7,6 +7,8 @@ import { AppError } from '../../middleware/errorHandler';
 
 const router = Router();
 
+const activeShiftLocks = new Set<number>();
+
 const checkInSchema = z.object({
   ShiftID: z.number().int(),
 });
