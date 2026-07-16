@@ -126,7 +126,7 @@ const orderItemSchema = z.object({
   Quantity: z.number().int().positive(),
   Sugar: z.string().optional(),
   Ice: z.string().optional(),
-  Toppings: z.string().optional(),
+  Toppings: z.union([z.string(), z.array(z.number())]).optional(),
   UnitPrice: z.number().positive(),
 });
 
@@ -653,19 +653,33 @@ router.post('/customer-place', optionalAuth, async (req, res, next) => {
           },
         });
 
-        await tx.orderDetail.createMany({
-          data: validatedData.Items.map((item) => {
-            return {
+        for (const item of validatedData.Items) {
+          const orderDetail = await tx.orderDetail.create({
+            data: {
               OrderID: order.OrderID,
               DrinkSizeID: item.DrinkSizeID,
               Quantity: item.Quantity,
               Sugar: item.Sugar || '100%',
               Ice: item.Ice || '100%',
-              Toppings: (item as any).Toppings || null,
               UnitPrice: item.UnitPrice,
-            };
-          }),
-        });
+            },
+          });
+
+          if ((item as any).Toppings && (item as any).Toppings.length > 0) {
+            const toppingList = await tx.topping.findMany({ where: { ToppingID: { in: (item as any).Toppings } } });
+            await tx.orderDetailTopping.createMany({
+              data: (item as any).Toppings.map((tId: number) => {
+                const tPrice = toppingList.find(t => t.ToppingID === tId)?.Price || 0;
+                return {
+                  OrderDetailID: orderDetail.OrderDetailID,
+                  ToppingID: tId,
+                  Quantity: 1,
+                  UnitPrice: tPrice,
+                }
+              })
+            });
+          }
+        }
 
         if (usedVoucherId) {
           // @ts-ignore
