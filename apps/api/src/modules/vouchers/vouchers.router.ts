@@ -1,6 +1,6 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { verifyJWT, requireRole } from '../../middleware/auth';
+import { verifyJWT, requireRole, optionalAuth } from '../../middleware/auth';
 import { sendResponse } from '../../utils/response';
 
 const prisma = new PrismaClient();
@@ -82,8 +82,8 @@ router.post('/check', async (req, res, next) => {
       return sendResponse(res, 404, false, 'Mã giảm giá không tồn tại');
     }
 
-    if (voucher.IsUsed) {
-      return sendResponse(res, 400, false, 'Mã giảm giá đã được sử dụng');
+    if (voucher.UsedCount >= voucher.MaxUsage) {
+      return sendResponse(res, 400, false, 'Mã giảm giá đã hết lượt sử dụng');
     }
 
     if (voucher.ValidUntil && new Date(voucher.ValidUntil) < new Date()) {
@@ -100,6 +100,42 @@ router.post('/check', async (req, res, next) => {
     }
 
     return sendResponse(res, 200, true, 'Mã hợp lệ', voucher);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get vouchers for a specific customer
+router.get('/customer/:customerId', optionalAuth, async (req, res, next) => {
+  try {
+    const { customerId } = req.params;
+    
+    if (!customerId || isNaN(Number(customerId))) {
+      return sendResponse(res, 400, false, 'ID khách hàng không hợp lệ');
+    }
+
+    // BẢO MẬT: Ngăn chặn rò rỉ thông tin cá nhân
+    if (!req.user || req.user.CustomerID !== Number(customerId)) {
+       return sendResponse(res, 403, false, 'Forbidden: Cannot access other customer vouchers');
+    }
+
+    const rawVouchers = await prisma.voucher.findMany({
+      where: {
+        OwnerID: Number(customerId),
+        OR: [
+          { ValidUntil: null },
+          { ValidUntil: { gt: new Date() } }
+        ]
+      },
+      include: {
+        DrinkSize: { include: { Drink: true, Size: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const vouchers = rawVouchers.filter(v => v.UsedCount < v.MaxUsage);
+
+    return sendResponse(res, 200, true, 'Lấy danh sách voucher thành công', vouchers);
   } catch (err) {
     next(err);
   }

@@ -2,9 +2,13 @@ import app from './app';
 import { config } from './config/index';
 import { seedDatabaseIfEmpty } from './utils/seed';
 import { initSocketIo } from './modules/chat/chat.socket';
+import { startCronJobs } from './jobs/cronJobs';
 
 // Auto-seed database if empty on server boot
 seedDatabaseIfEmpty();
+
+// Start Background Jobs
+startCronJobs();
 
 const server = app.listen(config.port, () => {
   initSocketIo(server);

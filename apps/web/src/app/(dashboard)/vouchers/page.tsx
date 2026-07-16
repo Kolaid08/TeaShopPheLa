@@ -30,6 +30,7 @@ export default function VouchersManagement() {
   const [discountType, setDiscountType] = useState<'PERCENT' | 'FIXED'>('PERCENT');
   const [discountValue, setDiscountValue] = useState(10);
   const [targetProductId, setTargetProductId] = useState<number | ''>('');
+  const [maxUsage, setMaxUsage] = useState(1);
   const [validUntil, setValidUntil] = useState('');
 
   const loadData = async () => {
@@ -50,6 +51,7 @@ export default function VouchersManagement() {
     setDiscountType('PERCENT');
     setDiscountValue(10);
     setTargetProductId('');
+    setMaxUsage(1);
     setValidUntil('');
     setIsFormOpen(true);
   };
@@ -67,6 +69,7 @@ export default function VouchersManagement() {
         DiscountType: discountType,
         DiscountValue: Number(discountValue),
         TargetProductID: targetProductId ? Number(targetProductId) : undefined,
+        MaxUsage: Number(maxUsage),
         ValidUntil: validUntil ? new Date(validUntil).toISOString() : undefined,
       };
 
@@ -178,11 +181,9 @@ export default function VouchersManagement() {
                     )}
                   </TableCell>
                   <TableCell className="text-center">
-                    {v.IsUsed ? (
-                      <Badge variant="neutral">Đã sử dụng</Badge>
-                    ) : (
-                      <Badge variant="success">Chưa dùng</Badge>
-                    )}
+                    <Badge variant={v.UsedCount >= v.MaxUsage ? "neutral" : "success"}>
+                      {v.UsedCount} / {v.MaxUsage}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     {v.ValidUntil ? (
@@ -263,6 +264,18 @@ export default function VouchersManagement() {
               ))}
             </select>
             <p className="text-[10px] text-muted-foreground mt-1">Chọn nếu mã này chỉ áp dụng để giảm giá riêng biệt món uống này.</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
+              Lượt Sử Dụng Tối Đa
+            </label>
+            <Input
+              type="number"
+              value={maxUsage}
+              onChange={(e) => setMaxUsage(Number(e.target.value))}
+              min={1}
+              required
+            />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">

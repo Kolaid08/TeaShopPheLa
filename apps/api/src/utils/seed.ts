@@ -434,10 +434,10 @@ export async function seedDatabaseIfEmpty() {
       console.log('Seeding customers...');
       await prisma.customer.createMany({
         data: [
-          { CustomerName: 'Nguyễn Khách A', PhoneNumber: '0901234567', TotalMoneySpending: 1250000, LevelID: 2, Email: 'khacha@gmail.com' },
-          { CustomerName: 'Trần Khách B', PhoneNumber: '0909876543', TotalMoneySpending: 3200000, LevelID: 3, Email: 'khachb@gmail.com' },
-          { CustomerName: 'Lê Khách C', PhoneNumber: '0912345678', TotalMoneySpending: 150000, LevelID: 1, Email: 'khachc@gmail.com' },
-          { CustomerName: 'Phạm Khách D VIP', PhoneNumber: '0988888888', TotalMoneySpending: 15000000, LevelID: 4, Email: 'khachd@gmail.com' },
+          { CustomerName: 'Nguyễn Khách A', PhoneNumber: '0901234567', TotalMoneySpending: 1250000, LevelID: 2 },
+          { CustomerName: 'Trần Khách B', PhoneNumber: '0909876543', TotalMoneySpending: 3200000, LevelID: 3 },
+          { CustomerName: 'Lê Khách C', PhoneNumber: '0912345678', TotalMoneySpending: 150000, LevelID: 1 },
+          { CustomerName: 'Phạm Khách D VIP', PhoneNumber: '0988888888', TotalMoneySpending: 15000000, LevelID: 4 },
         ]
       });
     }

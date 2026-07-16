@@ -204,10 +204,11 @@ model MemberShipLevel {
 model Customer {
   CustomerID         Int             @id @default(autoincrement())
   CustomerName       String          @db.NVarChar(255)
-  Email              String?         @db.VarChar(255)
   PhoneNumber        String          @db.VarChar(20)
   TotalMoneySpending Decimal         @db.Decimal(15, 2)
   LevelID            Int
+  ReferredBy         Int?
+  PasswordHash       String?         @db.VarChar(255)
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
   Carts              Cart[]
@@ -216,6 +217,8 @@ model Customer {
   Orders             Orders[]
   Reviews            Review[]
   Vouchers           Voucher[]
+  ReferredCustomer   Customer?       @relation("Referral", fields: [ReferredBy], references: [CustomerID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Customer_ReferredBy")
+  Referrals          Customer[]      @relation("Referral")
 
   @@map("Customer")
 }
@@ -283,14 +286,29 @@ model OrderDetail {
   Quantity      Int
   Sugar         String    @default("100%") @db.VarChar(20)
   Ice           String    @default("100%") @db.VarChar(20)
-  Toppings      String?   @db.NVarChar(500)
   UnitPrice     Decimal   @db.Decimal(10, 2)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   DrinkSize     DrinkSize @relation(fields: [DrinkSizeID], references: [DrinkSizeID], map: "FK_OrderDetail_DrinkSize")
   Orders        Orders    @relation(fields: [OrderID], references: [OrderID], onDelete: Cascade, map: "FK_OrderDetail_Orders")
 
+  Toppings      OrderDetailTopping[]
+
   @@map("OrderDetail")
+}
+
+model OrderDetailTopping {
+  OrderDetailID Int
+  ToppingID     Int
+  Quantity      Int       @default(1)
+  UnitPrice     Decimal   @db.Decimal(10, 2)
+  createdAt     DateTime  @default(now())
+  
+  OrderDetail   OrderDetail @relation(fields: [OrderDetailID], references: [OrderDetailID], onDelete: Cascade)
+  Topping       Topping     @relation(fields: [ToppingID], references: [ToppingID], onDelete: Cascade)
+  
+  @@id([OrderDetailID, ToppingID])
+  @@map("OrderDetailTopping")
 }
 
 model Employee {
@@ -394,14 +412,29 @@ model CartItem {
   Quantity    Int
   Sugar       String   @default("100%") @db.VarChar(20)
   Ice         String   @default("100%") @db.VarChar(20)
-  Toppings    String?  @db.NVarChar(500)
   UnitPrice   Decimal  @db.Decimal(10, 2)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   Cart        Cart      @relation(fields: [CartID], references: [CartID], onDelete: Cascade, map: "FK_CartItem_Cart")
   DrinkSize   DrinkSize @relation(fields: [DrinkSizeID], references: [DrinkSizeID], map: "FK_CartItem_DrinkSize")
 
+  Toppings    CartItemTopping[]
+
   @@map("CartItem")
+}
+
+model CartItemTopping {
+  CartItemID    Int
+  ToppingID     Int
+  Quantity      Int       @default(1)
+  UnitPrice     Decimal   @db.Decimal(10, 2)
+  createdAt     DateTime  @default(now())
+  
+  CartItem      CartItem  @relation(fields: [CartItemID], references: [CartItemID], onDelete: Cascade)
+  Topping       Topping   @relation(fields: [ToppingID], references: [ToppingID], onDelete: Cascade)
+  
+  @@id([CartItemID, ToppingID])
+  @@map("CartItemTopping")
 }
 
 model Review {
@@ -451,7 +484,8 @@ model Voucher {
   TargetProductID Int?
   OwnerID         Int?
   Creator         String?     @db.VarChar(50)
-  IsUsed          Boolean     @default(false)
+  MaxUsage        Int         @default(1)
+  UsedCount       Int         @default(0)
   ValidUntil      DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -489,4 +523,18 @@ model HighUtilityItemset {
   LastCalculated  DateTime @default(now())
   
   @@map("HighUtilityItemset")
+}
+
+model Topping {
+  ToppingID Int      @id @default(autoincrement())
+  Name      String   @unique @db.NVarChar(255)
+  Price     Decimal  @db.Decimal(10, 2)
+  IsActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  OrderDetailToppings OrderDetailTopping[]
+  CartItemToppings    CartItemTopping[]
+
+  @@map("Topping")
 }

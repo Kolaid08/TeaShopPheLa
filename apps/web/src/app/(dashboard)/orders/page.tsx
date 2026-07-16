@@ -18,6 +18,8 @@ import {
 import { api, Order, Employee } from '@/lib/api';
 import { toast } from 'sonner';
 
+import { io } from 'socket.io-client';
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,6 +42,30 @@ export default function OrdersPage() {
   useEffect(() => {
     loadOrders();
     api.getEmployees().then(list => setEmployees(list.filter(e => e.Role?.RoleName === 'Shipper' || !e.Role || e.Role?.RoleName === 'STAFF'))).catch(() => {});
+
+    // Khởi tạo Socket.IO client kết nối đến Backend
+    const socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3001');
+
+    // Join admin room
+    const token = localStorage.getItem('token');
+    socket.emit('admin_join', { token: token || 'mock_token_admin' });
+
+    socket.on('new_order', (order) => {
+      toast.success(`Đơn hàng mới #${order?.OrderID} vừa được tạo!`, {
+        description: 'Vui lòng kiểm tra và xử lý.',
+        action: { label: 'Tải lại', onClick: () => loadOrders() }
+      });
+      loadOrders(); // Auto reload orders
+    });
+
+    socket.on('payment_success', (order) => {
+      toast.success(`Đơn hàng #${order?.OrderID} đã được thanh toán thành công (PayOS QR)!`);
+      loadOrders(); // Auto reload to update status
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   const handleAssignShipper = async () => {
@@ -422,7 +448,11 @@ export default function OrdersPage() {
                           <>
                             {item.Sugar && <span className="border border-border rounded px-1">Đường {item.Sugar}</span>}
                             {item.Ice && <span className="border border-border rounded px-1">Đá {item.Ice}</span>}
-                            {item.Toppings && <span className="border border-border rounded px-1">+ {item.Toppings}</span>}
+                            {item.Toppings && item.Toppings.length > 0 && (
+                              <span className="border border-border rounded px-1">
+                                + {item.Toppings.map((t: any) => t.Topping.Name).join(', ')}
+                              </span>
+                            )}
                           </>
                         ) : (
                           <span className="italic">Không có tùy chỉnh</span>

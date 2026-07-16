@@ -1,3 +1,4 @@
+import { getIo } from '../chat/chat.socket';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../../utils/prisma';
@@ -125,7 +126,7 @@ const orderItemSchema = z.object({
   Quantity: z.number().int().positive(),
   Sugar: z.string().optional(),
   Ice: z.string().optional(),
-  Toppings: z.string().optional(),
+  Toppings: z.union([z.string(), z.array(z.number())]).optional(),
   UnitPrice: z.number().positive(),
 });
 
@@ -273,7 +274,7 @@ router.get('/customer-frequent/:customerId', async (req, res, next) => {
         }
         const entry = frequencyMap.get(d.DrinkSizeID)!;
         entry.count += 1;
-        entry.configs.push({ Sugar: d.Sugar, Ice: d.Ice, Toppings: d.Toppings || '' });
+        entry.configs.push({ Sugar: d.Sugar, Ice: d.Ice, Toppings: (d as any).Toppings || '' });
       }
 
       // Sort by count
@@ -538,7 +539,7 @@ router.post('/customer-place', optionalAuth, async (req, res, next) => {
         // @ts-ignore - Prisma types might be out of sync if server is not restarted yet
         const voucher = await prisma.voucher.findUnique({ where: { Code: validatedData.VoucherCode } });
         if (!voucher) throw new AppError(404, 'Mã giảm giá không tồn tại');
-        if (voucher.IsUsed) throw new AppError(400, 'Mã giảm giá đã được sử dụng');
+        if (voucher.UsedCount >= voucher.MaxUsage) throw new AppError(400, 'Mã giảm giá đã hết lượt sử dụng');
         if (voucher.ValidUntil && new Date(voucher.ValidUntil) < new Date()) throw new AppError(400, 'Mã giảm giá đã hết hạn');
         if (voucher.OwnerID && voucher.OwnerID !== customerId) throw new AppError(403, 'Mã giảm giá không dành cho tài khoản này');
 
@@ -626,10 +627,10 @@ router.post('/customer-place', optionalAuth, async (req, res, next) => {
       const newOrder = await prisma.$transaction(async (tx) => {
         if (usedVoucherId) {
           const v = await tx.voucher.findUnique({ where: { VoucherID: usedVoucherId } });
-          if (!v || v.IsUsed) throw new AppError(400, 'Mã giảm giá không hợp lệ hoặc đã được sử dụng');
+          if (!v || (v.UsedCount >= v.MaxUsage)) throw new AppError(400, 'Mã giảm giá không hợp lệ hoặc đã được sử dụng');
           await tx.voucher.update({
             where: { VoucherID: usedVoucherId },
-            data: { IsUsed: true }
+            data: { UsedCount: { increment: 1 } }
           });
         }
         const order = await tx.orders.create({
@@ -652,25 +653,39 @@ router.post('/customer-place', optionalAuth, async (req, res, next) => {
           },
         });
 
-        await tx.orderDetail.createMany({
-          data: validatedData.Items.map((item) => {
-            return {
+        for (const item of validatedData.Items) {
+          const orderDetail = await tx.orderDetail.create({
+            data: {
               OrderID: order.OrderID,
               DrinkSizeID: item.DrinkSizeID,
               Quantity: item.Quantity,
               Sugar: item.Sugar || '100%',
               Ice: item.Ice || '100%',
-              Toppings: item.Toppings || null,
               UnitPrice: item.UnitPrice,
-            };
-          }),
-        });
+            },
+          });
+
+          if ((item as any).Toppings && (item as any).Toppings.length > 0) {
+            const toppingList = await tx.topping.findMany({ where: { ToppingID: { in: (item as any).Toppings } } });
+            await tx.orderDetailTopping.createMany({
+              data: (item as any).Toppings.map((tId: number) => {
+                const tPrice = toppingList.find(t => t.ToppingID === tId)?.Price || 0;
+                return {
+                  OrderDetailID: orderDetail.OrderDetailID,
+                  ToppingID: tId,
+                  Quantity: 1,
+                  UnitPrice: tPrice,
+                }
+              })
+            });
+          }
+        }
 
         if (usedVoucherId) {
           // @ts-ignore
           await tx.voucher.update({
             where: { VoucherID: usedVoucherId },
-            data: { IsUsed: true }
+            data: { UsedCount: { increment: 1 } }
           });
         }
 
@@ -751,6 +766,20 @@ router.get('/customer-status/:id', optionalAuth, async (req, res, next) => {
       const order = await prisma.orders.findUnique({ where: { OrderID: orderId } });
       if (!order) throw new AppError(404, 'Order not found.');
 
+    // BẢO MẬT: Kiểm tra IDOR cho Shipper
+    if (req.user?.RoleName === 'SHIPPER') {
+      if (order.ShipperID !== req.user.EmployeeID) {
+        throw new AppError(403, 'Bạn không có quyền cập nhật đơn hàng của tài xế khác.');
+      }
+    }
+
+    // BẢO MẬT: Kiểm tra IDOR cho Shipper
+    if (req.user?.RoleName === 'SHIPPER') {
+      if (order.ShipperID !== req.user.EmployeeID) {
+        throw new AppError(403, 'Bạn không có quyền cập nhật đơn hàng của tài xế khác.');
+      }
+    }
+
       if (order.OrderStatus === 'PENDING') {
         try {
           const payosRes = await payos.paymentRequests.get(order.OrderID);
@@ -823,7 +852,7 @@ router.patch('/customer-cancel/:id', verifyJWT, async (req, res, next) => {
           if (order.VoucherID) {
             await tx.voucher.update({
               where: { VoucherID: order.VoucherID },
-              data: { IsUsed: false },
+              data: { UsedCount: { decrement: 1 } },
             });
           }
 
@@ -934,36 +963,280 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF']), async (r
     const employeeId = req.user?.EmployeeID;
     if (!employeeId) throw new AppError(401, 'Unauthorized');
 
+    // BẢO MẬT: Không lấy TotalPrice từ frontend nữa, TỰ ĐỘNG TÍNH LẠI HẾT!
+    const drinkSizeIds = validatedData.Items.map((i) => i.DrinkSizeID);
+    const catalogItems = await prisma.drinkSize.findMany({
+      where: { DrinkSizeID: { in: drinkSizeIds } },
+      include: { Drink: true, Size: true },
+    });
+
+    if (catalogItems.length !== drinkSizeIds.length) {
+      throw new AppError(400, 'Một hoặc nhiều món không tồn tại trong danh mục.');
+    }
+
+    // Compute base total pricing securely
     let baseTotal = 0;
     for (const item of validatedData.Items) {
+      const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
+      if (catalogItem) {
+         item.UnitPrice = catalogItem.UnitPrice.toNumber();
+      }
+
+      let toppingPrice = 0;
+      if ((item as any).Toppings && (item as any).Toppings.length > 0) {
+         // @ts-ignore - Bypass Prisma Client type check until user restarts dev server
+         const toppings = await prisma.topping.findMany({
+            where: { ToppingID: { in: (item as any).Toppings }, IsActive: true }
+         });
+         toppingPrice = toppings.reduce((sum: number, t: any) => sum + Number(t.Price), 0);
+      }
+
+      item.UnitPrice = item.UnitPrice + toppingPrice;
       baseTotal += item.UnitPrice * item.Quantity;
     }
-    const finalPrice = validatedData.TotalPrice || baseTotal;
+
+    // Calculate Promotion Discount (Best applicable promo)
+    let promotionDiscountAmount = 0;
+    const now = new Date();
+    const activePromos = await prisma.promotion.findMany({
+      where: { 
+        IsActive: true,
+        OR: [
+          { StartDate: null, EndDate: null },
+          { StartDate: { lte: now }, EndDate: { gte: now } },
+          { StartDate: { lte: now }, EndDate: null },
+          { StartDate: null, EndDate: { gte: now } }
+        ]
+      }
+    });
+
+    for (const promo of activePromos) {
+      let applicableItemsTotal = 0;
+      let applicableQuantity = 0;
+      
+      let targetIds: number[] | null = null;
+      if (promo.TargetDrinkIDs) {
+        try {
+          targetIds = JSON.parse(promo.TargetDrinkIDs);
+        } catch {}
+      }
+      
+      for (const item of validatedData.Items) {
+        if (!targetIds || targetIds.includes(item.DrinkSizeID)) {
+          applicableItemsTotal += item.UnitPrice * item.Quantity;
+          applicableQuantity += item.Quantity;
+        }
+      }
+
+      if (applicableQuantity >= promo.MinQuantity) {
+        let currentPromoDiscount = 0;
+        if (promo.Type === 'PERCENT') {
+          currentPromoDiscount = applicableItemsTotal * (Number(promo.Value) / 100);
+        } else if (promo.Type === 'AMOUNT') {
+          currentPromoDiscount = Number(promo.Value);
+        } else if (promo.Type === 'FREE_ITEM') {
+          const applicableSorted = validatedData.Items
+            .filter(i => !targetIds || targetIds.includes(i.DrinkSizeID))
+            .sort((a, b) => a.UnitPrice - b.UnitPrice);
+          const multiplier = Math.floor(applicableQuantity / promo.MinQuantity);
+          let freeItemsToGive = Number(promo.Value) * multiplier;
+          for (const item of applicableSorted) {
+            if (freeItemsToGive <= 0) break;
+            const qtyToFree = Math.min(item.Quantity, freeItemsToGive);
+            currentPromoDiscount += qtyToFree * item.UnitPrice;
+            freeItemsToGive -= qtyToFree;
+          }
+        }
+        
+        if (currentPromoDiscount > promotionDiscountAmount) {
+          promotionDiscountAmount = currentPromoDiscount;
+        }
+      }
+    }
+
+    const promoRatio = baseTotal > 0 ? (baseTotal - promotionDiscountAmount) / baseTotal : 1;
+
+    // Create Customer if doesn't exist to calculate discount
+    let customerId = validatedData.CustomerID || null;
+    let discountRate = 0;
+    
+    if (!customerId && validatedData.CustomerPhoneNumber) {
+      let dbCustomer = await prisma.customer.findFirst({
+        where: { PhoneNumber: validatedData.CustomerPhoneNumber },
+        include: { MemberShipLevel: true }
+      });
+      if (!dbCustomer) {
+        const baseLevel = await prisma.memberShipLevel.findFirst({ orderBy: { RequiredMoney: 'asc' } });
+        dbCustomer = await prisma.customer.create({
+          data: {
+            CustomerName: validatedData.CustomerName || 'Khách hàng',
+            PhoneNumber: validatedData.CustomerPhoneNumber,
+            TotalMoneySpending: 0,
+            LevelID: baseLevel?.LevelID || 1,
+          },
+          include: { MemberShipLevel: true }
+        });
+      }
+      customerId = dbCustomer.CustomerID;
+      if (dbCustomer.MemberShipLevel) {
+         discountRate = dbCustomer.MemberShipLevel.DiscountRate.toNumber();
+      }
+    } else if (customerId) {
+      const dbCustomer = await prisma.customer.findUnique({
+        where: { CustomerID: customerId },
+        include: { MemberShipLevel: true }
+      });
+      if (dbCustomer && dbCustomer.MemberShipLevel) {
+        discountRate = dbCustomer.MemberShipLevel.DiscountRate.toNumber();
+      }
+    }
+
+    // Check Voucher
+    let voucherDiscountAmount = 0;
+    let membershipDiscount = 0;
+    let usedVoucherId = null;
+
+    if (validatedData.VoucherCode) {
+      // @ts-ignore
+      const voucher = await prisma.voucher.findUnique({ where: { Code: validatedData.VoucherCode } });
+      if (!voucher) throw new AppError(404, 'Mã giảm giá không tồn tại');
+      if (voucher.UsedCount >= voucher.MaxUsage) throw new AppError(400, 'Mã giảm giá đã hết lượt sử dụng');
+      if (voucher.ValidUntil && new Date(voucher.ValidUntil) < new Date()) throw new AppError(400, 'Mã giảm giá đã hết hạn');
+      if (voucher.OwnerID && voucher.OwnerID !== customerId) throw new AppError(403, 'Mã giảm giá không dành cho tài khoản này');
+
+      let targetItemTotal = 0;
+      let otherItemsTotal = 0;
+
+      if (voucher.TargetProductID) {
+        let applied = false;
+        for (const item of validatedData.Items) {
+          if (item.DrinkSizeID === voucher.TargetProductID) {
+             targetItemTotal += item.UnitPrice * item.Quantity;
+             applied = true;
+          } else {
+             otherItemsTotal += item.UnitPrice * item.Quantity;
+          }
+        }
+        if (!applied) throw new AppError(400, 'Giỏ hàng không chứa món được áp dụng mã giảm giá');
+      } else {
+         targetItemTotal = baseTotal;
+         otherItemsTotal = 0;
+      }
+
+      targetItemTotal = targetItemTotal * promoRatio;
+      otherItemsTotal = otherItemsTotal * promoRatio;
+
+      if (voucher.DiscountType === 'PERCENT') {
+         voucherDiscountAmount = targetItemTotal * (Number(voucher.DiscountValue) / 100);
+      } else {
+         voucherDiscountAmount = Number(voucher.DiscountValue);
+         if (voucherDiscountAmount > targetItemTotal) voucherDiscountAmount = targetItemTotal;
+      }
+
+      membershipDiscount = otherItemsTotal * (discountRate / 100);
+      usedVoucherId = voucher.VoucherID;
+    } else {
+      membershipDiscount = (baseTotal * promoRatio) * (discountRate / 100);
+    }
+
+    const totalDiscount = promotionDiscountAmount + voucherDiscountAmount + membershipDiscount;
+    let finalPrice = Math.max(0, baseTotal - totalDiscount);
+
+    // Pre-validate ingredients for the entire cart
+    const requiredIngredients = new Map<number, number>();
+    for (const item of validatedData.Items) {
+      const catalogItem = catalogItems.find(c => c.DrinkSizeID === item.DrinkSizeID);
+      if (catalogItem) {
+        const multiplier = catalogItem.Size.VolumeML / 500.0;
+        const recipe = await prisma.recipe.findFirst({
+          where: { DrinkID: catalogItem.DrinkID },
+          orderBy: { createdAt: 'desc' },
+          include: { RecipeDetails: true },
+        });
+
+        if (recipe) {
+          for (const detail of recipe.RecipeDetails) {
+            const baseQty = Number(detail.Quantity);
+            const totalRequired = baseQty * multiplier * item.Quantity;
+            const currentReq = requiredIngredients.get(detail.IngredientID) || 0;
+            requiredIngredients.set(detail.IngredientID, currentReq + totalRequired);
+          }
+        }
+      }
+    }
+
+    for (const [ingredientId, totalRequired] of requiredIngredients.entries()) {
+      const ingredient = await prisma.ingredient.findUnique({ where: { IngredientID: ingredientId } });
+      if (ingredient && Number(ingredient.QuantityStock) < totalRequired) {
+        throw new AppError(
+          400,
+          `Nguyên liệu "${ingredient.IngredientName}" không đủ để pha chế (cần: ${totalRequired}, tồn kho: ${ingredient.QuantityStock}). Vui lòng báo khách chọn món khác.`
+        );
+      }
+    }
 
     const newOrder = await prisma.$transaction(async (tx) => {
+      // Bảo mật Voucher TOCTOU
+      if (usedVoucherId) {
+        const v = await tx.voucher.findUnique({ where: { VoucherID: usedVoucherId } });
+        if (!v || v.UsedCount >= v.MaxUsage) throw new AppError(400, 'Mã giảm giá không hợp lệ hoặc đã hết lượt sử dụng');
+        
+        const updateResult = await tx.voucher.updateMany({
+          where: { 
+            VoucherID: usedVoucherId,
+            UsedCount: { lt: v.MaxUsage }
+          },
+          data: { UsedCount: { increment: 1 } }
+        });
+        
+        if (updateResult.count === 0) {
+           throw new AppError(400, 'Mã giảm giá vừa bị sử dụng bởi một giao dịch khác. Vui lòng thử lại.');
+        }
+      }
+
       const order = await tx.orders.create({
         data: {
-          CustomerID: validatedData.CustomerID || null,
+          VoucherID: usedVoucherId,
+          CustomerID: customerId,
           ShopTableID: validatedData.ShopTableID || null,
           EmployeeID: employeeId,
           OrderStatus: 'PENDING',
+          PaymentStatus: 'PAID',
+          PaymentMethod: 'CASH',
           TotalPrice: finalPrice,
           OrderNote: validatedData.OrderNote || null,
           OrderType: validatedData.OrderType || (validatedData.ShopTableID ? 'DINE_IN' : 'TAKEAWAY'),
         },
       });
 
-      await tx.orderDetail.createMany({
-        data: validatedData.Items.map((item) => ({
-          OrderID: order.OrderID,
-          DrinkSizeID: item.DrinkSizeID,
-          Quantity: item.Quantity,
-          Sugar: item.Sugar || '100%',
-          Ice: item.Ice || '100%',
-          Toppings: item.Toppings || null,
-          UnitPrice: item.UnitPrice,
-        })),
-      });
+      for (const item of validatedData.Items) {
+        const orderDetail = await tx.orderDetail.create({
+          data: {
+            OrderID: order.OrderID,
+            DrinkSizeID: item.DrinkSizeID,
+            Quantity: item.Quantity,
+            Sugar: item.Sugar || '100%',
+            Ice: item.Ice || '100%',
+            UnitPrice: item.UnitPrice,
+          },
+        });
+        
+        // FIX: Bổ sung lưu Topping cho đơn hàng POS
+        if ((item as any).Toppings && (item as any).Toppings.length > 0) {
+          const toppingList = await tx.topping.findMany({ where: { ToppingID: { in: (item as any).Toppings } } });
+          await tx.orderDetailTopping.createMany({
+            data: (item as any).Toppings.map((tId: number) => {
+              const tPrice = toppingList.find(t => t.ToppingID === tId)?.Price || 0;
+              return {
+                OrderDetailID: orderDetail.OrderDetailID,
+                ToppingID: tId,
+                Quantity: 1,
+                UnitPrice: tPrice,
+              }
+            })
+          });
+        }
+      }
 
       return tx.orders.findUnique({
         where: { OrderID: order.OrderID },
@@ -979,13 +1252,22 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF']), async (r
                   Size: { select: { SizeName: true } },
                 },
               },
+              Toppings: {
+                include: { Topping: true }
+              }
             },
           },
         },
       });
     });
 
+    try {
+      const io = (global as any).io || null; // fallback if getIo missing
+      io.to('admins').emit('new_order', newOrder);
+    } catch (err) {}
+
     return sendResponse(res, 201, true, 'Tạo đơn hàng thành công', newOrder);
+
   } catch (err) {
     next(err);
   }

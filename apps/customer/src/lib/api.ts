@@ -53,7 +53,6 @@ export interface Unit {
 export interface Customer {
   CustomerID: number;
   CustomerName: string;
-  Email?: string;
   PhoneNumber: string;
   TotalMoneySpending: number;
   LevelID: number;
@@ -111,9 +110,29 @@ export interface OrderDetail {
   DrinkSizeID: number;
   Quantity: number;
   UnitPrice: number;
+  Sugar?: string;
+  Ice?: string;
+  Toppings?: any[];
   DrinkSize?: {
     Drink?: { DrinkName: string };
     Size?: { SizeName: string; VolumeML: number };
+  };
+}
+
+export interface Voucher {
+  VoucherID: number;
+  Code: string;
+  DiscountType: string;
+  DiscountValue: number;
+  TargetProductID?: number;
+  OwnerID?: number;
+  Creator?: string;
+  MaxUsage: number;
+  UsedCount: number;
+  ValidUntil?: string;
+  DrinkSize?: {
+    Drink?: { DrinkName: string };
+    Size?: { SizeName: string };
   };
 }
 
@@ -244,8 +263,8 @@ class LocalDatabase {
   ];
 
   customers: Customer[] = [
-    { CustomerID: 1, CustomerName: 'Nguyễn Văn A', Email: 'ana@gmail.com', PhoneNumber: '0901122334', TotalMoneySpending: 1250000, LevelID: 2 },
-    { CustomerID: 2, CustomerName: 'Trần Thị B', Email: 'btran@gmail.com', PhoneNumber: '0909988776', TotalMoneySpending: 3200000, LevelID: 3 },
+    { CustomerID: 1, CustomerName: 'Nguyễn Văn A', PhoneNumber: '0901122334', TotalMoneySpending: 1250000, LevelID: 2 },
+    { CustomerID: 2, CustomerName: 'Trần Thị B', PhoneNumber: '0909988776', TotalMoneySpending: 3200000, LevelID: 3 },
   ];
 
   tables: ShopTable[] = [
@@ -289,12 +308,12 @@ const getSessionCustomer = (): Customer | null => {
 // Unified API connection client
 export const api = {
   // CUSTOMER AUTHENTICATION (With auto-registration for new phones)
-  customerLogin: async (phoneNumber: string, fullName = 'Khách Hàng Mới'): Promise<Customer> => {
+  customerLogin: async (phoneNumber: string, password = '123456'): Promise<Customer> => {
     try {
       const res = await fetch(`${API_BASE}/customers/public/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber, fullName }),
+        body: JSON.stringify({ phoneNumber, password }),
       });
       const payload = await res.json();
       
@@ -316,6 +335,33 @@ export const api = {
     }
   },
 
+  customerRegister: async (phoneNumber: string, fullName: string, password = '123456', referrerId?: string): Promise<Customer> => {
+    try {
+      const res = await fetch(`${API_BASE}/customers/public/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber, fullName, password, referrerId }),
+      });
+      const payload = await res.json();
+      
+      if (!res.ok || !payload.data) {
+        throw new Error(payload.message || 'Registration failed');
+      }
+      
+      const cust = payload.data.customer || payload.data;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('phela_customer_token', payload.data.token || 'real_cust_token_' + Date.now());
+        localStorage.setItem('phela_customer_user', JSON.stringify(cust));
+        localStorage.removeItem('chat_session_id'); // Xóa phiên chat cũ
+        window.dispatchEvent(new Event('customer_auth_changed'));
+      }
+      return cust;
+    } catch (error) {
+      console.error('Customer register error:', error);
+      throw error;
+    }
+  },
+
   customerLogout: () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('phela_customer_token');
@@ -326,6 +372,17 @@ export const api = {
   },
 
   getCurrentCustomer: () => getSessionCustomer(),
+
+  getToppings: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/drinks/toppings`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (res.ok) return payload.data || [];
+      return [];
+    } catch {
+      return [];
+    }
+  },
 
   syncCustomerProfile: async (phoneNumber: string) => {
     try {
@@ -347,10 +404,14 @@ export const api = {
   // DRINKS CATALOG
   syncCart: async (Items: any[], customerId?: number, sessionId?: string): Promise<any> => {
     try {
+      const payloadItems = Items.map(item => ({
+        ...item,
+        Toppings: Array.isArray(item.Toppings) ? item.Toppings.map((t: any) => t.id || t.ToppingID || t) : []
+      }));
       const res = await fetch(`${API_BASE}/carts/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ Items, CustomerID: customerId, SessionID: sessionId })
+        body: JSON.stringify({ Items: payloadItems, CustomerID: customerId, SessionID: sessionId })
       });
       return res.json();
     } catch (error) {
@@ -479,7 +540,7 @@ export const api = {
   },
 
   createCustomerOrder: async (data: {
-    Items: { DrinkSizeID: number; Quantity: number; UnitPrice: number; Sugar?: string; Ice?: string; Toppings?: string }[];
+    Items: { DrinkSizeID: number; Quantity: number; UnitPrice: number; Sugar?: string; Ice?: string; Toppings?: any[] }[];
     TotalPrice: number;
     ShopTableID?: number;
     OrderNote?: string;
@@ -564,7 +625,7 @@ export const api = {
           UnitPrice: item.UnitPrice,
           Sugar: item.Sugar || '100%',
           Ice: item.Ice || '100%',
-          Toppings: item.Toppings || '',
+          Toppings: item.Toppings || [],
         })),
       };
 
@@ -704,6 +765,20 @@ export const api = {
       return [];
     } catch (e: any) {
       // Local fallback: We can implement local grouping if we want, but for now just return empty array
+      return [];
+    }
+  },
+
+  getCustomerVouchers: async (customerId: number): Promise<Voucher[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/vouchers/customer/${customerId}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Lỗi khi lấy danh sách voucher');
+      }
+      return data.data;
+    } catch (error) {
+      console.error(error);
       return [];
     }
   },
