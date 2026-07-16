@@ -192,6 +192,20 @@ export default function OrdersPage() {
     setIsDetailOpen(true);
   };
 
+  const handleRefundSubmit = async () => {
+    if (!selectedOrder) return;
+    try {
+      await api.refundOrder(selectedOrder.OrderID, refundAmount, refundReason);
+      toast.success(`Đã hoàn tiền ${refundAmount.toLocaleString('vi-VN')} đ cho đơn hàng #${selectedOrder.OrderID}`);
+      setIsRefundOpen(false);
+      loadOrders();
+      // Update selected order view
+      setSelectedOrder((prev) => (prev ? { ...prev, RefundStatus: 'PARTIAL', RefundAmount: refundAmount, RefundReason: refundReason, OrderStatus: 'CANCELLED' } : null));
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi hoàn tiền hóa đơn.');
+    }
+  };
+
   // Filter orders
   const filteredOrders = orders.filter((o) => {
     const custName = o.Customer?.CustomerName || '';
@@ -233,8 +247,10 @@ export default function OrdersPage() {
             <option value="ALL">Tất cả trạng thái</option>
             <option value="PENDING">Chờ xử lý (Pending)</option>
             <option value="PREPARING">Đang pha chế (Preparing)</option>
+            <option value="SHIPPING">Đang giao hàng (Shipping)</option>
             <option value="COMPLETED">Đã hoàn thành (Completed)</option>
             <option value="CANCELLED">Đã hủy bỏ (Cancelled)</option>
+            <option value="DELIVERY_FAILED">Giao thất bại (Failed)</option>
           </select>
         </div>
       </div>
@@ -300,7 +316,7 @@ export default function OrdersPage() {
                       variant={
                         order.OrderStatus === 'COMPLETED'
                           ? 'success'
-                          : order.OrderStatus === 'CANCELLED'
+                          : order.OrderStatus === 'CANCELLED' || order.OrderStatus === 'DELIVERY_FAILED'
                             ? 'danger'
                             : order.OrderStatus === 'PREPARING'
                               ? 'warning'
@@ -366,7 +382,7 @@ export default function OrdersPage() {
                   variant={
                     selectedOrder.OrderStatus === 'COMPLETED'
                       ? 'success'
-                      : selectedOrder.OrderStatus === 'CANCELLED'
+                      : selectedOrder.OrderStatus === 'CANCELLED' || selectedOrder.OrderStatus === 'DELIVERY_FAILED'
                         ? 'danger'
                         : selectedOrder.OrderStatus === 'PREPARING'
                           ? 'warning'
@@ -522,6 +538,24 @@ export default function OrdersPage() {
                 </div>
               )}
 
+            {/* Refund Action Trigger */}
+            {(selectedOrder.OrderStatus === 'CANCELLED' || selectedOrder.OrderStatus === 'COMPLETED') &&
+              (!selectedOrder.RefundStatus || selectedOrder.RefundStatus === 'NONE' || selectedOrder.RefundStatus === 'REQUESTED') && (
+                <div className="pt-2">
+                  <Button
+                    variant="outline"
+                    className="w-full py-3 rounded-xl border-amber-500/50 text-amber-600 hover:bg-amber-50"
+                    onClick={() => {
+                      setRefundAmount(selectedOrder.TotalPrice);
+                      setRefundReason(selectedOrder.RefundStatus === 'REQUESTED' ? 'Khách hàng yêu cầu hủy đơn' : '');
+                      setIsRefundOpen(true);
+                    }}
+                  >
+                    Hoàn tiền (Refund)
+                  </Button>
+                </div>
+            )}
+
             <div className="flex gap-4">
               <Button
                 variant="outline"
@@ -539,6 +573,47 @@ export default function OrdersPage() {
             </div>
           </div>
         )}
+      </Dialog>
+
+      {/* Refund Modal */}
+      <Dialog
+        isOpen={isRefundOpen}
+        onClose={() => setIsRefundOpen(false)}
+        title="Thực hiện Hoàn Tiền"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Bạn đang thực hiện thủ tục hoàn tiền cho hóa đơn #{selectedOrder?.OrderID}. 
+            Vui lòng thực hiện chuyển khoản tay cho khách trước khi xác nhận trên hệ thống.
+          </p>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-muted-foreground">Số tiền hoàn (VNĐ)</label>
+            <Input
+              type="number"
+              value={refundAmount}
+              onChange={(e) => setRefundAmount(Number(e.target.value))}
+              placeholder="VD: 55000"
+            />
+            <p className="text-[10px] text-muted-foreground font-mono italic">
+              * Tổng tiền hóa đơn gốc: {selectedOrder?.TotalPrice.toLocaleString('vi-VN')} đ
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-muted-foreground">Lý do hoàn tiền</label>
+            <Input
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+              placeholder="Khách đổi ý, hết nguyên liệu..."
+            />
+          </div>
+
+          <div className="pt-4 border-t border-border flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setIsRefundOpen(false)}>Hủy bỏ</Button>
+            <Button variant="danger" onClick={handleRefundSubmit}>Xác nhận Hoàn tiền</Button>
+          </div>
+        </div>
       </Dialog>
     </div>
   );
