@@ -132,6 +132,7 @@ export default function CustomerHome() {
   const [appliedVoucher, setAppliedVoucher] = useState<any | null>(null);
   const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
   const [comboSuggestions, setComboSuggestions] = useState<any[]>([]);
+  const [huiCombos, setHuiCombos] = useState<any[]>([]);
   const [activePromotions, setActivePromotions] = useState<any[]>([]);
 
   // Share states
@@ -140,6 +141,7 @@ export default function CustomerHome() {
 
   useEffect(() => {
     api.getActivePromotions().then(setActivePromotions);
+    api.getHUICombos().then(setHuiCombos);
   }, []);
 
   useEffect(() => {
@@ -813,6 +815,70 @@ export default function CustomerHome() {
 
         {/* Left 2 cols: Menu list */}
         <div className="lg:col-span-2 flex flex-col gap-8">
+          
+          {/* HUI VIP Combo Banner */}
+          {huiCombos && huiCombos.length > 0 && (
+            <div className="bg-gradient-to-r from-amber-500 to-orange-400 rounded-2xl p-6 shadow-xl relative overflow-hidden group border border-amber-300">
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-white opacity-10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+              <div className="relative z-10 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="flex-1">
+                  <h2 className="text-xl font-black text-white flex items-center gap-2 mb-2 font-serif tracking-wide drop-shadow-md">
+                    <Sparkles className="w-5 h-5 text-amber-100 animate-pulse" /> 
+                    COMBO VIP - Lựa chọn hoàn hảo
+                  </h2>
+                  <p className="text-amber-50 text-sm font-medium mb-4">
+                    Top {huiCombos[0].Items.length} thức uống đặc biệt được khách hàng Phe La sành điệu gọi chung nhiều nhất.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {huiCombos[0].Items.map((item: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-lg py-1 px-3 border border-white/30">
+                        <Coffee className="w-3.5 h-3.5 text-white" />
+                        <span className="text-white text-xs font-bold">{item.DrinkName} ({item.SizeName})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-col items-center sm:items-end gap-2 min-w-[150px]">
+                  <p className="text-white font-mono text-xl font-black drop-shadow-md">
+                    {huiCombos[0].Items.reduce((acc: number, item: any) => acc + Number(item.UnitPrice), 0).toLocaleString('vi-VN')}đ
+                  </p>
+                  <Button 
+                    onClick={() => {
+                      let currentCart = [...cart];
+                      let added = 0;
+                      huiCombos[0].Items.forEach((item: any) => {
+                        const itemKey = `${item.DrinkSizeID}-100%-100%-`;
+                        const existingIdx = currentCart.findIndex((c: any) => c.id === itemKey);
+                        if (existingIdx !== -1 && currentCart[existingIdx]) {
+                          currentCart[existingIdx]!.Quantity += 1;
+                        } else {
+                          currentCart.push({
+                            id: itemKey,
+                            DrinkSizeID: item.DrinkSizeID,
+                            DrinkName: item.DrinkName,
+                            SizeName: item.SizeName,
+                            UnitPrice: Number(item.UnitPrice),
+                            Quantity: 1,
+                            Sugar: '100%',
+                            Ice: '100%',
+                            Toppings: [],
+                          });
+                        }
+                        added++;
+                      });
+                      setCart(currentCart);
+                      localStorage.setItem('phela_customer_cart', JSON.stringify(currentCart));
+                      toast.success(`Đã thêm trọn bộ ${added} ly nước VIP vào giỏ hàng!`);
+                    }}
+                    className="bg-white text-orange-500 hover:bg-amber-50 w-full rounded-xl font-bold font-serif uppercase text-xs tracking-wider shadow-md transition-all hover:scale-105"
+                  >
+                    Mua trọn bộ
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <ProductCatalog
             timeGreeting={timeGreeting}
             customer={customer}

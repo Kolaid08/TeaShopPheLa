@@ -182,22 +182,24 @@ router.post('/customer-combos', async (req, res, next) => {
       return sendResponse(res, 200, true, 'No combos', []);
     }
 
-    // Lấy danh sách High Utility Itemsets đã được cache
-    const huiCache = await prisma.highUtilityItemset.findMany({
-        orderBy: { Rank: 'asc' },
+    // Lấy danh sách luật Apriori đã được cache
+    const rules = await prisma.aprioriRule.findMany({
+        orderBy: { Confidence: 'desc' },
         take: 100
     });
 
     const recommendedItemIds = new Set<number>();
     
-    // Tìm các tập HUI có chứa tất cả các món khách hàng đang chọn
-    for (const hui of huiCache) {
+    // Tìm các luật mà Antecedent nằm hoàn toàn trong giỏ hàng (drinkSizeIds)
+    for (const rule of rules) {
         try {
-            const itemset: number[] = JSON.parse(hui.Itemset);
-            const containsAll = drinkSizeIds.every(id => itemset.includes(id));
-            if (containsAll) {
-                // Thêm các món MỚI (chưa có trong giỏ) từ tập HUI này vào danh sách gợi ý
-                for (const id of itemset) {
+            const antecedent: number[] = JSON.parse(rule.Antecedent);
+            const consequent: number[] = JSON.parse(rule.Consequent);
+            
+            const isSubset = antecedent.every(id => drinkSizeIds.includes(id));
+            if (isSubset) {
+                // Thêm các món MỚI (chưa có trong giỏ) từ Consequent vào danh sách gợi ý
+                for (const id of consequent) {
                     if (!drinkSizeIds.includes(id)) {
                         recommendedItemIds.add(id);
                     }
@@ -230,7 +232,45 @@ router.post('/customer-combos', async (req, res, next) => {
         };
     }).filter(d => d !== null);
 
-    return sendResponse(res, 200, true, 'Combo suggestions based on High Utility Itemsets', result);
+    return sendResponse(res, 200, true, 'Cross-sell suggestions based on Apriori', result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/hui-combos', async (req, res, next) => {
+  try {
+    const huiCache = await prisma.highUtilityItemset.findMany({
+        orderBy: { Rank: 'asc' },
+        take: 5
+    });
+
+    const result = [];
+    for (const hui of huiCache) {
+        try {
+            const itemIds: number[] = JSON.parse(hui.Itemset);
+            const drinks = await prisma.drinkSize.findMany({
+                where: { DrinkSizeID: { in: itemIds } },
+                include: { Drink: true, Size: true }
+            });
+
+            if (drinks.length > 0) {
+                result.push({
+                    HUI_ID: hui.HUI_ID,
+                    TotalUtility: hui.TotalUtility,
+                    Items: drinks.map(d => ({
+                        DrinkSizeID: d.DrinkSizeID,
+                        DrinkName: d.Drink.DrinkName,
+                        SizeName: d.Size.SizeName,
+                        UnitPrice: d.UnitPrice,
+                        DrinkImageURL: d.Drink.DrinkImageURL,
+                    }))
+                });
+            }
+        } catch(e) {}
+    }
+
+    return sendResponse(res, 200, true, 'Upsell VIP Combos based on High Utility Itemsets', result);
   } catch (err) {
     next(err);
   }

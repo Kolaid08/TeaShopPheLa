@@ -513,3 +513,15 @@ model Topping {
 
   @@map("Topping")
 }
+
+model AprioriRule {
+  RuleID      Int      @id @default(autoincrement())
+  Antecedent  String   @db.VarChar(255)
+  Consequent  String   @db.VarChar(255)
+  Support     Decimal  @db.Decimal(10, 4)
+  Confidence  Decimal  @db.Decimal(10, 4)
+  Lift        Decimal  @db.Decimal(10, 4)
+  CreatedAt   DateTime @default(now())
+
+  @@map("AprioriRule")
+}

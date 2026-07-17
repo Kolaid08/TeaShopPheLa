@@ -85,7 +85,6 @@ async function main() {
       await prisma.employee.update({ where: { EmployeeID: exists.EmployeeID }, data: { ...e, password: exists.password } }); // Giữ nguyên mk cũ nếu đã có
     }
   }
-  const adminEmp = await prisma.employee.findFirst({ where: { Email: 'admin@phela.vn' } });
 
   // 3. Units
   console.log('Đang xử lý Units...');
@@ -231,9 +230,9 @@ async function main() {
   console.log('Đang xử lý Customers...');
   const customersData = [
     { CustomerName: 'Khách vãng lai', PhoneNumber: '0000000000', TotalMoneySpending: 0, LevelID: memberLvl!.LevelID },
-    { CustomerName: 'Nguyễn Văn A', PhoneNumber: '0987654321', Email: 'nguyenvana@gmail.com', TotalMoneySpending: 150000, LevelID: memberLvl!.LevelID },
-    { CustomerName: 'Trần Thị B', PhoneNumber: '0912345678', Email: 'tranthib@gmail.com', TotalMoneySpending: 550000, LevelID: memberLvl!.LevelID },
-    { CustomerName: 'Lê Văn C', PhoneNumber: '0923456789', Email: 'levanc@gmail.com', TotalMoneySpending: 1200000, LevelID: memberLvl!.LevelID },
+    { CustomerName: 'Nguyễn Văn A', PhoneNumber: '0987654321', TotalMoneySpending: 150000, LevelID: memberLvl!.LevelID },
+    { CustomerName: 'Trần Thị B', PhoneNumber: '0912345678', TotalMoneySpending: 550000, LevelID: memberLvl!.LevelID },
+    { CustomerName: 'Lê Văn C', PhoneNumber: '0923456789', TotalMoneySpending: 1200000, LevelID: memberLvl!.LevelID },
   ];
   for (const c of customersData) {
     const exists = await prisma.customer.findFirst({ where: { PhoneNumber: c.PhoneNumber } });
@@ -486,9 +485,27 @@ async function main() {
           });
 
           let totalPrice = 0;
-          const numDetails = Math.floor(Math.random() * 3) + 1;
-          for (let j = 0; j < numDetails; j++) {
-            const randomDS = allDrinkSizes[Math.floor(Math.random() * allDrinkSizes.length)]!;
+          // Tạo thiên vị (Bias): 35% hóa đơn sẽ cố tình mua chung Combo (DrinkSize 0 + DrinkSize 1) để thuật toán Apriori có cái học
+          const isBiasedOrder = Math.random() < 0.35;
+          let selectedSizes: any[] = [];
+
+          if (isBiasedOrder && allDrinkSizes.length >= 3) {
+            selectedSizes.push(allDrinkSizes[0], allDrinkSizes[1]);
+            // 60% trong số đó mua thêm món thứ 3
+            if (Math.random() < 0.6) selectedSizes.push(allDrinkSizes[2]);
+          } else {
+            const numDetails = Math.floor(Math.random() * 3) + 1;
+            for (let j = 0; j < numDetails; j++) {
+              selectedSizes.push(allDrinkSizes[Math.floor(Math.random() * allDrinkSizes.length)]!);
+            }
+          }
+
+          // Lọc trùng món trong 1 hóa đơn
+          selectedSizes = Array.from(new Set(selectedSizes.map((s: any) => s?.DrinkSizeID)))
+            .map((id: any) => selectedSizes.find((s: any) => s?.DrinkSizeID === id))
+            .filter((s: any) => s !== undefined);
+
+          for (const randomDS of selectedSizes) {
             const qty = Math.floor(Math.random() * 2) + 1;
             totalPrice += Number(randomDS.UnitPrice) * qty;
 
@@ -549,8 +566,8 @@ async function main() {
   if (voucherCount === 0 && allCustomers.length > 0) {
     await prisma.voucher.createMany({
       data: [
-        { Code: 'WELCOME', DiscountType: 'PERCENT', DiscountValue: 10, Creator: 'ADMIN', IsUsed: false },
-        { Code: 'VIP', DiscountType: 'AMOUNT', DiscountValue: 20000, Creator: 'ADMIN', IsUsed: false, OwnerID: allCustomers[0]!.CustomerID }
+        { Code: 'WELCOME', DiscountType: 'PERCENT', DiscountValue: 10, Creator: 'ADMIN' },
+        { Code: 'VIP', DiscountType: 'AMOUNT', DiscountValue: 20000, Creator: 'ADMIN', OwnerID: allCustomers[0]!.CustomerID }
       ]
     });
   }
