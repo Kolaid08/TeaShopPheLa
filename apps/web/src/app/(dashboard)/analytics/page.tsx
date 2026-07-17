@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Users,
   ShoppingCart,
+  Coffee,
 } from 'lucide-react';
 import {
   Card,
@@ -25,18 +26,47 @@ import { api } from '@/lib/api';
 
 export default function DashboardHome() {
   const [stats, setStats] = useState<any>(null);
+  const [aprioriRules, setAprioriRules] = useState<any[]>([]);
+  const [huiCombos, setHuiCombos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isTriggering, setIsTriggering] = useState(false);
+  const [isTriggeringApriori, setIsTriggeringApriori] = useState(false);
+
+  const fetchAIResults = async () => {
+    try {
+      const [apriori, hui] = await Promise.all([
+        api.getAprioriResults(),
+        api.getHUIResults()
+      ]);
+      setAprioriRules(apriori);
+      setHuiCombos(hui);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleTriggerHUI = async () => {
     setIsTriggering(true);
     try {
       await api.triggerHUI();
       alert('Đã chạy quá trình khai phá dữ liệu HUI ngầm thành công!');
+      fetchAIResults();
     } catch (e: any) {
       alert(e.message || 'Có lỗi xảy ra khi gọi HUI');
     }
     setIsTriggering(false);
+  };
+
+  const handleTriggerApriori = async () => {
+    setIsTriggeringApriori(true);
+    try {
+      await api.triggerApriori();
+      alert('Đã cập nhật bộ luật Apriori thành công!');
+      fetchAIResults();
+    } catch (e: any) {
+      alert(e.message || 'Có lỗi xảy ra khi gọi Apriori');
+    }
+    setIsTriggeringApriori(false);
   };
 
   useEffect(() => {
@@ -48,6 +78,7 @@ export default function DashboardHome() {
       setIsLoading(false);
     };
     fetchStats();
+    fetchAIResults();
   }, []);
 
   if (isLoading || !stats) {
@@ -91,15 +122,26 @@ export default function DashboardHome() {
             </span>
             Luồng dữ liệu đồng bộ
           </div>
-          <Button 
-            variant="primary" 
-            onClick={handleTriggerHUI}
-            disabled={isTriggering}
-            className="shadow-primary/20 gap-2"
-          >
-            <Sparkles className="w-4 h-4" />
-            {isTriggering ? 'Đang phân tích...' : 'Cập nhật HUI AI'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              onClick={handleTriggerApriori}
+              disabled={isTriggeringApriori}
+              className="gap-2 border-primary/30 text-primary hover:bg-primary/5"
+            >
+              <Sparkles className="w-4 h-4" />
+              {isTriggeringApriori ? 'Đang phân tích...' : 'Cập nhật Apriori AI'}
+            </Button>
+            <Button 
+              variant="primary" 
+              onClick={handleTriggerHUI}
+              disabled={isTriggering}
+              className="shadow-primary/20 gap-2"
+            >
+              <Sparkles className="w-4 h-4" />
+              {isTriggering ? 'Đang phân tích...' : 'Cập nhật HUI AI'}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -347,7 +389,115 @@ export default function DashboardHome() {
           </div>
         </CardContent>
       </Card>
-      
+
+      {/* AI Analysis Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+        
+        {/* Apriori Rules */}
+        <Card className="cafe-panel shadow-sm">
+          <CardHeader className="border-b border-border/40 pb-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-primary">
+                  <Sparkles className="w-5 h-5" /> Phân tích mua kèm (Apriori)
+                </CardTitle>
+                <CardDescription>
+                  Luật kết hợp khai phá được từ các hóa đơn thực tế
+                </CardDescription>
+              </div>
+              <Badge variant="info" className="font-mono">{aprioriRules.length} luật</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="max-h-[400px] overflow-y-auto divide-y divide-border/60">
+              {aprioriRules.length > 0 ? (
+                aprioriRules.map((rule, idx) => {
+                  const ant = (rule.AntecedentItems || []).map((i: any) => `${i?.DrinkName} (${i?.SizeName})`);
+                  const con = (rule.ConsequentItems || []).map((i: any) => `${i?.DrinkName} (${i?.SizeName})`);
+                  return (
+                    <div key={idx} className="p-4 hover:bg-muted/10 transition-colors">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="flex-1 p-2 bg-muted/40 rounded-lg text-sm font-semibold border border-border">
+                          {ant.join(' + ')}
+                        </div>
+                        <ArrowUpRight className="w-5 h-5 text-primary shrink-0" />
+                        <div className="flex-1 p-2 bg-primary/10 rounded-lg text-sm font-bold text-primary border border-primary/20">
+                          {con.join(' + ')}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Độ tin cậy (Xác suất khách mua món bên trái sẽ mua thêm món bên phải)</span>
+                        <span className="font-mono font-bold text-foreground">{(rule.Confidence * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-1.5 mt-1 overflow-hidden">
+                        <div className="bg-primary h-1.5 rounded-full" style={{ width: `${rule.Confidence * 100}%` }}></div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  Chưa có luật Apriori nào. Vui lòng bấm "Cập nhật Apriori AI".
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* HUI Combos */}
+        <Card className="cafe-panel shadow-sm border-amber-200">
+          <CardHeader className="border-b border-border/40 pb-4 bg-amber-50/50">
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-amber-600">
+                  <Sparkles className="w-5 h-5" /> Combo Sinh Lời (HUI)
+                </CardTitle>
+                <CardDescription>
+                  Các tập hợp đồ uống mang lại tổng lợi nhuận cao nhất
+                </CardDescription>
+              </div>
+              <Badge variant="warning" className="font-mono">{huiCombos.length} combo</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="max-h-[400px] overflow-y-auto divide-y divide-border/60">
+              {huiCombos.length > 0 ? (
+                huiCombos.map((combo, idx) => (
+                  <div key={idx} className="p-4 hover:bg-amber-50/30 transition-colors">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center font-bold text-xs">
+                          #{idx + 1}
+                        </div>
+                        <span className="font-semibold text-sm">Combo {combo.Items.length} món</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-muted-foreground mb-0.5">Tổng giá trị (Utility)</div>
+                        <div className="font-mono font-bold text-amber-600">
+                          {combo.TotalUtility.toLocaleString('vi-VN')} đ
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {combo.Items.map((item: any, i: number) => (
+                        <div key={i} className="px-2 py-1 bg-background border border-border rounded text-[11px] font-medium flex items-center gap-1 shadow-sm">
+                          <Coffee className="w-3 h-3 text-muted-foreground" />
+                          {item.DrinkName} ({item.SizeName})
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  Chưa có Combo HUI nào. Vui lòng bấm "Cập nhật HUI AI".
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+      </div>
 
     </div>
   );

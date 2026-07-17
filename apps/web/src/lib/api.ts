@@ -585,6 +585,30 @@ export const api = {
     }
   },
 
+  triggerApriori: async (): Promise<any> => {
+    try {
+      return await api.request('/analytics/apriori/trigger', { method: 'POST' });
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  getAprioriResults: async (): Promise<any[]> => {
+    try {
+      return await api.request('/analytics/apriori');
+    } catch (err) {
+      return [];
+    }
+  },
+
+  getHUIResults: async (): Promise<any[]> => {
+    try {
+      return await api.request('/analytics/hui');
+    } catch (err) {
+      return [];
+    }
+  },
+
   // DRINKS
   getDrinks: async (): Promise<Drink[]> => {
     try {

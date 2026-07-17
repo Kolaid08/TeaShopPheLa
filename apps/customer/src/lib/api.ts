@@ -483,6 +483,17 @@ export const api = {
     }
   },
 
+  getHUICombos: async (): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/orders/hui-combos`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (res.ok) return payload.data;
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
   getActivePromotions: async (): Promise<any[]> => {
     try {
       const res = await fetch(`${API_BASE}/promotions/active`, { cache: 'no-store' });
