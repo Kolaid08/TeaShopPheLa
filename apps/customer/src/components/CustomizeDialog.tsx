@@ -47,7 +47,7 @@ export const CustomizeDialog: React.FC<CustomizeDialogProps> = ({
       <div className="space-y-5">
         {/* 1. Size selection options */}
         <div className="space-y-2">
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Kích cỡ cốc (Sizes):</span>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Kích cỡ cốc:</span>
           <div className="grid grid-cols-3 gap-3">
             {drinkSizes
               .filter(ds => ds.DrinkID === selectedDrink.DrinkID && ds.DrinkSizeStatus === 'AVAILABLE')
@@ -78,7 +78,7 @@ export const CustomizeDialog: React.FC<CustomizeDialogProps> = ({
 
         {/* 2. Sugar customization levels */}
         <div className="space-y-2">
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Mức độ ngọt (Sugar):</span>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Mức độ ngọt:</span>
           <div className="grid grid-cols-5 gap-2 text-center text-xs font-bold">
             {['0%', '30%', '50%', '70%', '100%'].map(sugar => (
               <button
@@ -99,9 +99,9 @@ export const CustomizeDialog: React.FC<CustomizeDialogProps> = ({
 
         {/* 3. Ice customization levels */}
         <div className="space-y-2">
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Mức độ đá (Ice):</span>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block">Mức độ đá:</span>
           <div className="grid grid-cols-3 gap-3 text-center text-xs font-bold">
-            {['Nóng (Hot)', '50% đá', '100% đá'].map(ice => (
+            {['Nóng', '50% đá', '100% đá'].map(ice => (
               <button
                 key={ice}
                 type="button"

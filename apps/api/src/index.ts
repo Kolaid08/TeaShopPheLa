@@ -3,9 +3,13 @@ import { config } from './config/index';
 import { seedDatabaseIfEmpty } from './utils/seed';
 import { initSocketIo } from './modules/chat/chat.socket';
 import { startCronJobs } from './jobs/cronJobs';
+import { initFirebase } from './config/firebase';
 
 // Auto-seed database if empty on server boot
 seedDatabaseIfEmpty();
+
+// Init Firebase
+initFirebase();
 
 // Start Background Jobs
 startCronJobs();

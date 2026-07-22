@@ -46,6 +46,17 @@ export interface Ingredient {
   Unit?: { UnitName: string };
 }
 
+export interface IngredientReceiptDetail {
+  IngredientReceiptID: number;
+  IngredientID: number;
+  Quantity: number;
+  CostPrice: number;
+  ExpirationDate?: string | null;
+  QuantityRemaining: number;
+  Ingredient?: { IngredientName: string; Unit?: { UnitName: string } };
+  IngredientReceipt?: { ReceivedDate: string; Supplier?: { SupplierName: string } };
+}
+
 export interface Unit {
   UnitID: number;
   UnitName: string;
@@ -730,6 +741,20 @@ export const api = {
         ...ing,
         Unit: db.units.find(u => u.UnitID === ing.UnitID)
       }));
+    }
+  },
+  getExpiredIngredients: async (days: number = 7): Promise<IngredientReceiptDetail[]> => {
+    try {
+      return await api.request(`/ingredients/expired?days=${days}`);
+    } catch {
+      return []; // Mock return empty for local storage fallback
+    }
+  },
+  disposeIngredients: async (items: { IngredientReceiptID: number; IngredientID: number; Quantity: number; Reason?: string }[]): Promise<any> => {
+    try {
+      return await api.request('/ingredients/dispose', { method: 'POST', body: JSON.stringify(items) });
+    } catch {
+      return []; // Mock return
     }
   },
   createIngredient: async (data: any): Promise<Ingredient> => {
@@ -1463,6 +1488,17 @@ export const api = {
       });
     } catch (e: any) {
       throw new Error(e.message || 'Lỗi tạo voucher');
+    }
+  },
+
+  updateVoucherStatus: async (id: number, status: string): Promise<any> => {
+    try {
+      return await api.request(`/vouchers/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ Status: status }),
+      });
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi cập nhật trạng thái voucher');
     }
   },
 

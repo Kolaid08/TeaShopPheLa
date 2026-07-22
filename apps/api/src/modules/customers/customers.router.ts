@@ -157,6 +157,18 @@ export const upgradeCustomerLevel = async (customerId: number, tx: any) => {
   }
 };
 
+// GET /levels - Fetch all membership levels
+router.get('/levels', async (req, res, next) => {
+  try {
+    const levels = await prisma.memberShipLevel.findMany({
+      orderBy: { RequiredMoney: 'asc' }
+    });
+    return sendResponse(res, 200, true, 'Levels retrieved', levels);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET / - List all customers with optional paginations
 router.get('/', async (req, res, next) => {
   try {

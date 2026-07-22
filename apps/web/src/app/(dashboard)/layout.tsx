@@ -21,6 +21,7 @@ import {
   MessageCircle,
   Gift,
   Undo2,
+  BellRing,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -139,6 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Tài khoản Barista', path: '/employees', icon: Users, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Tính lương (Salary)', path: '/salary', icon: DollarSign, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Quản lý Rota & Công', path: '/shift-logs', icon: Calendar, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
+    { name: 'Chiến dịch Marketing', path: '/marketing', icon: BellRing, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Live Chat (CSKH)', path: '/chat', icon: MessageCircle, roles: ['ADMIN', 'MANAGER'] },
   ];
 

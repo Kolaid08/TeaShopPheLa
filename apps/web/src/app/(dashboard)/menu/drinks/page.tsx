@@ -347,8 +347,8 @@ export default function DrinksMenu() {
               onChange={(e) => setDrinkStatus(e.target.value)}
               className="w-full rounded-xl border border-border bg-background/50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
             >
-              <option value="ACTIVE">Đang phục vụ (Active)</option>
-              <option value="INACTIVE">Ngừng bán (Inactive)</option>
+              <option value="ACTIVE">Đang phục vụ</option>
+              <option value="INACTIVE">Ngừng bán</option>
             </select>
           </div>
           <div>

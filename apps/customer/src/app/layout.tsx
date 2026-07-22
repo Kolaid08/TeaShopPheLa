@@ -4,6 +4,7 @@ import './globals.css';
 import { Toaster } from 'sonner';
 import Providers from '../lib/query-provider';
 import { ChatWidget } from '@/components/chat/ChatWidget';
+import { GlobalMarketingListener } from '@/components/GlobalMarketingListener';
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -46,6 +47,7 @@ export default function RootLayout({
               },
             }}
           />
+          <GlobalMarketingListener />
           <ChatWidget />
         </Providers>
       </body>

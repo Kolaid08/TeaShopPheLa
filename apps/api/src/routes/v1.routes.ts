@@ -26,6 +26,8 @@ import vouchersRouter from '../modules/vouchers/vouchers.router';
 import promotionsRouter from '../modules/promotions/promotions.router';
 import shippingRouter from '../modules/shipping/shipping.router';
 import analyticsRouter from '../modules/analytics/analytics.router';
+import notificationsRouter from '../modules/notifications/notifications.router';
+import marketingRouter from '../modules/marketing/marketing.router';
 
 const router = Router();
 
@@ -62,5 +64,7 @@ router.use('/vouchers', vouchersRouter);
 router.use('/promotions', promotionsRouter);
 router.use('/shipping', shippingRouter);
 router.use('/analytics', analyticsRouter);
+router.use('/notifications', notificationsRouter);
+router.use('/marketing', marketingRouter);
 
 export default router;

@@ -107,7 +107,7 @@ export default function ShipperDashboard() {
                 </div>
                 
                 <div className="p-3 bg-muted/40 rounded-xl border border-border/50 flex justify-between items-center">
-                  <span className="text-muted-foreground font-bold text-xs uppercase">Thu hộ (COD):</span>
+                  <span className="text-muted-foreground font-bold text-xs uppercase">Tiền thu hộ:</span>
                   <span className="font-mono text-lg font-black text-foreground">{order.TotalPrice.toLocaleString('vi-VN')} đ</span>
                 </div>
               </div>

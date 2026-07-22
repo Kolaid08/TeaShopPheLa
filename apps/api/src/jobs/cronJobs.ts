@@ -1,5 +1,7 @@
 import cron from 'node-cron';
 import { prisma } from '../utils/prisma';
+import { processNotificationQueue } from '../modules/notifications/notifications.worker';
+import { queueNotification } from '../modules/notifications/notifications.service';
 
 // Chạy job mỗi 1 giờ
 export const startCronJobs = () => {
@@ -15,7 +17,14 @@ export const startCronJobs = () => {
     }
   });
 
-  // Có thể thêm các job khác ở đây trong tương lai
+  // Chạy mỗi 30 giây để xử lý hàng đợi thông báo
+  cron.schedule('*/30 * * * * *', async () => {
+    try {
+      await processNotificationQueue();
+    } catch (error) {
+      console.error('❌ Lỗi khi chạy job processNotificationQueue:', error);
+    }
+  });
 };
 
 const processAbandonedCarts = async () => {
@@ -92,5 +101,15 @@ const processAbandonedCarts = async () => {
     });
 
     console.log(`🎁 Đã tự động gửi mã ${code} (15% off) cho khách hàng ID ${cart.CustomerID}`);
+
+    if (cart.CustomerID) {
+      await queueNotification({
+        customerId: cart.CustomerID,
+        title: 'Bạn để quên gì đó này! 🎁',
+        body: `Tặng bạn voucher 15% (Mã: ${code}) để hoàn tất giỏ hàng nhé. Hạn dùng 3 ngày!`,
+        type: 'PROMOTION',
+        actionLink: '/cart',
+      });
+    }
   }
 };

@@ -51,6 +51,9 @@ export default function OrdersPage() {
     socket.emit('admin_join', { token: token || 'mock_token_admin' });
 
     socket.on('new_order', (order) => {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.play().catch(e => console.log('Audio play failed:', e));
+
       toast.success(`Đơn hàng mới #${order?.OrderID} vừa được tạo!`, {
         description: 'Vui lòng kiểm tra và xử lý.',
         action: { label: 'Tải lại', onClick: () => loadOrders() }
@@ -231,10 +234,10 @@ export default function OrdersPage() {
             className="px-4 py-2 rounded-xl border border-border bg-card text-xs font-semibold text-foreground uppercase tracking-wider cafe-panel focus:outline-none"
           >
             <option value="ALL">Tất cả trạng thái</option>
-            <option value="PENDING">Chờ xử lý (Pending)</option>
-            <option value="PREPARING">Đang pha chế (Preparing)</option>
-            <option value="COMPLETED">Đã hoàn thành (Completed)</option>
-            <option value="CANCELLED">Đã hủy bỏ (Cancelled)</option>
+            <option value="PENDING">Chờ xử lý</option>
+            <option value="PREPARING">Đang pha chế</option>
+            <option value="COMPLETED">Đã hoàn thành</option>
+            <option value="CANCELLED">Đã hủy bỏ</option>
           </select>
         </div>
       </div>

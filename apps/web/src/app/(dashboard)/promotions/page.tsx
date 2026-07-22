@@ -290,7 +290,7 @@ export default function PromotionsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-bold text-foreground">Số lượng ly tối thiểu (Combo)</label>
+              <label className="text-sm font-bold text-foreground">Số lượng ly tối thiểu</label>
               <Input 
                 type="number"
                 min={1}

@@ -73,7 +73,10 @@ export const generateAIResponse = async (messages: { sender: string; text: strin
     result = await chat.sendMessage(prompt);
   } catch (error: any) {
     console.error("Gemini API Error:", error.message);
-    throw error;
+    if (error.message && error.message.includes('503')) {
+      return "Xin lỗi, hiện tại Phêla AI đang bị quá tải do có quá nhiều khách hàng trò chuyện cùng lúc. Bạn vui lòng thử lại sau vài phút nhé!";
+    }
+    return "Xin lỗi, đã xảy ra lỗi kết nối với trợ lý AI. Vui lòng thử lại sau.";
   }
   
   let response = result.response;
@@ -100,8 +103,11 @@ export const generateAIResponse = async (messages: { sender: string; text: strin
       }]);
       response = result.response;
       functionCalls = response.functionCalls();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Gemini Tool Response Error:', err);
+      if (err.message && err.message.includes('503')) {
+        return "Xin lỗi, hiện tại Phêla AI đang bị quá tải do có quá nhiều khách hàng trò chuyện cùng lúc. Bạn vui lòng thử lại sau vài phút nhé!";
+      }
       break;
     }
   }

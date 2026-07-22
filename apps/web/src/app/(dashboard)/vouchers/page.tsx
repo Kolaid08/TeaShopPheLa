@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Plus, Search, Ticket, Calendar, User } from 'lucide-react';
+import { Plus, Search, Ticket, Calendar, User, Power, PowerOff } from 'lucide-react';
 import {
   Button,
   Input,
@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 export default function VouchersManagement() {
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [drinkSizes, setDrinkSizes] = useState<DrinkSize[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -30,14 +31,20 @@ export default function VouchersManagement() {
   const [discountType, setDiscountType] = useState<'PERCENT' | 'FIXED'>('PERCENT');
   const [discountValue, setDiscountValue] = useState(10);
   const [targetProductId, setTargetProductId] = useState<number | ''>('');
+  const [ownerId, setOwnerId] = useState<number | ''>('');
   const [maxUsage, setMaxUsage] = useState(1);
   const [validUntil, setValidUntil] = useState('');
 
   const loadData = async () => {
     try {
-      const [vList, dsList] = await Promise.all([api.getVouchers(), api.getDrinkSizes()]);
+      const [vList, dsList, cList] = await Promise.all([
+        api.getVouchers(), 
+        api.getDrinkSizes(),
+        api.getCustomers()
+      ]);
       setVouchers(vList);
       setDrinkSizes(dsList);
+      setCustomers(cList);
     } catch {}
     setIsLoading(false);
   };
@@ -51,6 +58,7 @@ export default function VouchersManagement() {
     setDiscountType('PERCENT');
     setDiscountValue(10);
     setTargetProductId('');
+    setOwnerId('');
     setMaxUsage(1);
     setValidUntil('');
     setIsFormOpen(true);
@@ -69,6 +77,7 @@ export default function VouchersManagement() {
         DiscountType: discountType,
         DiscountValue: Number(discountValue),
         TargetProductID: targetProductId ? Number(targetProductId) : undefined,
+        OwnerID: ownerId ? Number(ownerId) : undefined,
         MaxUsage: Number(maxUsage),
         ValidUntil: validUntil ? new Date(validUntil).toISOString() : undefined,
       };
@@ -79,6 +88,17 @@ export default function VouchersManagement() {
       loadData();
     } catch (err: any) {
       toast.error(err.message || 'Lỗi tạo mã giảm giá.');
+    }
+  };
+
+  const handleToggleStatus = async (voucher: any) => {
+    try {
+      const newStatus = voucher.Status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      await api.updateVoucherStatus(voucher.VoucherID, newStatus);
+      toast.success('Cập nhật trạng thái thành công!');
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi cập nhật trạng thái');
     }
   };
 
@@ -137,6 +157,7 @@ export default function VouchersManagement() {
                 <TableHead className="font-serif font-bold text-foreground">Tài Khoản</TableHead>
                 <TableHead className="font-serif font-bold text-foreground text-center">Trạng Thái</TableHead>
                 <TableHead className="font-serif font-bold text-foreground">Thời Hạn</TableHead>
+                <TableHead className="font-serif font-bold text-foreground text-center">Thao Tác</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -181,9 +202,20 @@ export default function VouchersManagement() {
                     )}
                   </TableCell>
                   <TableCell className="text-center">
-                    <Badge variant={v.UsedCount >= v.MaxUsage ? "neutral" : "success"}>
-                      {v.UsedCount} / {v.MaxUsage}
-                    </Badge>
+                    <div className="flex flex-col gap-1 items-center">
+                      {v.Status === 'INACTIVE' ? (
+                        <Badge variant="destructive" className="text-[10px]">VÔ HIỆU HÓA</Badge>
+                      ) : (v.ValidUntil && new Date(v.ValidUntil) < new Date()) ? (
+                        <Badge variant="neutral" className="text-[10px]">ĐÃ QUÁ HẠN</Badge>
+                      ) : (v.UsedCount >= v.MaxUsage) ? (
+                        <Badge variant="neutral" className="text-[10px]">HẾT LƯỢT</Badge>
+                      ) : (
+                        <Badge variant="success" className="text-[10px]">HOẠT ĐỘNG</Badge>
+                      )}
+                      <span className="text-xs font-mono text-muted-foreground">
+                        {v.UsedCount} / {v.MaxUsage} lượt
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     {v.ValidUntil ? (
@@ -194,6 +226,32 @@ export default function VouchersManagement() {
                     ) : (
                       <span className="text-xs text-muted-foreground">Vô thời hạn</span>
                     )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {(() => {
+                      const isExpired = v.ValidUntil && new Date(v.ValidUntil) < new Date();
+                      const isFullyUsed = v.UsedCount >= v.MaxUsage;
+                      const disableActivate = v.Status === 'INACTIVE' && (isExpired || isFullyUsed);
+                      
+                      return (
+                        <Button
+                          variant={v.Status === 'ACTIVE' ? "outline" : "default"}
+                          size="sm"
+                          disabled={disableActivate}
+                          onClick={() => handleToggleStatus(v)}
+                          className={
+                            disableActivate 
+                              ? "bg-muted text-muted-foreground cursor-not-allowed" 
+                              : v.Status === 'ACTIVE' 
+                                ? "text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20" 
+                                : "bg-green-500 hover:bg-green-600 text-white"
+                          }
+                          title={v.Status === 'ACTIVE' ? "Vô hiệu hóa" : disableActivate ? "Không thể kích hoạt mã đã quá hạn hoặc hết lượt" : "Kích hoạt lại"}
+                        >
+                          {v.Status === 'ACTIVE' ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
+                        </Button>
+                      );
+                    })()}
                   </TableCell>
                 </TableRow>
               ))}
@@ -264,6 +322,24 @@ export default function VouchersManagement() {
               ))}
             </select>
             <p className="text-[10px] text-muted-foreground mt-1">Chọn nếu mã này chỉ áp dụng để giảm giá riêng biệt món uống này.</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
+              Khách Hàng Áp Dụng (Tùy chọn)
+            </label>
+            <select
+              value={ownerId}
+              onChange={(e) => setOwnerId(e.target.value ? Number(e.target.value) : '')}
+              className="w-full h-10 rounded-xl border border-border bg-background px-3 text-sm"
+            >
+              <option value="">Tất cả mọi người</option>
+              {customers.map((c) => (
+                <option key={c.CustomerID} value={c.CustomerID}>
+                  {c.CustomerName} - {c.PhoneNumber}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-muted-foreground mt-1">Chọn nếu mã này được tặng riêng cho một khách hàng.</p>
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">

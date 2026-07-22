@@ -8,6 +8,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { upgradeCustomerLevel } from '../customers/customers.router';
 import { payos } from '../payment/payment.controller';
 import { GhnService } from '../shipping/ghn.service';
+import { queueNotification } from '../notifications/notifications.service';
 
 export async function processOrderIngredients(tx: any, items: { DrinkSizeID: number, Quantity: number }[], mode: 'deduct' | 'refund') {
   for (const item of items) {
@@ -53,7 +54,11 @@ export async function processOrderIngredients(tx: any, items: { DrinkSizeID: num
             const availableBatches = await tx.ingredientReceiptDetail.findMany({
               where: {
                 IngredientID: detail.IngredientID,
-                QuantityRemaining: { gt: 0 }
+                QuantityRemaining: { gt: 0 },
+                OR: [
+                  { ExpirationDate: null },
+                  { ExpirationDate: { gt: new Date() } }
+                ]
               },
               orderBy: [
                 { ExpirationDate: 'asc' }, // Prioritize expiring first
@@ -478,11 +483,13 @@ router.post('/customer-place', optionalAuth, async (req, res, next) => {
 
       for (const [ingredientId, totalRequired] of requiredIngredients.entries()) {
         const ingredient = await prisma.ingredient.findUnique({ where: { IngredientID: ingredientId } });
-        if (ingredient && Number(ingredient.QuantityStock) < totalRequired) {
-          throw new AppError(
-            400,
-            `Nguyên liệu "${ingredient.IngredientName}" không đủ để pha chế toàn bộ đơn hàng (cần: ${totalRequired}, tồn kho: ${ingredient.QuantityStock}). Vui lòng giảm số lượng món.`,
-          );
+        if (ingredient) {
+          if (Number(ingredient.QuantityStock) < totalRequired) {
+            throw new AppError(
+              400,
+              `Nguyên liệu "${ingredient.IngredientName}" không đủ lượng khả dụng để pha chế toàn bộ đơn hàng (cần: ${totalRequired}, hiện có: ${ingredient.QuantityStock}). Vui lòng giảm số lượng món.`,
+            );
+          }
         }
       }
 
@@ -756,6 +763,11 @@ router.post('/customer-place', optionalAuth, async (req, res, next) => {
           data: { Status: 'COMPLETED' }
         });
       }
+
+      try {
+        const io = getIo();
+        io.to('admin_orders').emit('new_order', newOrder);
+      } catch (err) { console.error(err); }
 
       return sendResponse(res, 201, true, 'Đơn hàng đã được tạo thành công.', newOrder);
     } catch (dbErr: any) {
@@ -1201,11 +1213,13 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF']), async (r
 
     for (const [ingredientId, totalRequired] of requiredIngredients.entries()) {
       const ingredient = await prisma.ingredient.findUnique({ where: { IngredientID: ingredientId } });
-      if (ingredient && Number(ingredient.QuantityStock) < totalRequired) {
-        throw new AppError(
-          400,
-          `Nguyên liệu "${ingredient.IngredientName}" không đủ để pha chế (cần: ${totalRequired}, tồn kho: ${ingredient.QuantityStock}). Vui lòng báo khách chọn món khác.`
-        );
+      if (ingredient) {
+        if (Number(ingredient.QuantityStock) < totalRequired) {
+          throw new AppError(
+            400,
+            `Nguyên liệu "${ingredient.IngredientName}" không đủ lượng khả dụng để pha chế (cần: ${totalRequired}, hiện có: ${ingredient.QuantityStock}). Vui lòng báo khách chọn món khác.`
+          );
+        }
       }
     }
 
@@ -1296,8 +1310,8 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF']), async (r
     });
 
     try {
-      const io = (global as any).io || null; // fallback if getIo missing
-      io.to('admins').emit('new_order', newOrder);
+      const io = getIo();
+      io.to('admin_orders').emit('new_order', newOrder);
     } catch (err) {}
 
     return sendResponse(res, 201, true, 'Tạo đơn hàng thành công', newOrder);
@@ -1424,6 +1438,38 @@ router.patch('/:id/status', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF',
       });
       return updated;
     });
+
+    // --- TRIGGER NOTIFICATION ---
+    if (updatedOrder.CustomerID) {
+      // Map status to a human-readable message
+      let msg = '';
+      if (validatedData.OrderStatus === 'PREPARING') msg = 'Đơn hàng của bạn đang được pha chế.';
+      if (validatedData.OrderStatus === 'SHIPPING') msg = 'Đơn hàng đang trên đường giao đến bạn.';
+      if (validatedData.OrderStatus === 'COMPLETED') msg = 'Đơn hàng đã hoàn thành. Cảm ơn bạn đã thưởng thức!';
+      if (validatedData.OrderStatus === 'CANCELLED') msg = 'Đơn hàng đã bị huỷ.';
+
+      if (msg) {
+        // We don't await so it doesn't block the API response
+        queueNotification({
+          customerId: updatedOrder.CustomerID,
+          title: `Cập nhật đơn hàng #${orderId}`,
+          body: msg,
+          type: 'ORDER_UPDATE',
+          actionLink: `/history`,
+          dataPayload: { orderId: orderId.toString(), status: validatedData.OrderStatus }
+        });
+      }
+    }
+
+    // --- TRIGGER SOCKET IO ---
+    if (updatedOrder.CustomerID) {
+      try {
+        const io = getIo();
+        io.to(`customer_${updatedOrder.CustomerID}`).emit('order_status_updated', updatedOrder);
+      } catch (e) {
+        console.error('Socket emit error:', e);
+      }
+    }
 
     return sendResponse(res, 200, true, `Cập nhật trạng thái thành ${validatedData.OrderStatus}`, updatedOrder);
   } catch (err) {

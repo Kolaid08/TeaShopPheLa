@@ -74,6 +74,7 @@ model Ingredient {
   Unit                     Unit                      @relation(fields: [UnitID], references: [UnitID], map: "FK_Ingredient_Unit")
   IngredientReceiptDetails IngredientReceiptDetail[]
   RecipeDetails            RecipeDetail[]
+  IngredientDisposals      IngredientDisposal[]
 
   @@map("Ingredient")
 }
@@ -159,6 +160,7 @@ model IngredientReceiptDetail {
   updatedAt           DateTime          @updatedAt
   Ingredient          Ingredient        @relation(fields: [IngredientID], references: [IngredientID], map: "FK_IngredientReceiptDetail_Ingredient")
   IngredientReceipt   IngredientReceipt @relation(fields: [IngredientReceiptID], references: [IngredientReceiptID], onDelete: Cascade, map: "FK_IngredientReceiptDetail_IngredientReceipt")
+  IngredientDisposals IngredientDisposal[]
 
   @@id([IngredientReceiptID, IngredientID])
   @@map("IngredientReceiptDetail")
@@ -194,6 +196,10 @@ model Customer {
   Vouchers           Voucher[]
   ReferredCustomer   Customer?       @relation("Referral", fields: [ReferredBy], references: [CustomerID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Customer_ReferredBy")
   Referrals          Customer[]      @relation("Referral")
+  CustomerTokens     CustomerToken[]
+  UserNotifications  UserNotification[]
+  NotificationQueues NotificationQueue[]
+  ClaimedVouchers    CustomerVoucher[]
 
   @@map("Customer")
 }
@@ -304,6 +310,7 @@ model Employee {
   ShippedReceipts IngredientReceipt[] @relation("ReceiptShipper")
   Salaries      Salary[]
   ShiftLogs     ShiftLog[]
+  IngredientDisposals IngredientDisposal[] @relation("IngredientDisposalEmployee")
 
   @@map("Employee")
 }
@@ -462,11 +469,13 @@ model Voucher {
   MaxUsage        Int         @default(1)
   UsedCount       Int         @default(0)
   ValidUntil      DateTime?
+  Status          String      @default("ACTIVE") @db.VarChar(50)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   Customer        Customer?   @relation(fields: [OwnerID], references: [CustomerID], map: "FK_Voucher_Customer")
   DrinkSize       DrinkSize?  @relation(fields: [TargetProductID], references: [DrinkSizeID], map: "FK_Voucher_DrinkSize")
   Orders          Orders[]
+  ClaimedBy       CustomerVoucher[]
 
   @@map("Voucher")
 }
@@ -525,3 +534,80 @@ model AprioriRule {
 
   @@map("AprioriRule")
 }
+
+model IngredientDisposal {
+  DisposalID          Int      @id @default(autoincrement())
+  IngredientID        Int
+  IngredientReceiptID Int
+  Quantity            Decimal  @db.Decimal(10, 2)
+  Reason              String?  @db.NVarChar(255)
+  EmployeeID          Int
+  DisposalDate        DateTime @default(now())
+  
+  Ingredient          Ingredient              @relation(fields: [IngredientID], references: [IngredientID], onDelete: NoAction, onUpdate: NoAction)
+  ReceiptDetail       IngredientReceiptDetail @relation(fields: [IngredientReceiptID, IngredientID], references: [IngredientReceiptID, IngredientID], onDelete: NoAction, onUpdate: NoAction)
+  Employee            Employee                @relation("IngredientDisposalEmployee", fields: [EmployeeID], references: [EmployeeID])
+
+  @@map("IngredientDisposal")
+}
+
+model CustomerToken {
+  TokenID    Int      @id @default(autoincrement())
+  CustomerID Int
+  Provider   String   @default("FCM") @db.VarChar(50) 
+  TokenValue String   @db.NVarChar(500)
+  DeviceName String?  @db.NVarChar(100)
+  IsActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  Customer   Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade)
+
+  @@map("CustomerToken")
+}
+
+model UserNotification {
+  NotificationID Int      @id @default(autoincrement())
+  CustomerID     Int
+  Title          String   @db.NVarChar(255)
+  Body           String   @db.NVarChar(Max)
+  Type           String   @db.VarChar(50) // PROMOTION, ORDER_UPDATE, SYSTEM
+  IsRead         Boolean  @default(false) 
+  ActionLink     String?  @db.NVarChar(500) 
+  createdAt      DateTime @default(now())
+
+  Customer       Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade)
+
+  @@map("UserNotification")
+}
+
+model NotificationQueue {
+  JobID        Int      @id @default(autoincrement())
+  CustomerID   Int
+  Title        String   @db.NVarChar(255)
+  Body         String   @db.NVarChar(Max)
+  DataPayload  String?  @db.NVarChar(Max) 
+  Status       String   @default("PENDING") @db.VarChar(50) // PENDING, PROCESSING, SENT, FAILED
+  RetryCount   Int      @default(0)
+  ErrorMessage String?  @db.NVarChar(Max)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  Customer     Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade)
+
+  @@map("NotificationQueue")
+}
+
+model CustomerVoucher {
+  CustomerID Int
+  VoucherID  Int
+  IsUsed     Boolean @default(false)
+  CollectedAt DateTime @default(now())
+
+  Customer Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: NoAction, onUpdate: NoAction)
+  Voucher  Voucher  @relation(fields: [VoucherID], references: [VoucherID], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([CustomerID, VoucherID])
+  @@map("CustomerVoucher")
+}
+

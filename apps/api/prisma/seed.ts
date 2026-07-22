@@ -392,10 +392,20 @@ async function main() {
           ShippingAddress: '123 Cửa Hàng Phê La',
         }
       });
+      const today = new Date();
+      const expiredDate = new Date(today);
+      expiredDate.setDate(today.getDate() - 2); // Đã hết hạn 2 ngày trước
+      
+      const soonExpireDate = new Date(today);
+      soonExpireDate.setDate(today.getDate() + 3); // Sắp hết hạn trong 3 ngày tới
+      
+      const safeDate = new Date(today);
+      safeDate.setDate(today.getDate() + 30); // Còn hạn rất dài
+
       await prisma.ingredientReceiptDetail.createMany({
         data: [
-          { IngredientReceiptID: rec1.IngredientReceiptID, IngredientID: getIngId('Trà Ô Long Nhài')!, Quantity: 10, CostPrice: 150000 },
-          { IngredientReceiptID: rec1.IngredientReceiptID, IngredientID: getIngId('Trà Ô Long Đặc Sản')!, Quantity: 15, CostPrice: 180000 },
+          { IngredientReceiptID: rec1.IngredientReceiptID, IngredientID: getIngId('Trà Ô Long Nhài')!, Quantity: 1000, QuantityRemaining: 1000, CostPrice: 150000, ExpirationDate: expiredDate }, // Lô này đã hết hạn
+          { IngredientReceiptID: rec1.IngredientReceiptID, IngredientID: getIngId('Trà Ô Long Đặc Sản')!, Quantity: 1500, QuantityRemaining: 1500, CostPrice: 180000, ExpirationDate: soonExpireDate }, // Lô này sắp hết hạn
         ]
       });
 
@@ -410,8 +420,8 @@ async function main() {
       });
       await prisma.ingredientReceiptDetail.createMany({
         data: [
-          { IngredientReceiptID: rec2.IngredientReceiptID, IngredientID: getIngId('Sữa Tươi')!, Quantity: 20, CostPrice: 25000 },
-          { IngredientReceiptID: rec2.IngredientReceiptID, IngredientID: getIngId('Sữa Đặc')!, Quantity: 15, CostPrice: 35000 },
+          { IngredientReceiptID: rec2.IngredientReceiptID, IngredientID: getIngId('Sữa Tươi')!, Quantity: 2000, QuantityRemaining: 2000, CostPrice: 25000, ExpirationDate: safeDate }, // An toàn
+          { IngredientReceiptID: rec2.IngredientReceiptID, IngredientID: getIngId('Sữa Đặc')!, Quantity: 1500, QuantityRemaining: 1500, CostPrice: 35000, ExpirationDate: safeDate },
         ]
       });
     }
@@ -434,6 +444,22 @@ async function main() {
       });
     }
   }
+
+  // 14.5 Toppings
+  console.log('Đang xử lý Toppings...');
+  const toppingsData = [
+    { Name: 'Trân Châu Châu Mộc', Price: 10000, IsActive: true },
+    { Name: 'Thạch Phô Mai', Price: 12000, IsActive: true },
+    { Name: 'Kem Trứng', Price: 15000, IsActive: true },
+    { Name: 'Nha Đam', Price: 10000, IsActive: true }
+  ];
+  for (const t of toppingsData) {
+    const exists = await prisma.topping.findFirst({ where: { Name: t.Name } });
+    if (!exists) {
+      await prisma.topping.create({ data: t });
+    }
+  }
+  const allToppings = await prisma.topping.findMany();
 
   // 15. Orders and OrderDetails
   console.log('Đang xử lý Orders...');
@@ -509,7 +535,7 @@ async function main() {
             const qty = Math.floor(Math.random() * 2) + 1;
             totalPrice += Number(randomDS.UnitPrice) * qty;
 
-            await prisma.orderDetail.create({
+            const od = await prisma.orderDetail.create({
               data: {
                 OrderID: order.OrderID,
                 DrinkSizeID: randomDS.DrinkSizeID,
@@ -521,6 +547,21 @@ async function main() {
                 updatedAt: orderDate,
               }
             });
+
+            // Thêm topping ngẫu nhiên vào món
+            if (Math.random() < 0.4 && allToppings.length > 0) {
+              const randomTopping = allToppings[Math.floor(Math.random() * allToppings.length)]!;
+              await prisma.orderDetailTopping.create({
+                data: {
+                  OrderDetailID: od.OrderDetailID,
+                  ToppingID: randomTopping.ToppingID,
+                  Quantity: 1,
+                  UnitPrice: randomTopping.Price,
+                  createdAt: orderDate
+                }
+              });
+              totalPrice += Number(randomTopping.Price) * 1;
+            }
           }
 
           await prisma.orders.update({
