@@ -1,64 +1,224 @@
-# 🚀 Báo Cáo Phân Tích Công Nghệ & Thuật Toán Dự Án Phê La (Monorepo)
+# 🏗️ Kiến Trúc Hệ Thống & Tài Liệu Kỹ Thuật (Phê La ERP)
 
-Dự án **Phê La** là một hệ thống ERP (Enterprise Resource Planning) thu nhỏ dành riêng cho ngành F&B, bao gồm quản lý kho bãi, nhân sự, bán hàng (POS), và cổng thương mại điện tử dành cho khách hàng. Hệ thống được thiết kế theo kiến trúc **Monorepo** với 3 phân hệ chính hoạt động song song.
-
----
-
-## 🏗️ 1. Cấu Trúc Kiến Trúc (Architecture)
-
-*   **`apps/api` (Backend Server):** Đóng vai trò là "bộ não" trung tâm xử lý logic nghiệp vụ, giao tiếp cơ sở dữ liệu và cung cấp API (RESTful).
-*   **`apps/web` (Admin & POS App):** Cổng thông tin (Web portal) dành cho đội ngũ Quản trị viên (Admin) và Nhân viên (Thu ngân/Barista).
-*   **`apps/customer` (Customer Portal):** Cổng đặt hàng trực tuyến dành riêng cho khách hàng.
+Tài liệu này đóng vai trò là "Kim chỉ nam" (Single Source of Truth) cho toàn bộ đội ngũ phát triển, mô tả cấu trúc kiến trúc tổng thể, sơ đồ dữ liệu, chiến lược triển khai và các quy chuẩn tích hợp bảo mật của hệ thống Phê La.
 
 ---
 
-## 🧠 2. Các Thuật Toán Khai Phá Dữ Liệu (Data Mining Algorithms)
+## 🎯 1. Tổng Quan & Hướng Dẫn Đọc
 
-Điểm sáng của dự án nằm ở phân hệ **Analytics**, nơi áp dụng các thuật toán máy học chuyên biệt thay vì các truy vấn cơ sở dữ liệu thông thường:
+Tài liệu được phân cấp theo từng nhóm đối tượng độc giả:
 
-1.  **Thuật toán Apriori (Khai phá luật kết hợp):**
-    *   **Mục đích:** Tìm ra các nhóm sản phẩm thường xuyên được mua cùng nhau (Ví dụ: "Trà Ô Long" thường được mua kèm "Trân châu trắng").
-    *   **Kỹ thuật:** Áp dụng **Apriori Pruning** (Cắt tỉa Apriori) để tối ưu hóa bộ nhớ, chỉ sinh tổ hợp mới khi mọi tập con của nó đều đã phổ biến (`minSupport`). Từ đó sinh ra các luật (Rules) dựa trên độ tin cậy (`minConfidence`).
-2.  **Thuật toán HUI-Miner (High Utility Itemset):**
-    *   **Mục đích:** Tìm ra các tập hợp sản phẩm mang lại **lợi nhuận/doanh thu** cao nhất. Khắc phục nhược điểm của Apriori (tập trung vào số lượng nhưng lợi nhuận có thể thấp).
-    *   **Kỹ thuật:** Tính toán TWU (Transaction-Weighted Utilization), sử dụng cấu trúc **Utility-List** và thuật toán Tìm kiếm theo chiều sâu (DFS) kết hợp **Cắt nhánh (Remaining Utility Pruning)** để tìm tổ hợp siêu tốc mà không cần quét lại DB nhiều lần.
+- **System Architect / Tech Lead:** Đọc mục 2 & 3 để hiểu luồng dữ liệu và thiết kế Database.
+- **Backend / Frontend Developer:** Đọc mục 4 để nắm quy chuẩn tích hợp API bên thứ 3 an toàn.
+- **DevOps / SysAdmin:** Đọc mục 5 & 6 để hiểu chiến lược Deploy và CI/CD.
+- **Fresher / Newcomer:** Đọc mục 7 để biết cách setup môi trường trên máy cá nhân.
 
-Ngoài ra, hệ thống áp dụng thuật toán **Duyệt Cây/Đồ thị (Tree Traversal)** ở phân hệ `recipes` để bóc tách một sản phẩm hoàn chỉnh (Trà Sữa) ra thành từng gram nguyên liệu thô (Trà, Sữa, Đường) nhằm mục đích trừ kho tự động.
+Hệ thống được thiết kế theo kiến trúc **Monorepo** với 3 module độc lập chạy song song:
 
----
-
-## 💻 3. Ngôn Ngữ & Bộ Khung Cơ Bản (Core Stack)
-
-*   **Ngôn ngữ chính:** `TypeScript` (Sử dụng đồng nhất ở cả 3 phân hệ).
-*   **Backend Framework:** `Node.js` + `Express.js`.
-*   **Frontend Framework:** `Next.js 14` (Sử dụng kiến trúc App Router mới nhất) + `React 18`.
-*   **Database:** `SQL Server` (Giao tiếp thông qua `Prisma ORM`).
+1. `apps/api`: Backend Core (Express.js + Prisma).
+2. `apps/web`: Admin Portal & POS System (Next.js).
+3. `apps/customer`: E-commerce Customer App (Next.js).
 
 ---
 
-## 📦 4. Các Thư Viện Chuyên Biệt Theo Chức Năng
+## 🏛️ 2. Sơ Đồ Kiến Trúc Hệ Thống (System Architecture)
 
-### 🔗 4.1. Phía Backend (`apps/api`)
-*   **Database & ORM:** `@prisma/client` (Xử lý giao dịch Database an toàn, chống sai lệch dữ liệu bằng Prisma Transactions).
-*   **Security & Auth:** `bcrypt` (băm mật khẩu) và `jsonwebtoken` (xác thực phiên đăng nhập).
-*   **Validation:** `zod` (Kiểm duyệt dữ liệu đầu vào cực kỳ chặt chẽ).
-*   **Realtime Communication:** `socket.io` (Đẩy thông báo đơn hàng theo thời gian thực tới POS và Khách hàng).
-*   **AI Integration:** `@google/generative-ai` (Tích hợp LLM Gemini làm trợ lý ảo tự động tư vấn, ứng dụng kỹ thuật Prompt Injection và Function Calling).
-*   **Payment Gateway:** `@payos/node` (Tự động sinh mã VietQR và nhận Webhook báo chuyển khoản thành công).
-*   **Background Jobs:** `node-cron` (Lên lịch tự động chốt ca, tính lương, đồng bộ tồn kho vào nửa đêm).
-*   **Push Notification & Email:** `firebase-admin` (Bắn thông báo đẩy) và `nodemailer` (Gửi email hóa đơn).
-*   **File Upload:** `multer` (Xử lý tải ảnh sản phẩm, avatar nhân viên).
+Dự án áp dụng mô hình Client-Server hiện đại, tách biệt hoàn toàn Frontend và Backend, giao tiếp qua RESTful API, Realtime Socket và tích hợp mạnh mẽ với các đối tác thứ ba (Thanh toán, Vận chuyển, Trí tuệ nhân tạo).
 
-### 🎨 4.2. Phía Frontend (`apps/web` & `apps/customer`)
-*   **UI/UX Styling:** `tailwindcss`, `clsx`, `tailwind-merge`, `class-variance-authority` (Hệ thống thiết kế chuẩn mực, tạo giao diện Responsive nhanh chóng).
-*   **State Management & Caching:** `@tanstack/react-query` (Quản lý trạng thái, tạo cache dữ liệu, hỗ trợ tính năng Offline Fallback khi mất mạng).
-*   **Icons & Toasts:** `lucide-react` (Bộ icon) và `sonner` (Thông báo Toast hiện đại).
-*   **Realtime Client:** `socket.io-client` (Bắt tín hiệu từ Backend để cập nhật UI tự động).
-*   **Markdown Parsing:** `react-markdown` (Render nội dung tin nhắn của Chatbot AI thành định dạng dễ đọc).
-*   **Animation (Chỉ có ở Customer Web):** `framer-motion` (Tạo hiệu ứng chuyển cảnh mượt mà).
-*   **Maps (Chỉ có ở Customer Web):** `leaflet` & `react-leaflet` (Bản đồ tương tác để chọn địa chỉ giao hàng).
-*   **Push Client:** `firebase` (Nhận tín hiệu thông báo trên thiết bị di động/trình duyệt).
+```mermaid
+graph TD
+    subgraph Client [Client Tier (Frontend)]
+        C[Customer Web App<br>Next.js 14]
+        A[Admin POS Portal<br>Next.js 14]
+    end
+
+    subgraph Core [Logic Tier (Backend)]
+        API[API Gateway & Server<br>Node.js + Express]
+        Socket[Realtime Engine<br>Socket.io]
+        Job[Background Workers<br>Node-cron]
+
+        API --- Socket
+        API --- Job
+    end
+
+    subgraph Data [Data Tier]
+        DB[(Primary Database<br>SQL Server)]
+    end
+
+    subgraph External [Third-party Services]
+        PayOS[PayOS<br>VietQR Payment]
+        GHN[Giao Hàng Nhanh<br>Logistics]
+        Gemini[Google Gemini<br>AI LLM]
+        Firebase[Firebase Cloud Messaging<br>Push Notifications]
+    end
+
+    %% Connections
+    C <-->|REST API + Socket| API
+    A <-->|REST API + Socket| API
+
+    API <-->|Prisma ORM| DB
+
+    API -->|Create Payment Link| PayOS
+    PayOS -->|Webhook Notification| API
+
+    API <-->|Calculate Fee / Push Order| GHN
+    API <-->|Prompt & Tool Calling| Gemini
+    API -->|Trigger Alert| Firebase
+    Firebase -.->|Push| C
+```
 
 ---
 
-> 💡 **Tổng kết:** Phê La là một dự án đồ sộ, thiết kế kiến trúc theo định hướng Modern Web Stack (T3/MERN). Việc mạnh dạn áp dụng AI, Cổng thanh toán nội địa và các Thuật toán khai phá dữ liệu học thuật vào thực tiễn kinh doanh giúp hệ thống vượt ra khỏi ranh giới của một ứng dụng POS thông thường, trở thành một nền tảng hỗ trợ ra quyết định thông minh.
+## 🗄️ 3. Mô Hình Thực Thể & Cơ Sở Dữ Liệu (ERD)
+
+Database sử dụng **SQL Server**, được quản lý hoàn toàn bằng **Prisma ORM**. Dưới đây là lược đồ ERD (Entity-Relationship Diagram) thu gọn thể hiện các bảng cốt lõi nhất của dự án (Lượt bỏ các bảng phụ để dễ hình dung):
+
+```mermaid
+erDiagram
+    CUSTOMER ||--o{ ORDERS : "Places"
+    CUSTOMER ||--o{ CHAT_SESSION : "Interacts with AI"
+
+    ORDERS ||--o{ ORDER_DETAIL : "Contains"
+    ORDERS }o--o| VOUCHER : "Applies"
+
+    DRINK ||--|{ DRINK_SIZE : "Has options"
+    DRINK ||--o{ RECIPE : "Is made from"
+
+    DRINK_SIZE ||--o{ ORDER_DETAIL : "Is part of"
+
+    EMPLOYEE ||--o{ ORDERS : "Creates (Cashier)"
+    EMPLOYEE ||--o{ ORDERS : "Delivers (Shipper)"
+
+    RECIPE ||--|{ RECIPE_DETAIL : "Requires"
+    INGREDIENT ||--o{ RECIPE_DETAIL : "Used in"
+
+    SUPPLIER ||--o{ INGREDIENT_RECEIPT : "Provides"
+    INGREDIENT_RECEIPT ||--|{ INGREDIENT : "Contains"
+```
+
+> **Lưu ý Kiến trúc DB:** Hệ thống sử dụng Cắt tỉa (Soft-delete) đối với một số dữ liệu quan trọng để đảm bảo tính toàn vẹn của lịch sử hóa đơn. Lịch sử nhập kho (Receipt) và trừ nguyên liệu (Recipe/Disposal) được liên kết chặt chẽ để phục vụ thuật toán HUI-Miner (Tính lợi nhuận).
+
+---
+
+## 🔐 4. Tiêu Chuẩn Tích Hợp Bảo Mật Dành Cho Developer
+
+Không giống như các dự án học thuật, khi đưa lên Production, các đoạn code tích hợp cần phải có cơ chế bảo vệ nghiêm ngặt. Dưới đây là các tiêu chuẩn bắt buộc:
+
+### 4.1. Bảo mật Webhook PayOS (Chống gian lận nạp tiền)
+
+Không bao giờ tin tưởng mù quáng vào data đẩy về từ Webhook. Kẻ gian có thể giả mạo request POST vào `/webhook` để báo thành công.
+
+- **Quy tắc:** Bắt buộc sử dụng hàm `verifyPaymentWebhookData` của thư viện `@payos/node`. Hàm này sẽ dùng `CHECKSUM_KEY` sinh ra chữ ký HMAC để đối chiếu. Nếu chữ ký không khớp, lập tức Reject request.
+- **Local Test:** Developer sử dụng `ngrok` (vd: `ngrok http 3001`) để tạo Public URL, sau đó dán vào trang quản trị PayOS để test Webhook tại máy cá nhân.
+
+### 4.2. Quản trị Bộ nhớ AI Chatbot (Gemini)
+
+LLM (Large Language Model) thường xuyên bị quên ngữ cảnh nếu đoạn chat quá dài (vượt quá Context Window) hoặc sinh lỗi trả về text thay vì JSON.
+
+- **Quy tắc Function Calling:** Khi AI gọi Tool (ví dụ: `check_order_status`), luôn bọc trong `try-catch` và quy định rõ `Schema` (Zod) cho dữ liệu AI sinh ra.
+- **Bảo mật:** Không tiêm (Inject) toàn bộ thông tin Database vào System Instruction. Chỉ tiêm danh sách Menu hiện hành. Mọi dữ liệu nhạy cảm (Doanh thu, Lịch sử khách khác) BẮT BUỘC phải dùng Function Calling để kiểm soát quyền (Authorization).
+
+### 4.3. Xác thực Realtime (Socket.io Auth)
+
+- **Rủi ro:** Client bất kỳ có thể mở F12, tự kết nối Socket vào server và nghe lén dữ liệu đơn hàng (`NEW_ORDER`).
+- **Quy tắc:** Socket Connection phải mang theo JWT Token. Backend sử dụng Middleware của Socket.io để decode Token. Nếu không phải nhân viên hợp lệ, lập tức ngắt kết nối (`socket.disconnect()`).
+
+---
+
+## 🚀 5. Chiến Lược Triển Khai (Deployment & DevOps)
+
+Để hệ thống chịu tải tốt và dễ dàng mở rộng (Scale), đề xuất mô hình triển khai như sau:
+
+### 5.1. Cơ sở dữ liệu (Database Layer)
+
+- Sử dụng **Azure SQL Database** (Hoặc AWS RDS for SQL Server) thay vì tự cài SQL Server lên VPS.
+- Thiết lập tự động Backup hàng ngày.
+
+### 5.2. Backend API Server (Node.js)
+
+- Đóng gói bằng **Docker**. Triển khai lên các nền tảng tự động Scale như **Render, Railway** hoặc AWS ECS.
+- Môi trường Production phải thiết lập `NODE_ENV=production` để bỏ qua các log thừa và tăng hiệu suất Express.
+
+### 5.3. Frontend Web & Customer App
+
+- Triển khai trực tiếp lên **Vercel** bằng Github Integration.
+- Vercel tự động hỗ trợ Next.js Caching và CDN, giúp hình ảnh đồ uống tải siêu tốc.
+- Lưu ý: Chỉnh cấu hình `Root Directory` của Vercel trỏ vào `apps/web` hoặc `apps/customer`.
+
+---
+
+## 🧪 6. Chiến Lược Kiểm Thử (Testing & CI/CD)
+
+Để tránh tình trạng "sửa lỗi chỗ này, vỡ chức năng chỗ kia", mọi Pull Request (PR) đều phải thỏa mãn:
+
+1. **TypeScript Checker:** Github Actions sẽ chạy `npm run build` hoặc `tsc --noEmit`. Nếu code sai kiểu dữ liệu, PR sẽ bị Block.
+2. **Unit Test (Jest):** Các module liên quan đến tính tiền (Voucher, Shipping Fee, Tổng đơn) bắt buộc phải có Unit Test (`npm run test`).
+3. **Lint & Prettier:** Sử dụng Husky để bắt lỗi Format code trước khi cho phép `git commit`.
+
+---
+
+## 💻 7. Hướng Dẫn Setup Môi Trường Local (Onboarding)
+
+Dành cho thành viên mới gia nhập team:
+
+1. Đảm bảo máy có Node.js >= v18, Git, và công cụ quản lý DB (như Azure Data Studio hoặc DBeaver).
+2. Clone dự án và cài thư viện tổng:
+   ```bash
+   git clone https://github.com/Kolaid08/TeaShopPheLa.git
+   cd TeaShopPheLa
+   npm install
+   ```
+3. Lấy file biến môi trường (`.env`) từ Tech Lead, bỏ vào thư mục `apps/api`.
+4. Khởi tạo Database và Seed dữ liệu mẫu:
+   ```bash
+   cd apps/api
+   npx prisma generate
+   npx prisma db push
+   npx prisma db seed
+   ```
+5. Khởi động toàn bộ Monorepo:
+   ```bash
+   cd ../..
+   npm run dev
+   ```
+6. Truy cập:
+   - POS/Admin: `http://localhost:3000` (Mã PIN: `4444` / `2222`)
+   - API Server: `http://localhost:3001`
+   - Customer App: `http://localhost:3002` (SĐT mẫu: `0987654321`)
+
+---
+
+## 🛠️ 8. Hướng Dẫn Tích Hợp Dịch Vụ Bên Thứ 3 (Dành Cho Người Mới)
+
+Dưới đây là hướng dẫn "cầm tay chỉ việc" để bạn có thể tự thiết lập các dịch vụ (PayOS, Giao Hàng Nhanh, Gemini AI) từ con số 0 và đưa vào dự án.
+
+### 8.1. Tích hợp Cổng Thanh Toán PayOS (Chuyển khoản QR Code)
+
+PayOS giúp hệ thống tự động nhận biết khách đã chuyển khoản thành công.
+
+- **Bước 1: Tạo tài khoản.** Truy cập [payos.vn](https://payos.vn) và đăng ký tài khoản doanh nghiệp hoặc cá nhân.
+- **Bước 2: Tạo Kênh Thanh Toán.** Sau khi đăng nhập, chọn "Tạo kênh thanh toán mới". Điền thông tin cửa hàng Phê La.
+- **Bước 3: Lấy API Keys.** Vào mục **Cài đặt -> API Keys**. Bạn sẽ thấy 3 mã quan trọng. Hãy copy và dán vào file `.env` của `apps/api`:
+  - `PAYOS_CLIENT_ID="..."`
+  - `PAYOS_API_KEY="..."`
+  - `PAYOS_CHECKSUM_KEY="..."`
+- **Bước 4: Cấu hình Webhook (Rất quan trọng).** Chuyển sang tab Webhook. Nhập URL Server của bạn (ví dụ: `https://api.phela.com/api/v1/payment/payos/webhook`). Nếu bạn đang code ở máy ảo Local, hãy dùng phần mềm ngrok (`ngrok http 3001`) để lấy link public tạm thời, sau đó dán vào đây. Bấm "Xác nhận Webhook".
+
+### 8.2. Tích hợp Giao Hàng Nhanh (GHN) - Tính phí Ship
+
+- **Bước 1:** Đăng ký tài khoản tại [khachhang.ghn.vn](https://khachhang.ghn.vn).
+- **Bước 2:** Vào mục **Cửa hàng (Shop)**, điền địa chỉ kho hàng của bạn (ví dụ: Quận 1, TP.HCM). Hệ thống sẽ cấp cho bạn một `SHOP_ID`.
+- **Bước 3:** Vào mục **Quản lý API Token**, tạo mới một Token.
+- **Bước 4:** Cập nhật file `.env` ở `apps/api`:
+  - `GHN_TOKEN="Mã_Token_Vừa_Tạo"`
+  - `GHN_SHOP_ID="ID_Cửa_Hàng_Của_Bạn"`
+- **Lưu ý:** API của GHN có môi trường Test và Production khác nhau. Hãy dùng URL Test (https://dev-online-gateway.ghn.vn) trong lúc dev.
+
+### 8.3. Tích hợp Google Gemini AI (Phê La AI Chatbot)
+
+- **Bước 1:** Truy cập [Google AI Studio](https://aistudio.google.com).
+- **Bước 2:** Đăng nhập bằng tài khoản Google, chọn **Get API Key** ở menu bên trái.
+- **Bước 3:** Bấm nút **Create API Key in new project**. Copy đoạn mã đó.
+- **Bước 4:** Dán vào file `.env` của thư mục `apps/api`:
+  - `GEMINI_API_KEY="AIzaSyB..."`
+- **Sử dụng trong Code:** Đảm bảo thư viện `@google/generative-ai` đã được cài (`npm install @google/generative-ai`). Thư viện này đã được cấu hình sẵn trong `apps/api/src/modules/chat/ai.service.ts`, nó sẽ tự động lấy key từ `.env` để chat và gọi hàm (Function Calling).
