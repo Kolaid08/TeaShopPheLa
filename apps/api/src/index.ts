@@ -6,7 +6,18 @@ import { startCronJobs } from './jobs/cronJobs';
 import { initFirebase } from './config/firebase';
 
 // Auto-seed database if empty on server boot
-seedDatabaseIfEmpty();
+seedDatabaseIfEmpty().then(async () => {
+  const { prisma } = require('./utils/prisma');
+  console.log('Fixing any localhost image URLs in DB...');
+  const drinks = await prisma.drink.findMany({ where: { DrinkImageURL: { contains: 'localhost:3001' } } });
+  for (const d of drinks) {
+    await prisma.drink.update({
+      where: { DrinkID: d.DrinkID },
+      data: { DrinkImageURL: d.DrinkImageURL.replace('http://localhost:3001', 'https://teashopphela.onrender.com') }
+    });
+  }
+  console.log('Fixed image URLs.');
+});
 
 // Init Firebase
 initFirebase();
