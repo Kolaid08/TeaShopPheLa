@@ -13,7 +13,7 @@ const recipeDetailSchema = z.object({
 });
 
 const recipeSchema = z.object({
-  DrinkID: z.number().int(),
+  DrinkSizeID: z.number().int(),
   Ingredients: z.array(recipeDetailSchema).min(1),
 });
 
@@ -28,7 +28,7 @@ router.get('/', async (req, res, next) => {
 
     const where = search
       ? {
-          Drink: { DrinkName: { contains: search } },
+          DrinkSize: { Drink: { DrinkName: { contains: search } } },
         }
       : {};
 
@@ -40,7 +40,7 @@ router.get('/', async (req, res, next) => {
         take: limit,
         orderBy: { [sortBy]: sortDir },
         include: {
-          Drink: { select: { DrinkName: true } },
+          DrinkSize: { include: { Drink: { select: { DrinkName: true } }, Size: { select: { SizeName: true } } } },
           RecipeDetails: {
             include: {
               Ingredient: {
@@ -74,7 +74,7 @@ router.get('/:id', async (req, res, next) => {
     const recipe = await prisma.recipe.findUnique({
       where: { RecipeID: recipeId },
       include: {
-        Drink: true,
+        DrinkSize: { include: { Drink: true, Size: true } },
         RecipeDetails: {
           include: {
             Ingredient: {
@@ -98,13 +98,13 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, 
   try {
     const validatedData = recipeSchema.parse(req.body);
 
-    const drinkExists = await prisma.drink.findUnique({
-      where: { DrinkID: validatedData.DrinkID },
+    const drinkExists = await prisma.drinkSize.findUnique({
+      where: { DrinkSizeID: validatedData.DrinkSizeID },
     });
-    if (!drinkExists) throw new AppError(404, 'Drink not found.');
+    if (!drinkExists) throw new AppError(404, 'Drink Size not found.');
 
     const activeRecipeExists = await prisma.recipe.findFirst({
-      where: { DrinkID: validatedData.DrinkID },
+      where: { DrinkSizeID: validatedData.DrinkSizeID },
     });
     if (activeRecipeExists) {
       throw new AppError(
@@ -124,7 +124,7 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, 
 
     const recipe = await prisma.$transaction(async (tx) => {
       const createdRecipe = await tx.recipe.create({
-        data: { DrinkID: validatedData.DrinkID },
+        data: { DrinkSizeID: validatedData.DrinkSizeID },
       });
 
       const groupedIngredients = validatedData.Ingredients.reduce((acc, curr) => {
@@ -205,10 +205,10 @@ router.put('/:id', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res
         })),
       });
 
-      // 3. Update main record in case of change in DrinkID
+      // 3. Update main record in case of change in DrinkSizeID
       return tx.recipe.update({
         where: { RecipeID: recipeId },
-        data: { DrinkID: validatedData.DrinkID },
+        data: { DrinkSizeID: validatedData.DrinkSizeID },
         include: { RecipeDetails: true },
       });
     });
