@@ -788,21 +788,17 @@ router.get('/customer-history', verifyJWT, async (req, res, next) => {
         where: { CustomerID: customerId },
         orderBy: { OrderID: 'desc' },
         include: {
-          Customer: { select: { CustomerName: true, PhoneNumber: true } },
-          ShopTable: { select: { ShopTableNumber: true } },
-          Employee: { select: { FullName: true } },
-          Reviews: { select: { DrinkID: true, Rating: true } },
+          Customer: true,
+          ShopTable: true,
           OrderDetails: {
             include: {
               DrinkSize: {
-                include: {
-                  Drink: { select: { DrinkName: true } },
-                  Size: { select: { SizeName: true } },
-                },
+                include: { Drink: true, Size: true },
               },
             },
           },
         },
+        orderBy: { CreatedTime: 'desc' },
       });
       return sendResponse(res, 200, true, 'Lịch sử đặt hàng hội viên', dbOrders);
     } catch (err) {
@@ -847,6 +843,10 @@ router.get('/customer-status/:id', optionalAuth, async (req, res, next) => {
               data: { PaymentStatus: 'PAID', PaymentMethod: 'QR_CODE' }
             });
             console.log(`[PayOS Polling] Auto-updated order ${order.OrderID} to PAID`);
+            
+            // Sync to GHN if it's a delivery order
+            const ghnCode = await checkAndSyncGHN(order);
+            if (ghnCode) order.GHN_OrderCode = ghnCode;
           }
         } catch {}
       }
@@ -910,6 +910,12 @@ router.patch('/customer-cancel/:id', verifyJWT, async (req, res, next) => {
 
         return updated;
       });
+
+      // 5. Sync to GHN if shop accepts the order (PREPARING)
+      if (validatedData.OrderStatus === 'PREPARING' && updatedOrder.DeliveryType === 'DELIVERY' && !updatedOrder.GHN_OrderCode) {
+        const ghnCode = await checkAndSyncGHN(updatedOrder);
+        if (ghnCode) updatedOrder.GHN_OrderCode = ghnCode;
+      }
 
       return sendResponse(
         res,
