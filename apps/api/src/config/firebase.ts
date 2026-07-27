@@ -10,12 +10,21 @@ export const initFirebase = () => {
   if (isFirebaseInitialized) return;
 
   try {
-    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH 
-      ? path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
-      : 'D:\\Project\\wow\\phela-web-firebase-adminsdk-fbsvc-f065e87062.json';
+    let serviceAccount;
 
-    if (fs.existsSync(serviceAccountPath)) {
-      const serviceAccount = require(serviceAccountPath);
+    if (process.env.FIREBASE_CREDENTIALS) {
+      serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+    } else {
+      const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH 
+        ? path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
+        : 'D:\\Project\\wow\\phela-web-firebase-adminsdk-fbsvc-f065e87062.json';
+
+      if (fs.existsSync(serviceAccountPath)) {
+        serviceAccount = require(serviceAccountPath);
+      }
+    }
+
+    if (serviceAccount) {
       const app = initializeApp({
         credential: cert(serviceAccount),
       });
@@ -23,7 +32,7 @@ export const initFirebase = () => {
       isFirebaseInitialized = true;
       console.log('✅ Firebase Admin initialized successfully.');
     } else {
-      console.warn('⚠️ Firebase Admin NOT initialized. Could not find service account at:', serviceAccountPath);
+      console.warn('⚠️ Firebase Admin NOT initialized. Could not find service account credentials.');
     }
   } catch (error) {
     console.error('❌ Failed to initialize Firebase Admin:', error);
@@ -34,3 +43,4 @@ export const getFirebaseAdmin = () => {
   if (!isFirebaseInitialized || !messagingInstance) return null;
   return { messaging: () => messagingInstance };
 };
+
