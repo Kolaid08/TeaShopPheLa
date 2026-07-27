@@ -19,6 +19,7 @@ import { Card, Button, Badge, Dialog } from '@/components/ui/core';
 import { api, Order, Customer } from '@/lib/api';
 import { toast } from 'sonner';
 import { VoucherWallet } from '@/components/VoucherWallet';
+import { io } from 'socket.io-client';
 
 export default function HistoryPage() {
   const router = useRouter();
@@ -86,6 +87,29 @@ export default function HistoryPage() {
     if (active) {
       loadOrderHistory();
     }
+
+    // Real-time order status updates via Socket.io
+    const token = localStorage.getItem('phela_customer_token');
+    let socket: any;
+    if (token) {
+      socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3001');
+      socket.emit('customer_join', { token });
+      
+      socket.on('order_status_updated', (updatedOrder: any) => {
+        // Play ting sound
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        audio.play().catch(e => console.log('Audio play failed:', e));
+        
+        setOrders(prevOrders => {
+          return prevOrders.map(o => o.OrderID === updatedOrder.OrderID ? { ...o, OrderStatus: updatedOrder.OrderStatus, PaymentStatus: updatedOrder.PaymentStatus } : o);
+        });
+        toast.success(`Đơn hàng #${updatedOrder.OrderID} đã cập nhật trạng thái mới!`);
+      });
+    }
+
+    return () => {
+      if (socket) socket.disconnect();
+    };
   }, [router]);
 
   // Handle re-ordering (Add items from past order to cart)

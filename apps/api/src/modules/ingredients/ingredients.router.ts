@@ -13,9 +13,112 @@ const ingredientSchema = z.object({
   UnitID: z.number().int(),
 });
 
+const disposeSchema = z.array(z.object({
+  IngredientID: z.number().int(),
+  IngredientReceiptID: z.number().int(),
+  Quantity: z.number().positive(),
+  Reason: z.string().optional()
+}));
+
 // Protect routes
 router.use(verifyJWT);
 router.use(requireRole(['ADMIN', 'MANAGER', 'STAFF']));
+
+// GET /expired - List expired or expiring soon ingredients
+router.get('/expired', async (req, res, next) => {
+  try {
+    const days = parseInt(req.query.days as string) || 7;
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + days);
+
+    const expiredBatches = await prisma.ingredientReceiptDetail.findMany({
+      where: {
+        QuantityRemaining: { gt: 0 },
+        ExpirationDate: { lte: targetDate }
+      },
+      include: {
+        Ingredient: { select: { IngredientName: true, Unit: true } },
+        IngredientReceipt: { select: { ReceivedDate: true, Supplier: { select: { SupplierName: true } } } }
+      },
+      orderBy: { ExpirationDate: 'asc' }
+    });
+
+    return sendResponse(res, 200, true, 'Danh sách nguyên liệu hết hạn/sắp hết hạn', expiredBatches);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /dispose - Dispose expired ingredients (Manager/Admin only)
+router.post('/dispose', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+  try {
+    const items = disposeSchema.parse(req.body);
+    const employeeId = req.user?.EmployeeID;
+
+    if (!employeeId) throw new AppError(401, 'Không xác định được nhân viên thực hiện.');
+
+    const result = await prisma.$transaction(async (tx) => {
+      const disposals = [];
+      for (const item of items) {
+        // Validate batch exists and has enough quantity
+        const batch = await tx.ingredientReceiptDetail.findUnique({
+          where: {
+            IngredientReceiptID_IngredientID: {
+              IngredientReceiptID: item.IngredientReceiptID,
+              IngredientID: item.IngredientID
+            }
+          }
+        });
+
+        if (!batch) {
+          throw new AppError(404, `Không tìm thấy lô nguyên liệu (ReceiptID: ${item.IngredientReceiptID}, IngredientID: ${item.IngredientID})`);
+        }
+
+        if (Number(batch.QuantityRemaining) < item.Quantity) {
+          throw new AppError(400, `Số lượng tồn của lô (ReceiptID: ${item.IngredientReceiptID}, IngredientID: ${item.IngredientID}) không đủ để huỷ (Còn: ${batch.QuantityRemaining}, Yêu cầu: ${item.Quantity})`);
+        }
+
+        // Deduct from batch
+        await tx.ingredientReceiptDetail.update({
+          where: {
+            IngredientReceiptID_IngredientID: {
+              IngredientReceiptID: item.IngredientReceiptID,
+              IngredientID: item.IngredientID
+            }
+          },
+          data: {
+            QuantityRemaining: { decrement: item.Quantity }
+          }
+        });
+
+        // Deduct from total stock
+        await tx.ingredient.update({
+          where: { IngredientID: item.IngredientID },
+          data: {
+            QuantityStock: { decrement: item.Quantity }
+          }
+        });
+
+        // Create disposal log
+        const disposal = await tx.ingredientDisposal.create({
+          data: {
+            IngredientID: item.IngredientID,
+            IngredientReceiptID: item.IngredientReceiptID,
+            Quantity: item.Quantity,
+            Reason: item.Reason || 'Hàng hết hạn/hỏng',
+            EmployeeID: employeeId
+          }
+        });
+        disposals.push(disposal);
+      }
+      return disposals;
+    });
+
+    return sendResponse(res, 200, true, 'Đã huỷ nguyên liệu thành công', result);
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /low-stock - List ingredients below the custom threshold (default 10)
 router.get('/low-stock', async (req, res, next) => {

@@ -97,16 +97,3 @@ export const getAprioriResults = async (req: Request, res: Response) => {
     }
 };
 
-export const triggerMockData = async (req: Request, res: Response) => {
-    try {
-        const numOrders = req.body.numOrders !== undefined ? Number(req.body.numOrders) : 200;
-        const result = await AnalyticsService.generateBiasedMockData(numOrders);
-        if (!result.success) {
-            return sendResponse(res, 400, false, result.message);
-        }
-        return sendResponse(res, 200, true, result.message, result);
-    } catch (error) {
-        console.error("Mock Data Error:", error);
-        return sendResponse(res, 500, false, 'Lỗi khi sinh dữ liệu giả', error);
-    }
-};

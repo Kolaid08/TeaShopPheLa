@@ -124,18 +124,40 @@ export const initSocketIo = (server: HttpServer) => {
         if (token.startsWith('mock_token_') && process.env.NODE_ENV === 'development') {
           socket.data.user = { RoleName: 'ADMIN' } as UserPayload;
           socket.join('admins');
+          socket.join('admin_orders');
           console.log(`Socket ${socket.id} joined admins room (mock)`);
           return;
         }
         
         const decoded = jwt.verify(token, config.jwt.accessSecret) as UserPayload;
-        if (decoded.RoleName === 'ADMIN' || decoded.RoleName === 'MANAGER') {
+        if (decoded.RoleName) {
           socket.data.user = decoded;
           socket.join('admins');
+          socket.join('admin_orders');
           console.log(`Socket ${socket.id} joined admins room`);
         }
       } catch (err) {
         console.error(`Invalid token for admin_join from socket ${socket.id}`);
+      }
+    });
+
+    // Customer joins their own private room for real-time order updates
+    socket.on('customer_join', (payload?: { token?: string }) => {
+      const token = payload?.token;
+      if (!token) return;
+      try {
+        if (token.startsWith('real_cust_token_') && process.env.NODE_ENV === 'development') {
+          // Dev mock fallback - skip verification
+          return;
+        }
+        const decoded = jwt.verify(token, config.jwt.accessSecret) as UserPayload;
+        if (decoded.CustomerID) {
+          socket.join(`customer_${decoded.CustomerID}`);
+          socket.join('customers_global');
+          console.log(`Socket ${socket.id} joined customer_${decoded.CustomerID} and customers_global`);
+        }
+      } catch (err) {
+        console.error(`Invalid token for customer_join from socket ${socket.id}`);
       }
     });
 

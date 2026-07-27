@@ -2,6 +2,7 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { verifyJWT, requireRole, optionalAuth } from '../../middleware/auth';
 import { sendResponse } from '../../utils/response';
+import { queueNotification } from '../notifications/notifications.service';
 
 const prisma = new PrismaClient();
 
@@ -54,13 +55,110 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, 
         OwnerID: OwnerID || null,
         Creator: 'ADMIN',
         ValidUntil: ValidUntil ? new Date(ValidUntil) : null,
+        Status: 'ACTIVE'
       }
     });
+
+    if (voucher.OwnerID) {
+      queueNotification({
+        customerId: voucher.OwnerID,
+        title: 'Ting ting! Bạn có một Voucher mới 🎁',
+        body: `Bạn vừa được tặng voucher giảm giá ${voucher.DiscountType === 'PERCENT' ? voucher.DiscountValue + '%' : voucher.DiscountValue + 'đ'}! Kiểm tra ngay trong Ví Voucher của bạn.`,
+        type: 'PROMOTION',
+        actionLink: '/',
+        dataPayload: { voucherCode: voucher.Code }
+      });
+    }
+
     return sendResponse(res, 201, true, 'Tạo mã thành công', voucher);
   } catch (err) {
     next(err);
   }
 });
+
+// Update voucher status (Admin only)
+router.put('/:id/status', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+  try {
+    const voucherId = Number(req.params.id);
+    const { Status } = req.body;
+    
+    if (isNaN(voucherId)) {
+      return sendResponse(res, 400, false, 'ID voucher không hợp lệ');
+    }
+    
+    if (!['ACTIVE', 'INACTIVE'].includes(Status)) {
+      return sendResponse(res, 400, false, 'Trạng thái không hợp lệ');
+    }
+    
+    const existing = await prisma.voucher.findUnique({ where: { VoucherID: voucherId } });
+    if (!existing) {
+      return sendResponse(res, 404, false, 'Không tìm thấy voucher');
+    }
+    
+    if (Status === 'ACTIVE') {
+      if (existing.ValidUntil && new Date(existing.ValidUntil) < new Date()) {
+        return sendResponse(res, 400, false, 'Không thể kích hoạt voucher đã quá hạn sử dụng');
+      }
+      if (existing.UsedCount >= existing.MaxUsage) {
+        return sendResponse(res, 400, false, 'Không thể kích hoạt voucher đã hết lượt sử dụng');
+      }
+    }
+    
+    const updated = await prisma.voucher.update({
+      where: { VoucherID: voucherId },
+      data: { Status }
+    });
+    
+    return sendResponse(res, 200, true, 'Cập nhật trạng thái thành công', updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Claim voucher (Customer saves voucher to wallet)
+router.post('/claim', verifyJWT, requireRole(['CUSTOMER']), async (req, res, next) => {
+  try {
+    const customerId = req.user?.CustomerID;
+    const { Code } = req.body;
+    
+    if (!customerId) return sendResponse(res, 401, false, 'Unauthorized');
+    if (!Code) return sendResponse(res, 400, false, 'Vui lòng cung cấp mã Voucher');
+
+    const voucher = await prisma.voucher.findUnique({ where: { Code } });
+    if (!voucher) return sendResponse(res, 404, false, 'Mã Voucher không tồn tại');
+    
+    if (voucher.Status !== 'ACTIVE') return sendResponse(res, 400, false, 'Mã Voucher này đã bị vô hiệu hóa');
+    if (voucher.ValidUntil && new Date(voucher.ValidUntil) < new Date()) return sendResponse(res, 400, false, 'Mã Voucher đã hết hạn');
+    
+    // Check if max usage reached globally
+    const totalClaimed = await prisma.customerVoucher.count({ where: { VoucherID: voucher.VoucherID } });
+    if (totalClaimed >= voucher.MaxUsage) {
+      return sendResponse(res, 400, false, 'Rất tiếc, mã Voucher này đã hết số lượng phát hành!');
+    }
+
+    // Check if already claimed
+    const existingClaim = await prisma.customerVoucher.findUnique({
+      where: { CustomerID_VoucherID: { CustomerID: customerId, VoucherID: voucher.VoucherID } }
+    });
+
+    if (existingClaim) {
+      return sendResponse(res, 400, false, 'Bạn đã lưu mã Voucher này rồi!');
+    }
+
+    // Claim it
+    await prisma.customerVoucher.create({
+      data: {
+        CustomerID: customerId,
+        VoucherID: voucher.VoucherID,
+      }
+    });
+
+    return sendResponse(res, 200, true, 'Lưu Voucher thành công!');
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 // Check voucher validity (Public/Customer)
 router.post('/check', async (req, res, next) => {
@@ -88,6 +186,10 @@ router.post('/check', async (req, res, next) => {
 
     if (voucher.ValidUntil && new Date(voucher.ValidUntil) < new Date()) {
       return sendResponse(res, 400, false, 'Mã giảm giá đã hết hạn');
+    }
+
+    if (voucher.Status !== 'ACTIVE') {
+      return sendResponse(res, 400, false, 'Mã giảm giá đã bị vô hiệu hóa hoặc thu hồi');
     }
 
     if (voucher.OwnerID && voucher.OwnerID !== CustomerID) {
@@ -121,10 +223,17 @@ router.get('/customer/:customerId', optionalAuth, async (req, res, next) => {
 
     const rawVouchers = await prisma.voucher.findMany({
       where: {
-        OwnerID: Number(customerId),
         OR: [
-          { ValidUntil: null },
-          { ValidUntil: { gt: new Date() } }
+          { OwnerID: Number(customerId) },
+          { ClaimedBy: { some: { CustomerID: Number(customerId) } } }
+        ],
+        AND: [
+          {
+            OR: [
+              { ValidUntil: null },
+              { ValidUntil: { gt: new Date() } }
+            ]
+          }
         ]
       },
       include: {
@@ -136,6 +245,32 @@ router.get('/customer/:customerId', optionalAuth, async (req, res, next) => {
     const vouchers = rawVouchers.filter(v => v.UsedCount < v.MaxUsage);
 
     return sendResponse(res, 200, true, 'Lấy danh sách voucher thành công', vouchers);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get public available vouchers (to claim)
+router.get('/public/available', async (req, res, next) => {
+  try {
+    const vouchers = await prisma.voucher.findMany({
+      where: {
+        OwnerID: null,
+        Status: 'ACTIVE',
+        OR: [
+          { ValidUntil: null },
+          { ValidUntil: { gt: new Date() } }
+        ]
+      },
+      include: {
+        DrinkSize: { include: { Drink: true, Size: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const activeVouchers = vouchers.filter(v => v.UsedCount < v.MaxUsage);
+
+    return sendResponse(res, 200, true, 'Lấy danh sách voucher thành công', activeVouchers);
   } catch (err) {
     next(err);
   }

@@ -228,35 +228,65 @@ export default function DashboardHome() {
             <CardTitle>Đường cong doanh thu</CardTitle>
             <CardDescription>Số liệu doanh thu được tổng hợp theo tháng qua</CardDescription>
           </CardHeader>
-          <CardContent className="h-64 flex flex-col justify-end pt-4">
-            <div className="flex-1 flex items-end justify-between gap-2 px-2 relative">
-              {/* Grid Lines */}
-              <div className="absolute inset-x-0 bottom-0 h-full flex flex-col justify-between pointer-events-none opacity-20">
-                {[1, 2, 3, 4].map((line) => (
-                  <div key={line} className="w-full border-t border-dashed border-border" />
-                ))}
-              </div>
+          <CardContent className="h-64 flex flex-col justify-end pt-4 pb-2 relative">
+            <div className="absolute inset-x-6 bottom-8 top-6 flex flex-col justify-between pointer-events-none opacity-20">
+              {[1, 2, 3, 4, 5].map((line) => (
+                <div key={line} className="w-full border-t border-dashed border-border" />
+              ))}
+            </div>
 
-              {stats.monthlyRevenueChart.map((m: any, i: number) => {
-                const maxVal = Math.max(...stats.monthlyRevenueChart.map((x: any) => x.revenue));
-                const heightPct = maxVal > 0 ? (m.revenue / maxVal) * 80 : 10;
+            <div className="absolute inset-x-8 bottom-8 top-6">
+              {(() => {
+                const maxVal = Math.max(...(stats.monthlyRevenueChart.length ? stats.monthlyRevenueChart.map((x: any) => x.revenue) : [1]));
+                const chartHeight = 100;
+                const chartWidth = 1000;
+                const stepX = stats.monthlyRevenueChart.length > 1 ? chartWidth / (stats.monthlyRevenueChart.length - 1) : chartWidth;
+                
+                const points = stats.monthlyRevenueChart.map((m: any, i: number) => {
+                  const x = i * stepX;
+                  const y = maxVal > 0 ? chartHeight - (m.revenue / maxVal) * chartHeight : chartHeight;
+                  return `${x},${y}`;
+                }).join(' ');
+
                 return (
-                  <div key={i} className="h-full flex-1 flex flex-col justify-end items-center group relative z-10">
-                    <div
-                      style={{ height: `${heightPct}%` }}
-                      className="w-full max-w-[28px] rounded-t-lg bg-gradient-to-t from-primary to-orange-400 group-hover:from-orange-400 group-hover:to-orange-300 transition-all duration-300 relative shadow-lg shadow-primary/10"
-                    >
-                      {/* Tooltip */}
-                      <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-accent text-white text-[10px] font-mono px-2 py-1 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                        {(m.revenue / 1000000).toFixed(1)}M đ
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground font-bold mt-2 font-mono">
-                      {m.month}
-                    </span>
-                  </div>
+                  <>
+                    <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-full overflow-visible" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.4" />
+                          <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <polygon points={`0,${chartHeight} ${points} ${chartWidth},${chartHeight}`} fill="url(#lineGrad)" />
+                      <polyline points={points} fill="none" stroke="#f59e0b" strokeWidth="4" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+
+                    {stats.monthlyRevenueChart.map((m: any, i: number) => {
+                      const left = i === 0 ? 0 : (i / (stats.monthlyRevenueChart.length - 1)) * 100;
+                      const bottom = maxVal > 0 ? (m.revenue / maxVal) * 100 : 0;
+                      return (
+                        <div 
+                          key={i} 
+                          className="absolute w-3.5 h-3.5 bg-white border-[3px] border-amber-500 rounded-full transform -translate-x-1/2 translate-y-1/2 group cursor-pointer hover:scale-150 transition-transform shadow-md z-10"
+                          style={{ left: `${left}%`, bottom: `${bottom}%` }}
+                        >
+                          <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-accent text-white text-[11px] font-mono px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                            {(m.revenue / 1000000).toFixed(1)}M đ
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
                 );
-              })}
+              })()}
+            </div>
+
+            <div className="absolute bottom-1 left-8 right-8 flex justify-between">
+              {stats.monthlyRevenueChart.map((m: any, i: number) => (
+                <span key={i} className="text-[10px] text-muted-foreground font-bold mt-2 font-mono text-center w-8 -ml-4">
+                  {m.month}
+                </span>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -399,7 +429,7 @@ export default function DashboardHome() {
             <div className="flex justify-between items-center">
               <div>
                 <CardTitle className="flex items-center gap-2 text-primary">
-                  <Sparkles className="w-5 h-5" /> Phân tích mua kèm (Apriori)
+                  <Sparkles className="w-5 h-5" /> Phân tích mua kèm
                 </CardTitle>
                 <CardDescription>
                   Luật kết hợp khai phá được từ các hóa đơn thực tế
@@ -450,7 +480,7 @@ export default function DashboardHome() {
             <div className="flex justify-between items-center">
               <div>
                 <CardTitle className="flex items-center gap-2 text-amber-600">
-                  <Sparkles className="w-5 h-5" /> Combo Sinh Lời (HUI)
+                  <Sparkles className="w-5 h-5" /> Combo Sinh Lời
                 </CardTitle>
                 <CardDescription>
                   Các tập hợp đồ uống mang lại tổng lợi nhuận cao nhất
@@ -472,7 +502,7 @@ export default function DashboardHome() {
                         <span className="font-semibold text-sm">Combo {combo.Items.length} món</span>
                       </div>
                       <div className="text-right">
-                        <div className="text-xs text-muted-foreground mb-0.5">Tổng giá trị (Utility)</div>
+                        <div className="text-xs text-muted-foreground mb-0.5">Tổng giá trị</div>
                         <div className="font-mono font-bold text-amber-600">
                           {combo.TotalUtility.toLocaleString('vi-VN')} đ
                         </div>

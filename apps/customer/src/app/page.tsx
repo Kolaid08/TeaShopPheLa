@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/core';
 
 import { VoucherWallet } from '@/components/VoucherWallet';
+import { NotificationBell } from '@/components/NotificationBell';
 import { api, Drink, DrinkSize, Customer, ShopTable } from '@/lib/api';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
@@ -833,6 +834,7 @@ export default function CustomerHome() {
                     <History className="w-4 h-4" /> Lịch sử đơn
                   </Button>
                 </Link>
+                <NotificationBell customerId={customer.CustomerID} />
                 <VoucherWallet customerId={customer.CustomerID} />
                 <Button onClick={() => setIsShareModalOpen(true)} variant="outline" size="sm" className="rounded-xl flex items-center gap-1.5 text-xs text-primary font-bold border-primary/20">
                   <Gift className="w-4 h-4" /> Chia sẻ & Nhận Quà

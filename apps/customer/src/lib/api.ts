@@ -130,6 +130,7 @@ export interface Voucher {
   MaxUsage: number;
   UsedCount: number;
   ValidUntil?: string;
+  Status?: string;
   DrinkSize?: {
     Drink?: { DrinkName: string };
     Size?: { SizeName: string };
@@ -782,7 +783,11 @@ export const api = {
 
   getCustomerVouchers: async (customerId: number): Promise<Voucher[]> => {
     try {
-      const res = await fetch(`${API_BASE}/vouchers/customer/${customerId}`);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('phela_customer_token') : null;
+      const headers: HeadersInit = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/vouchers/customer/${customerId}`, { headers });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Lỗi khi lấy danh sách voucher');
@@ -791,6 +796,40 @@ export const api = {
     } catch (error) {
       console.error(error);
       return [];
+    }
+  },
+
+  getPublicVouchers: async (): Promise<Voucher[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/vouchers/public/available`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Lỗi khi lấy mã giảm giá công khai');
+      }
+      return data.data;
+    } catch (error) {
+      console.error(error);
+      return [];
+    }
+  },
+
+  claimVoucher: async (code: string): Promise<boolean> => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('phela_customer_token') : null;
+      if (!token) return false;
+      const res = await fetch(`${API_BASE}/vouchers/claim`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ Code: code })
+      });
+      const data = await res.json();
+      return data.success;
+    } catch (error) {
+      console.error(error);
+      return false;
     }
   },
 
@@ -820,6 +859,69 @@ export const api = {
       return [];
     } catch (e: any) {
       return [];
+    }
+  },
+
+  // NOTIFICATIONS
+  getNotifications: async (): Promise<any[]> => {
+    try {
+      const token = localStorage.getItem('phela_customer_token');
+      if (!token) return [];
+      const res = await fetch(`${API_BASE}/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store'
+      });
+      const payload = await res.json();
+      if (res.ok && payload.success) return payload.data;
+      return [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  markNotificationAsRead: async (id: number): Promise<boolean> => {
+    try {
+      const token = localStorage.getItem('phela_customer_token');
+      if (!token) return false;
+      const res = await fetch(`${API_BASE}/notifications/${id}/read`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  markAllNotificationsAsRead: async (): Promise<boolean> => {
+    try {
+      const token = localStorage.getItem('phela_customer_token');
+      if (!token) return false;
+      const res = await fetch(`${API_BASE}/notifications/read-all`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  registerNotificationToken: async (tokenValue: string, provider: string = 'WEB'): Promise<boolean> => {
+    try {
+      const token = localStorage.getItem('phela_customer_token');
+      if (!token) return false;
+      const res = await fetch(`${API_BASE}/notifications/token`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ token: tokenValue, provider })
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
     }
   },
 };

@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/core';
 import { api, Ingredient, Unit } from '@/lib/api';
 import { toast } from 'sonner';
+import Link from 'next/link';
 
 export default function IngredientsInventory() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -104,9 +105,9 @@ export default function IngredientsInventory() {
   );
 
   const getStockBadge = (stock: number) => {
-    if (stock < 10) return <Badge variant="danger">Báo động đỏ (Low)</Badge>;
-    if (stock < 50) return <Badge variant="warning">Mức trung bình (Medium)</Badge>;
-    return <Badge variant="success">An toàn (High)</Badge>;
+    if (stock < 10) return <Badge variant="danger">Báo động đỏ</Badge>;
+    if (stock < 50) return <Badge variant="warning">Mức trung bình</Badge>;
+    return <Badge variant="success">An toàn</Badge>;
   };
 
   return (
@@ -120,12 +121,22 @@ export default function IngredientsInventory() {
             Quản lý tồn kho nguyên liệu chè khô, bột sữa béo, trân châu Phêla
           </p>
         </div>
-        <Button
-          onClick={openCreateForm}
-          className="rounded-xl gap-2 font-serif uppercase tracking-wider text-xs font-bold"
-        >
-          <Plus className="w-4 h-4" /> Khai báo nguyên liệu
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link href="/inventory/ingredients/expired">
+            <Button
+              variant="outline"
+              className="rounded-xl gap-2 font-serif uppercase tracking-wider text-xs font-bold border-red-200 text-red-500 hover:bg-red-50"
+            >
+              <ShieldAlert className="w-4 h-4" /> Hàng Hết Hạn
+            </Button>
+          </Link>
+          <Button
+            onClick={openCreateForm}
+            className="rounded-xl gap-2 font-serif uppercase tracking-wider text-xs font-bold"
+          >
+            <Plus className="w-4 h-4" /> Khai báo nguyên liệu
+          </Button>
+        </div>
       </div>
 
       {/* Search Input */}

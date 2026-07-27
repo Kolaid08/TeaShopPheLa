@@ -48,10 +48,8 @@ export const generateAIResponse = async (messages: { sender: string; text: strin
     console.error('Failed to fetch menu:', error);
   }
 
-  let loginStatus = customerId ? 'Đã đăng nhập (Bạn có quyền tặng voucher ngay)' : 'Chưa đăng nhập (Khuyên khách đăng nhập để nhận voucher)';
   const systemInstruction = SYSTEM_INSTRUCTION_TEMPLATE
-    .replace('{{DYNAMIC_MENU}}', menuStr || 'Đang cập nhật')
-    .replace('{{LOGIN_STATUS}}', loginStatus);
+    .replace('{{DYNAMIC_MENU}}', menuStr || 'Đang cập nhật');
 
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash',
@@ -73,7 +71,10 @@ export const generateAIResponse = async (messages: { sender: string; text: strin
     result = await chat.sendMessage(prompt);
   } catch (error: any) {
     console.error("Gemini API Error:", error.message);
-    throw error;
+    if (error.message && error.message.includes('503')) {
+      return "Xin lỗi, hiện tại Phêla AI đang bị quá tải do có quá nhiều khách hàng trò chuyện cùng lúc. Bạn vui lòng thử lại sau vài phút nhé!";
+    }
+    return "Xin lỗi, đã xảy ra lỗi kết nối với trợ lý AI. Vui lòng thử lại sau.";
   }
   
   let response = result.response;
@@ -100,11 +101,14 @@ export const generateAIResponse = async (messages: { sender: string; text: strin
       }]);
       response = result.response;
       functionCalls = response.functionCalls();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Gemini Tool Response Error:', err);
+      if (err.message && err.message.includes('503')) {
+        return "Xin lỗi, hiện tại Phêla AI đang bị quá tải do có quá nhiều khách hàng trò chuyện cùng lúc. Bạn vui lòng thử lại sau vài phút nhé!";
+      }
       break;
     }
   }
 
-  return response.text() || 'Dạ hệ thống AI đang gặp chút sự cố khi tạo mã, anh/chị thông cảm đợi em một lát hoặc thử lại sau nhé.';
+  return response.text() || 'Dạ hệ thống AI đang gặp chút sự cố kết nối, anh/chị thông cảm đợi em một lát hoặc thử lại sau nhé.';
 };
