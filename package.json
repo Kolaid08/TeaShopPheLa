@@ -11,7 +11,8 @@
     "build": "npm run build -w apps/api && npm run build -w apps/web && npm run build -w apps/customer",
     "lint": "npm run lint -w apps/api && npm run lint -w apps/web && npm run lint -w apps/customer",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,css}\""
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,css}\"",
+    "start": "npm run start -w apps/api"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
