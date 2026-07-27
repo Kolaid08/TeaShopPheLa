@@ -413,8 +413,9 @@ export default function DrinksMenu() {
                     value={rd.IngredientID}
                     onChange={(e) => {
                       const newDetails = [...selectedRecipeDetails];
-                      if (newDetails[index]) {
-                        newDetails[index].IngredientID = parseInt(e.target.value);
+                      const detail = newDetails[index];
+                      if (detail) {
+                        detail.IngredientID = parseInt(e.target.value);
                         setSelectedRecipeDetails(newDetails);
                       }
                     }}
@@ -434,8 +435,9 @@ export default function DrinksMenu() {
                     value={rd.Quantity}
                     onChange={(e) => {
                       const newDetails = [...selectedRecipeDetails];
-                      if (newDetails[index]) {
-                        newDetails[index].Quantity = e.target.value;
+                      const detail = newDetails[index];
+                      if (detail) {
+                        detail.Quantity = e.target.value;
                         setSelectedRecipeDetails(newDetails);
                       }
                     }}

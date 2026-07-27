@@ -389,8 +389,9 @@ export default function CustomerHome() {
     const existingIdx = cart.findIndex((item) => item.id === itemKey);
     let updatedCart = [...cart];
 
-    if (existingIdx !== -1 && updatedCart[existingIdx]) {
-      updatedCart[existingIdx].Quantity += 1;
+    const existingItem = existingIdx !== -1 ? updatedCart[existingIdx] : undefined;
+    if (existingItem) {
+      existingItem.Quantity += 1;
     } else {
       updatedCart.push({
         id: itemKey,
