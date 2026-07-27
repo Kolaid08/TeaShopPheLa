@@ -113,8 +113,8 @@ router.post('/broadcast', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (r
               if (response.failureCount > 0) {
                 const failedTokens: string[] = [];
                 response.responses.forEach((resp: any, idx: number) => {
-                  if (!resp.success) {
-                    failedTokens.push(batch[idx]);
+                  if (!resp.success && batch[idx]) {
+                    failedTokens.push(batch[idx] as string);
                   }
                 });
                 console.log('List of tokens that caused failures: ' + failedTokens);

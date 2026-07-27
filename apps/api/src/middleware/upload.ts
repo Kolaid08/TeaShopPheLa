@@ -1,22 +1,26 @@
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import { AppError } from './errorHandler';
+import { v2 as cloudinary } from 'cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 
-// Ensure upload folder exists
-const uploadDir = path.join(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-const storage = multer.diskStorage({
-  destination: (_req: any, _file: any, cb: any) => {
-    cb(null, uploadDir);
-  },
-  filename: (_req: any, file: any, cb: any) => {
+// Create Cloudinary Storage
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
+    return {
+      folder: 'phela_uploads',
+      allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
+      public_id: `${file.fieldname}-${uniqueSuffix}`,
+    };
   },
 });
 
