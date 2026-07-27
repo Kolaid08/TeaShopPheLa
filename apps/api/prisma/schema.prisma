@@ -48,6 +48,7 @@ model DrinkSize {
   OrderDetails    OrderDetail[]
   CartItems       CartItem[]
   Vouchers        Voucher[]
+  Recipe          Recipe[]
 
   @@map("DrinkSize")
 }
@@ -57,7 +58,7 @@ model Recipe {
   DrinkSizeID   Int
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  Drink         Drink          @relation(fields: [DrinkID], references: [DrinkID], onDelete: Cascade, map: "FK_Recipe_Drink")
+  DrinkSize     DrinkSize      @relation(fields: [DrinkSizeID], references: [DrinkSizeID], onDelete: Cascade, map: "FK_Recipe_DrinkSize")
   RecipeDetails RecipeDetail[]
 
   @@map("Recipe")
@@ -74,6 +75,7 @@ model Ingredient {
   IngredientReceiptDetails IngredientReceiptDetail[]
   RecipeDetails            RecipeDetail[]
   IngredientDisposals      IngredientDisposal[]
+  ToppingRecipeDetail      ToppingRecipeDetail[]
 
   @@map("Ingredient")
 }
@@ -102,13 +104,16 @@ model RecipeDetail {
 }
 
 model Topping {
-  ToppingID     Int                    @id @default(autoincrement())
-  ToppingName   String                 @db.NVarChar(255)
-  Price         Decimal                @db.Decimal(10, 2)
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
+  ToppingID   Int      @id @default(autoincrement())
+  ToppingName String   @db.NVarChar(255)
+  Price       Decimal  @db.Decimal(10, 2)
+  IsActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   ToppingRecipeDetails ToppingRecipeDetail[]
+  OrderDetailToppings  OrderDetailTopping[]
+  CartItemToppings     CartItemTopping[]
 
   @@map("Topping")
 }
@@ -116,12 +121,12 @@ model Topping {
 model ToppingRecipeDetail {
   ToppingID    Int
   IngredientID Int
-  Quantity     Decimal    @db.Decimal(10, 2)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  Quantity     Decimal  @db.Decimal(10, 2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  Topping      Topping    @relation(fields: [ToppingID], references: [ToppingID], onDelete: Cascade)
-  Ingredient   Ingredient @relation(fields: [IngredientID], references: [IngredientID], onDelete: NoAction)
+  Topping    Topping    @relation(fields: [ToppingID], references: [ToppingID], onDelete: Cascade)
+  Ingredient Ingredient @relation(fields: [IngredientID], references: [IngredientID], onDelete: NoAction)
 
   @@id([ToppingID, IngredientID])
   @@map("ToppingRecipeDetail")
@@ -177,14 +182,14 @@ model IngredientReceipt {
 model IngredientReceiptDetail {
   IngredientReceiptID Int
   IngredientID        Int
-  Quantity            Decimal           @db.Decimal(10, 2)
-  CostPrice           Decimal           @db.Decimal(10, 2)
+  Quantity            Decimal              @db.Decimal(10, 2)
+  CostPrice           Decimal              @db.Decimal(10, 2)
   ExpirationDate      DateTime?
-  QuantityRemaining   Decimal           @default(0) @db.Decimal(10, 2)
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  Ingredient          Ingredient        @relation(fields: [IngredientID], references: [IngredientID], map: "FK_IngredientReceiptDetail_Ingredient")
-  IngredientReceipt   IngredientReceipt @relation(fields: [IngredientReceiptID], references: [IngredientReceiptID], onDelete: Cascade, map: "FK_IngredientReceiptDetail_IngredientReceipt")
+  QuantityRemaining   Decimal              @default(0) @db.Decimal(10, 2)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  Ingredient          Ingredient           @relation(fields: [IngredientID], references: [IngredientID], map: "FK_IngredientReceiptDetail_Ingredient")
+  IngredientReceipt   IngredientReceipt    @relation(fields: [IngredientReceiptID], references: [IngredientReceiptID], onDelete: Cascade, map: "FK_IngredientReceiptDetail_IngredientReceipt")
   IngredientDisposals IngredientDisposal[]
 
   @@id([IngredientReceiptID, IngredientID])
@@ -204,23 +209,23 @@ model MemberShipLevel {
 }
 
 model Customer {
-  CustomerID         Int             @id @default(autoincrement())
-  CustomerName       String          @db.NVarChar(255)
-  PhoneNumber        String          @db.VarChar(20)
-  TotalMoneySpending Decimal         @db.Decimal(15, 2)
+  CustomerID         Int                 @id @default(autoincrement())
+  CustomerName       String              @db.NVarChar(255)
+  PhoneNumber        String              @db.VarChar(20)
+  TotalMoneySpending Decimal             @db.Decimal(15, 2)
   LevelID            Int
   ReferredBy         Int?
-  PasswordHash       String?         @db.VarChar(255)
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  PasswordHash       String?             @db.VarChar(255)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
   Carts              Cart[]
   ChatSessions       ChatSession[]
-  MemberShipLevel    MemberShipLevel @relation(fields: [LevelID], references: [LevelID], map: "FK_Customer_MemberShipLevel")
+  MemberShipLevel    MemberShipLevel     @relation(fields: [LevelID], references: [LevelID], map: "FK_Customer_MemberShipLevel")
   Orders             Orders[]
   Reviews            Review[]
   Vouchers           Voucher[]
-  ReferredCustomer   Customer?       @relation("Referral", fields: [ReferredBy], references: [CustomerID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Customer_ReferredBy")
-  Referrals          Customer[]      @relation("Referral")
+  ReferredCustomer   Customer?           @relation("Referral", fields: [ReferredBy], references: [CustomerID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Customer_ReferredBy")
+  Referrals          Customer[]          @relation("Referral")
   CustomerTokens     CustomerToken[]
   UserNotifications  UserNotification[]
   NotificationQueues NotificationQueue[]
@@ -240,47 +245,47 @@ model ShopTable {
 }
 
 model Orders {
-  OrderID         Int           @id @default(autoincrement())
-  CustomerID      Int?
-  ShopTableID     Int?
-  EmployeeID      Int
-  ShipperID       Int?
-  OrderType       String        @default("DINE_IN") @db.VarChar(50)
-  ShippingAddress String?       @db.NVarChar(255)
-  Latitude        Float?
-  Longitude       Float?
-  Distance        Float?
-  ReceiverName    String?       @db.NVarChar(255)
-  ReceiverPhone   String?       @db.VarChar(20)
-  ProvinceID      Int?
-  DistrictID      Int?
-  WardCode        String?       @db.VarChar(50)
-  GHN_OrderCode   String?       @db.VarChar(100)
-  ShippingFee     Decimal?      @default(0) @db.Decimal(10, 2)
-  DeliveryMethod  String?       @db.VarChar(50)
-  TrackingURL     String?       @db.VarChar(500)
-  CreatedTime     DateTime      @default(now())
-  OrderStatus     String        @default("PENDING") @db.VarChar(50)
-  TotalPrice      Decimal       @db.Decimal(10, 2)
-  OrderNote       String?       @db.NVarChar(500)
-  PaymentMethod   String?       @db.VarChar(50)
-  PaymentStatus   String?       @db.VarChar(50)
-  AppTransId      String?       @db.VarChar(100)
-  RefundReason    String?       @db.NVarChar(500)
-  RefundStatus    String?       @db.VarChar(50)
-  RefundBankCode  String?       @db.VarChar(50)
-  RefundAccountNumber String?   @db.VarChar(50)
-  RefundAccountName String?     @db.NVarChar(255)
-  VoucherID       Int?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  OrderDetails    OrderDetail[]
-  Customer        Customer?     @relation(fields: [CustomerID], references: [CustomerID], onDelete: SetNull, map: "FK_Orders_Customer")
-  Voucher         Voucher?      @relation(fields: [VoucherID], references: [VoucherID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Orders_Voucher")
-  Employee        Employee      @relation("OrderCreator", fields: [EmployeeID], references: [EmployeeID], map: "FK_Orders_Employee")
-  Shipper         Employee?     @relation("OrderShipper", fields: [ShipperID], references: [EmployeeID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Orders_Shipper")
-  ShopTable       ShopTable?    @relation(fields: [ShopTableID], references: [ShopTableID], map: "FK_Orders_ShopTable")
-  Reviews         Review[]
+  OrderID             Int           @id @default(autoincrement())
+  CustomerID          Int?
+  ShopTableID         Int?
+  EmployeeID          Int
+  ShipperID           Int?
+  OrderType           String        @default("DINE_IN") @db.VarChar(50)
+  ShippingAddress     String?       @db.NVarChar(255)
+  Latitude            Float?
+  Longitude           Float?
+  Distance            Float?
+  ReceiverName        String?       @db.NVarChar(255)
+  ReceiverPhone       String?       @db.VarChar(20)
+  ProvinceID          Int?
+  DistrictID          Int?
+  WardCode            String?       @db.VarChar(50)
+  GHN_OrderCode       String?       @db.VarChar(100)
+  ShippingFee         Decimal?      @default(0) @db.Decimal(10, 2)
+  DeliveryMethod      String?       @db.VarChar(50)
+  TrackingURL         String?       @db.VarChar(500)
+  CreatedTime         DateTime      @default(now())
+  OrderStatus         String        @default("PENDING") @db.VarChar(50)
+  TotalPrice          Decimal       @db.Decimal(10, 2)
+  OrderNote           String?       @db.NVarChar(500)
+  PaymentMethod       String?       @db.VarChar(50)
+  PaymentStatus       String?       @db.VarChar(50)
+  AppTransId          String?       @db.VarChar(100)
+  RefundReason        String?       @db.NVarChar(500)
+  RefundStatus        String?       @db.VarChar(50)
+  RefundBankCode      String?       @db.VarChar(50)
+  RefundAccountNumber String?       @db.VarChar(50)
+  RefundAccountName   String?       @db.NVarChar(255)
+  VoucherID           Int?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  OrderDetails        OrderDetail[]
+  Customer            Customer?     @relation(fields: [CustomerID], references: [CustomerID], onDelete: SetNull, map: "FK_Orders_Customer")
+  Voucher             Voucher?      @relation(fields: [VoucherID], references: [VoucherID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Orders_Voucher")
+  Employee            Employee      @relation("OrderCreator", fields: [EmployeeID], references: [EmployeeID], map: "FK_Orders_Employee")
+  Shipper             Employee?     @relation("OrderShipper", fields: [ShipperID], references: [EmployeeID], onDelete: NoAction, onUpdate: NoAction, map: "FK_Orders_Shipper")
+  ShopTable           ShopTable?    @relation(fields: [ShopTableID], references: [ShopTableID], map: "FK_Orders_ShopTable")
+  Reviews             Review[]
 
   @@map("Orders")
 }
@@ -298,7 +303,7 @@ model OrderDetail {
   DrinkSize     DrinkSize @relation(fields: [DrinkSizeID], references: [DrinkSizeID], map: "FK_OrderDetail_DrinkSize")
   Orders        Orders    @relation(fields: [OrderID], references: [OrderID], onDelete: Cascade, map: "FK_OrderDetail_Orders")
 
-  Toppings      OrderDetailTopping[]
+  Toppings OrderDetailTopping[]
 
   @@map("OrderDetail")
 }
@@ -306,35 +311,35 @@ model OrderDetail {
 model OrderDetailTopping {
   OrderDetailID Int
   ToppingID     Int
-  Quantity      Int       @default(1)
-  UnitPrice     Decimal   @db.Decimal(10, 2)
-  createdAt     DateTime  @default(now())
-  
-  OrderDetail   OrderDetail @relation(fields: [OrderDetailID], references: [OrderDetailID], onDelete: Cascade)
-  Topping       Topping     @relation(fields: [ToppingID], references: [ToppingID], onDelete: Cascade)
-  
+  Quantity      Int      @default(1)
+  UnitPrice     Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+
+  OrderDetail OrderDetail @relation(fields: [OrderDetailID], references: [OrderDetailID], onDelete: Cascade)
+  Topping     Topping     @relation(fields: [ToppingID], references: [ToppingID], onDelete: Cascade)
+
   @@id([OrderDetailID, ToppingID])
   @@map("OrderDetailTopping")
 }
 
 model Employee {
-  EmployeeID    Int          @id @default(autoincrement())
-  FullName      String       @db.NVarChar(255)
-  PhoneNumber   String       @db.VarChar(20)
-  Email         String       @db.VarChar(255)
-  Birth         DateTime
-  Sex           String       @db.VarChar(20)
-  PINCode       String       @db.VarChar(10)
-  password      String       @db.VarChar(255)
-  RoleID        Int
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  Role          EmployeeRole @relation(fields: [RoleID], references: [RoleID], map: "FK_Employee_EmployeeRole")
-  Orders        Orders[]     @relation("OrderCreator")
-  ShippedOrders Orders[]     @relation("OrderShipper")
-  ShippedReceipts IngredientReceipt[] @relation("ReceiptShipper")
-  Salaries      Salary[]
-  ShiftLogs     ShiftLog[]
+  EmployeeID          Int                  @id @default(autoincrement())
+  FullName            String               @db.NVarChar(255)
+  PhoneNumber         String               @db.VarChar(20)
+  Email               String               @db.VarChar(255)
+  Birth               DateTime
+  Sex                 String               @db.VarChar(20)
+  PINCode             String               @db.VarChar(10)
+  password            String               @db.VarChar(255)
+  RoleID              Int
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  Role                EmployeeRole         @relation(fields: [RoleID], references: [RoleID], map: "FK_Employee_EmployeeRole")
+  Orders              Orders[]             @relation("OrderCreator")
+  ShippedOrders       Orders[]             @relation("OrderShipper")
+  ShippedReceipts     IngredientReceipt[]  @relation("ReceiptShipper")
+  Salaries            Salary[]
+  ShiftLogs           ShiftLog[]
   IngredientDisposals IngredientDisposal[] @relation("IngredientDisposalEmployee")
 
   @@map("Employee")
@@ -413,33 +418,33 @@ model Cart {
 }
 
 model CartItem {
-  CartItemID  Int      @id @default(autoincrement())
+  CartItemID  Int       @id @default(autoincrement())
   CartID      Int
   DrinkSizeID Int
   Quantity    Int
-  Sugar       String   @default("100%") @db.VarChar(20)
-  Ice         String   @default("100%") @db.VarChar(20)
-  UnitPrice   Decimal  @db.Decimal(10, 2)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  Sugar       String    @default("100%") @db.VarChar(20)
+  Ice         String    @default("100%") @db.VarChar(20)
+  UnitPrice   Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   Cart        Cart      @relation(fields: [CartID], references: [CartID], onDelete: Cascade, map: "FK_CartItem_Cart")
   DrinkSize   DrinkSize @relation(fields: [DrinkSizeID], references: [DrinkSizeID], map: "FK_CartItem_DrinkSize")
 
-  Toppings    CartItemTopping[]
+  Toppings CartItemTopping[]
 
   @@map("CartItem")
 }
 
 model CartItemTopping {
-  CartItemID    Int
-  ToppingID     Int
-  Quantity      Int       @default(1)
-  UnitPrice     Decimal   @db.Decimal(10, 2)
-  createdAt     DateTime  @default(now())
-  
-  CartItem      CartItem  @relation(fields: [CartItemID], references: [CartItemID], onDelete: Cascade)
-  Topping       Topping   @relation(fields: [ToppingID], references: [ToppingID], onDelete: Cascade)
-  
+  CartItemID Int
+  ToppingID  Int
+  Quantity   Int      @default(1)
+  UnitPrice  Decimal  @db.Decimal(10, 2)
+  createdAt  DateTime @default(now())
+
+  CartItem CartItem @relation(fields: [CartItemID], references: [CartItemID], onDelete: Cascade)
+  Topping  Topping  @relation(fields: [ToppingID], references: [ToppingID], onDelete: Cascade)
+
   @@id([CartItemID, ToppingID])
   @@map("CartItemTopping")
 }
@@ -484,21 +489,21 @@ model ChatMessage {
 }
 
 model Voucher {
-  VoucherID       Int         @id @default(autoincrement())
-  Code            String      @unique @db.VarChar(50)
-  DiscountType    String      @default("PERCENT") @db.VarChar(20)
-  DiscountValue   Decimal     @db.Decimal(15, 2)
+  VoucherID       Int               @id @default(autoincrement())
+  Code            String            @unique @db.VarChar(50)
+  DiscountType    String            @default("PERCENT") @db.VarChar(20)
+  DiscountValue   Decimal           @db.Decimal(15, 2)
   TargetProductID Int?
   OwnerID         Int?
-  Creator         String?     @db.VarChar(50)
-  MaxUsage        Int         @default(1)
-  UsedCount       Int         @default(0)
+  Creator         String?           @db.VarChar(50)
+  MaxUsage        Int               @default(1)
+  UsedCount       Int               @default(0)
   ValidUntil      DateTime?
-  Status          String      @default("ACTIVE") @db.VarChar(50)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  Customer        Customer?   @relation(fields: [OwnerID], references: [CustomerID], map: "FK_Voucher_Customer")
-  DrinkSize       DrinkSize?  @relation(fields: [TargetProductID], references: [DrinkSizeID], map: "FK_Voucher_DrinkSize")
+  Status          String            @default("ACTIVE") @db.VarChar(50)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  Customer        Customer?         @relation(fields: [OwnerID], references: [CustomerID], map: "FK_Voucher_Customer")
+  DrinkSize       DrinkSize?        @relation(fields: [TargetProductID], references: [DrinkSizeID], map: "FK_Voucher_DrinkSize")
   Orders          Orders[]
   ClaimedBy       CustomerVoucher[]
 
@@ -506,56 +511,42 @@ model Voucher {
 }
 
 model Promotion {
-  PromotionID    Int         @id @default(autoincrement())
-  Name           String      @db.NVarChar(255)
-  Description    String?     @db.NVarChar(500)
-  Type           String      @default("PERCENT") @db.VarChar(20)
-  Value          Decimal     @db.Decimal(15, 2)
-  MinQuantity    Int         @default(2)
-  TargetDrinkIDs String?     @db.NVarChar(500)
-  IsActive       Boolean     @default(true)
-  IsCombo        Boolean     @default(false)
+  PromotionID    Int       @id @default(autoincrement())
+  Name           String    @db.NVarChar(255)
+  Description    String?   @db.NVarChar(500)
+  Type           String    @default("PERCENT") @db.VarChar(20)
+  Value          Decimal   @db.Decimal(15, 2)
+  MinQuantity    Int       @default(2)
+  TargetDrinkIDs String?   @db.NVarChar(500)
+  IsActive       Boolean   @default(true)
+  IsCombo        Boolean   @default(false)
   StartDate      DateTime?
   EndDate        DateTime?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@map("Promotion")
 }
 
 model HighUtilityItemset {
-  HUI_ID          Int      @id @default(autoincrement())
-  Itemset         String   @db.VarChar(255)
-  TotalUtility    Decimal  @db.Decimal(15, 2)
-  SupportCount    Int
-  Rank            Int
-  LastCalculated  DateTime @default(now())
-  
+  HUI_ID         Int      @id @default(autoincrement())
+  Itemset        String   @db.VarChar(255)
+  TotalUtility   Decimal  @db.Decimal(15, 2)
+  SupportCount   Int
+  Rank           Int
+  LastCalculated DateTime @default(now())
+
   @@map("HighUtilityItemset")
 }
 
-model Topping {
-  ToppingID Int      @id @default(autoincrement())
-  Name      String   @unique @db.NVarChar(255)
-  Price     Decimal  @db.Decimal(10, 2)
-  IsActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  OrderDetailToppings OrderDetailTopping[]
-  CartItemToppings    CartItemTopping[]
-
-  @@map("Topping")
-}
-
 model AprioriRule {
-  RuleID      Int      @id @default(autoincrement())
-  Antecedent  String   @db.VarChar(255)
-  Consequent  String   @db.VarChar(255)
-  Support     Decimal  @db.Decimal(10, 4)
-  Confidence  Decimal  @db.Decimal(10, 4)
-  Lift        Decimal  @db.Decimal(10, 4)
-  CreatedAt   DateTime @default(now())
+  RuleID     Int      @id @default(autoincrement())
+  Antecedent String   @db.VarChar(255)
+  Consequent String   @db.VarChar(255)
+  Support    Decimal  @db.Decimal(10, 4)
+  Confidence Decimal  @db.Decimal(10, 4)
+  Lift       Decimal  @db.Decimal(10, 4)
+  CreatedAt  DateTime @default(now())
 
   @@map("AprioriRule")
 }
@@ -568,10 +559,10 @@ model IngredientDisposal {
   Reason              String?  @db.NVarChar(255)
   EmployeeID          Int
   DisposalDate        DateTime @default(now())
-  
-  Ingredient          Ingredient              @relation(fields: [IngredientID], references: [IngredientID], onDelete: NoAction, onUpdate: NoAction)
-  ReceiptDetail       IngredientReceiptDetail @relation(fields: [IngredientReceiptID, IngredientID], references: [IngredientReceiptID, IngredientID], onDelete: NoAction, onUpdate: NoAction)
-  Employee            Employee                @relation("IngredientDisposalEmployee", fields: [EmployeeID], references: [EmployeeID])
+
+  Ingredient    Ingredient              @relation(fields: [IngredientID], references: [IngredientID], onDelete: NoAction, onUpdate: NoAction)
+  ReceiptDetail IngredientReceiptDetail @relation(fields: [IngredientReceiptID, IngredientID], references: [IngredientReceiptID, IngredientID], onDelete: NoAction, onUpdate: NoAction)
+  Employee      Employee                @relation("IngredientDisposalEmployee", fields: [EmployeeID], references: [EmployeeID])
 
   @@map("IngredientDisposal")
 }
@@ -579,14 +570,14 @@ model IngredientDisposal {
 model CustomerToken {
   TokenID    Int      @id @default(autoincrement())
   CustomerID Int
-  Provider   String   @default("FCM") @db.VarChar(50) 
+  Provider   String   @default("FCM") @db.VarChar(50)
   TokenValue String   @db.NVarChar(500)
   DeviceName String?  @db.NVarChar(100)
   IsActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  Customer   Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade)
+  Customer Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade)
 
   @@map("CustomerToken")
 }
@@ -597,11 +588,11 @@ model UserNotification {
   Title          String   @db.NVarChar(255)
   Body           String   @db.NVarChar(Max)
   Type           String   @db.VarChar(50) // PROMOTION, ORDER_UPDATE, SYSTEM
-  IsRead         Boolean  @default(false) 
-  ActionLink     String?  @db.NVarChar(500) 
+  IsRead         Boolean  @default(false)
+  ActionLink     String?  @db.NVarChar(500)
   createdAt      DateTime @default(now())
 
-  Customer       Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade)
+  Customer Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade)
 
   @@map("UserNotification")
 }
@@ -611,22 +602,22 @@ model NotificationQueue {
   CustomerID   Int
   Title        String   @db.NVarChar(255)
   Body         String   @db.NVarChar(Max)
-  DataPayload  String?  @db.NVarChar(Max) 
+  DataPayload  String?  @db.NVarChar(Max)
   Status       String   @default("PENDING") @db.VarChar(50) // PENDING, PROCESSING, SENT, FAILED
   RetryCount   Int      @default(0)
   ErrorMessage String?  @db.NVarChar(Max)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  Customer     Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade)
+  Customer Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: Cascade)
 
   @@map("NotificationQueue")
 }
 
 model CustomerVoucher {
-  CustomerID Int
-  VoucherID  Int
-  IsUsed     Boolean @default(false)
+  CustomerID  Int
+  VoucherID   Int
+  IsUsed      Boolean  @default(false)
   CollectedAt DateTime @default(now())
 
   Customer Customer @relation(fields: [CustomerID], references: [CustomerID], onDelete: NoAction, onUpdate: NoAction)
@@ -635,4 +626,3 @@ model CustomerVoucher {
   @@id([CustomerID, VoucherID])
   @@map("CustomerVoucher")
 }
-
