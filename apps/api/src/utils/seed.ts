@@ -282,7 +282,7 @@ export async function seedDatabaseIfEmpty() {
       console.log('Seeding recipes...');
 
       // Drink 1: Trà Ô Long sữa Phêla (DrinkID 1)
-      const r1 = await prisma.recipe.create({ data: { DrinkSizeID: 1 } });
+      const r1 = await prisma.recipe.create({ data: { DrinkID: 1 } });
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r1.RecipeID, IngredientID: 1, Quantity: 0.02 }, // 0.02 Kg trà
@@ -292,7 +292,7 @@ export async function seedDatabaseIfEmpty() {
       });
 
       // Drink 2: Trà sữa Oolong Nhài (DrinkID 2)
-      const r2 = await prisma.recipe.create({ data: { DrinkSizeID: 2 } });
+      const r2 = await prisma.recipe.create({ data: { DrinkID: 2 } });
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r2.RecipeID, IngredientID: 11, Quantity: 0.02 }, // 11 is Trà Ô Long Nhài
@@ -302,7 +302,7 @@ export async function seedDatabaseIfEmpty() {
       });
 
       // Drink 3: Cà phê Cốt dừa Phêla (DrinkID 3)
-      const r3 = await prisma.recipe.create({ data: { DrinkSizeID: 3 } });
+      const r3 = await prisma.recipe.create({ data: { DrinkID: 3 } });
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r3.RecipeID, IngredientID: 7, Quantity: 0.02 }, // Robusta
@@ -312,7 +312,7 @@ export async function seedDatabaseIfEmpty() {
       });
 
       // Drink 4: Trà Ô Long trân châu (DrinkID 4)
-      const r4 = await prisma.recipe.create({ data: { DrinkSizeID: 4 } });
+      const r4 = await prisma.recipe.create({ data: { DrinkID: 4 } });
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r4.RecipeID, IngredientID: 1, Quantity: 0.02 },
@@ -322,7 +322,7 @@ export async function seedDatabaseIfEmpty() {
       });
 
       // Drink 5: Trà Ô Long Nhiệt Đới (DrinkID 5)
-      const r5 = await prisma.recipe.create({ data: { DrinkSizeID: 5 } });
+      const r5 = await prisma.recipe.create({ data: { DrinkID: 5 } });
       await prisma.recipeDetail.createMany({
         data: [
           { RecipeID: r5.RecipeID, IngredientID: 1, Quantity: 0.02 },

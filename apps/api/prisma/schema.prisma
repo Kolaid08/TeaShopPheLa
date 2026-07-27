@@ -18,6 +18,7 @@ model Drink {
   updatedAt        DateTime    @updatedAt
   DrinkSizes       DrinkSize[]
   Reviews          Review[]
+  Recipes          Recipe[]
 
   @@map("Drink")
 }
@@ -48,17 +49,16 @@ model DrinkSize {
   OrderDetails    OrderDetail[]
   CartItems       CartItem[]
   Vouchers        Voucher[]
-  Recipe          Recipe[]
 
   @@map("DrinkSize")
 }
 
 model Recipe {
   RecipeID      Int            @id @default(autoincrement())
-  DrinkSizeID   Int
+  DrinkID       Int
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  DrinkSize     DrinkSize      @relation(fields: [DrinkSizeID], references: [DrinkSizeID], onDelete: Cascade, map: "FK_Recipe_DrinkSize")
+  Drink         Drink          @relation(fields: [DrinkID], references: [DrinkID], onDelete: Cascade, map: "FK_Recipe_Drink")
   RecipeDetails RecipeDetail[]
 
   @@map("Recipe")
