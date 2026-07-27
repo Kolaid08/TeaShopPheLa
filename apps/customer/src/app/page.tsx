@@ -117,15 +117,6 @@ export default function CustomerHome() {
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [isPolling, setIsPolling] = useState(false);
 
-  // Shipping states
-  const [shippingFee, setShippingFee] = useState<number>(0);
-  const [provinces, setProvinces] = useState<any[]>([]);
-  const [districts, setDistricts] = useState<any[]>([]);
-  const [wards, setWards] = useState<any[]>([]);
-  
-  const [selectedProvinceId, setSelectedProvinceId] = useState<number>(0);
-  const [selectedDistrictId, setSelectedDistrictId] = useState<number>(0);
-  const [selectedWardCode, setSelectedWardCode] = useState<string>('');
 
   // Available options
   const [toppingsList, setToppingsList] = useState<{ id: number; name: string; price: number }[]>([]);
@@ -324,39 +315,7 @@ export default function CustomerHome() {
     };
   }, [router]);
 
-  useEffect(() => {
-    api.getProvinces().then(setProvinces);
-  }, []);
 
-  useEffect(() => {
-    if (selectedProvinceId) {
-      api.getDistricts(selectedProvinceId).then(setDistricts);
-      setSelectedDistrictId(0);
-      setSelectedWardCode('');
-      setWards([]);
-      setShippingFee(0);
-    }
-  }, [selectedProvinceId]);
-
-  useEffect(() => {
-    if (selectedDistrictId) {
-      api.getWards(selectedDistrictId).then(setWards);
-      setSelectedWardCode('');
-      setShippingFee(0);
-    }
-  }, [selectedDistrictId]);
-
-  useEffect(() => {
-    if (selectedDistrictId && selectedWardCode && cart.length > 0) {
-      api.calculateFee({
-        to_district_id: selectedDistrictId,
-        to_ward_code: selectedWardCode,
-        items: cart.map(c => ({ DrinkSizeID: c.DrinkSizeID, Quantity: c.Quantity }))
-      }).then(res => setShippingFee(res.fee));
-    } else {
-      setShippingFee(0);
-    }
-  }, [selectedDistrictId, selectedWardCode, cart]);
 
   const saveCartState = (updatedCart: CartItem[]) => {
     setCart(updatedCart);

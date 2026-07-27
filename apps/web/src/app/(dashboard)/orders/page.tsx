@@ -30,6 +30,9 @@ export default function OrdersPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedShipperId, setSelectedShipperId] = useState<number>(0);
   const [isAssigning, setIsAssigning] = useState(false);
+  const [isRefundOpen, setIsRefundOpen] = useState(false);
+  const [refundAmount, setRefundAmount] = useState(0);
+  const [refundReason, setRefundReason] = useState('');
 
   const loadOrders = async () => {
     try {

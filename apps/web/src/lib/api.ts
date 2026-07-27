@@ -117,15 +117,6 @@ export interface IngredientReceipt {
   IngredientReceiptDetails?: IngredientReceiptDetail[];
 }
 
-export interface IngredientReceiptDetail {
-  IngredientReceiptID: number;
-  IngredientID: number;
-  Quantity: number;
-  CostPrice: number;
-  ExpirationDate?: string | null;
-  QuantityRemaining?: number;
-  Ingredient?: { IngredientName: string };
-}
 
 export interface MembershipLevel {
   LevelID: number;
@@ -154,7 +145,7 @@ export interface Order {
   ShopTableID?: number;
   EmployeeID: number;
   CreatedTime: string;
-  OrderStatus: 'PENDING' | 'PREPARING' | 'SHIPPING' | 'COMPLETED' | 'CANCELLED';
+  OrderStatus: 'PENDING' | 'PREPARING' | 'SHIPPING' | 'COMPLETED' | 'CANCELLED' | 'DELIVERY_FAILED';
   TotalPrice: number;
   OrderNote?: string;
   OrderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';

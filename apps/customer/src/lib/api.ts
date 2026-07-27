@@ -590,13 +590,6 @@ export const api = {
           ReceiverPhone: data.ReceiverPhone,
           VoucherCode: data.VoucherCode,
           TotalPrice: data.TotalPrice,
-          DeliveryType: data.DeliveryType,
-          RecipientName: data.RecipientName,
-          RecipientPhone: data.RecipientPhone,
-          DeliveryAddress: data.DeliveryAddress,
-          ProvinceID: data.ProvinceID,
-          DistrictID: data.DistrictID,
-          WardCode: data.WardCode,
           Items: data.Items.map((item) => ({
             DrinkSizeID: item.DrinkSizeID,
             Quantity: item.Quantity,

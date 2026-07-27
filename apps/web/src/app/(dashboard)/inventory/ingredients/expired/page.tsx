@@ -91,7 +91,7 @@ export default function ExpiredIngredients() {
         <div>
           <div className="flex items-center gap-3 mb-1">
             <Link href="/inventory/ingredients">
-              <Button variant="outline" size="icon" className="w-8 h-8 rounded-full">
+              <Button variant="outline" size="sm" className="w-8 h-8 rounded-full p-0 flex items-center justify-center">
                 <ArrowLeft className="w-4 h-4" />
               </Button>
             </Link>

@@ -204,7 +204,7 @@ export default function VouchersManagement() {
                   <TableCell className="text-center">
                     <div className="flex flex-col gap-1 items-center">
                       {v.Status === 'INACTIVE' ? (
-                        <Badge variant="destructive" className="text-[10px]">VÔ HIỆU HÓA</Badge>
+                        <Badge variant="danger" className="text-[10px]">VÔ HIỆU HÓA</Badge>
                       ) : (v.ValidUntil && new Date(v.ValidUntil) < new Date()) ? (
                         <Badge variant="neutral" className="text-[10px]">ĐÃ QUÁ HẠN</Badge>
                       ) : (v.UsedCount >= v.MaxUsage) ? (
@@ -235,7 +235,7 @@ export default function VouchersManagement() {
                       
                       return (
                         <Button
-                          variant={v.Status === 'ACTIVE' ? "outline" : "default"}
+                          variant={v.Status === 'ACTIVE' ? "outline" : "primary"}
                           size="sm"
                           disabled={disableActivate}
                           onClick={() => handleToggleStatus(v)}

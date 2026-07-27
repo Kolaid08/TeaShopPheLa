@@ -124,7 +124,7 @@ export default function MarketingBroadcastPage() {
               <select 
                 className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 value={targetLevelId}
-                onChange={(e) => setTargetLevelId(e.target.value)}
+                onChange={(e) => setTargetLevelId(e.target.value ? Number(e.target.value) : '')}
               >
                 <option value="">-- Tất cả khách hàng --</option>
                 {levels.map(l => (
