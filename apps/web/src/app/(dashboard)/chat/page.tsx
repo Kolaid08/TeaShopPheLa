@@ -29,7 +29,7 @@ export default function LiveChatPage() {
 
   useEffect(() => {
     // Fetch combos once
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/promotions/chatbox-combos`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://teashopphela.onrender.com/api/v1'}/promotions/chatbox-combos`)
       .then(res => res.json())
       .then(data => {
         if (data.data) {
@@ -39,7 +39,7 @@ export default function LiveChatPage() {
       .catch(err => console.error("Error fetching combos:", err));
 
     // 1. Fetch initial sessions
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/chat/admin/sessions`, {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://teashopphela.onrender.com/api/v1'}/chat/admin/sessions`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('phela_token')}`,
       }
@@ -53,7 +53,7 @@ export default function LiveChatPage() {
       .catch(err => console.error("Error fetching sessions:", err));
 
     // 2. Setup socket
-    const newSocket = io(process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'http://localhost:3001', { withCredentials: true });
+    const newSocket = io(process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'https://teashopphela.onrender.com', { withCredentials: true });
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
@@ -82,7 +82,7 @@ export default function LiveChatPage() {
     });
 
     newSocket.on('refresh_sessions', () => {
-      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/chat/admin/sessions`)
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://teashopphela.onrender.com/api/v1'}/chat/admin/sessions`)
         .then(res => res.json())
         .then(data => {
           if (data.data) setSessions(data.data);
@@ -100,13 +100,13 @@ export default function LiveChatPage() {
     const customerId = sessionData?.Customer?.CustomerID || sessionData?.CustomerID || '';
 
     // Fetch full history for this session
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/chat/sessions/${sessionId}`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://teashopphela.onrender.com/api/v1'}/chat/sessions/${sessionId}`)
       .then(res => res.json())
       .then(data => {
         if (data.data) {
           const dbMessages = data.data.Messages || [];
           
-          let comboEndpoint = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/promotions/chatbox-combos`;
+          let comboEndpoint = `${process.env.NEXT_PUBLIC_API_URL || 'https://teashopphela.onrender.com/api/v1'}/promotions/chatbox-combos`;
           if (customerId) comboEndpoint += `?customerId=${customerId}`;
           
           fetch(comboEndpoint)

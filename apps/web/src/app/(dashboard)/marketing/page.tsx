@@ -16,7 +16,7 @@ export default function MarketingBroadcastPage() {
 
   // Lấy danh sách hạng thành viên để lọc
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/customers/levels`, {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://teashopphela.onrender.com/api/v1'}/customers/levels`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('phela_token')}` }
     })
       .then(res => res.json())
@@ -50,7 +50,7 @@ export default function MarketingBroadcastPage() {
         TargetLevelID: targetLevelId !== '' ? Number(targetLevelId) : null
       };
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/marketing/broadcast`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://teashopphela.onrender.com/api/v1'}/marketing/broadcast`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

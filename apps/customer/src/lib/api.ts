@@ -4,7 +4,7 @@
  * to a full-featured client-side Local Storage Database mock.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://teashopphela.onrender.com/api/v1';
 
 // Shared type signatures
 export interface Drink {

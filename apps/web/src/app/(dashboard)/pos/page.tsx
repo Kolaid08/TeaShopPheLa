@@ -99,7 +99,7 @@ export default function PosTerminal() {
   // Real-time socket updates for Admin POS
   useEffect(() => {
     import('socket.io-client').then(({ io }) => {
-      const socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'http://localhost:3001');
+      const socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'https://teashopphela.onrender.com');
       const token = localStorage.getItem('token');
       socket.emit('admin_join', { token: token || 'mock_token_admin' });
 

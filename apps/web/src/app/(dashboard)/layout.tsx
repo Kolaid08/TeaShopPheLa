@@ -69,7 +69,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     // Setup global socket for admin notifications
     if (activeUser && (activeUser.Role === 'ADMIN' || activeUser.Role === 'MANAGER')) {
-      const socket = io(process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'http://localhost:3001', { withCredentials: true });
+      const socket = io(process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'https://teashopphela.onrender.com', { withCredentials: true });
       socket.on('connect', () => {
         socket.emit('admin_join');
       });

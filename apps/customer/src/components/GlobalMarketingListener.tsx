@@ -16,7 +16,7 @@ export function GlobalMarketingListener() {
     setIsClaiming(true);
     try {
       const token = localStorage.getItem('phela_customer_token');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/vouchers/claim`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://teashopphela.onrender.com/api/v1'}/vouchers/claim`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -45,7 +45,7 @@ export function GlobalMarketingListener() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('phela_customer_token') : null;
     if (!token) return;
 
-    const socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'http://localhost:3001');
+    const socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'https://teashopphela.onrender.com');
     socket.emit('customer_join', { token });
 
     socket.on('marketing_broadcast', (payload: any) => {
