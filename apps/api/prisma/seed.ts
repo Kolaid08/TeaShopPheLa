@@ -454,9 +454,9 @@ async function main() {
     { Name: 'Nha Đam', Price: 10000, IsActive: true }
   ];
   for (const t of toppingsData) {
-    const exists = await prisma.topping.findFirst({ where: { Name: t.Name } });
+    const exists = await prisma.topping.findFirst({ where: { ToppingName: t.Name } });
     if (!exists) {
-      await prisma.topping.create({ data: t });
+      await prisma.topping.create({ data: { ToppingName: t.Name, Price: t.Price, IsActive: t.IsActive } });
     }
   }
   const allToppings = await prisma.topping.findMany();

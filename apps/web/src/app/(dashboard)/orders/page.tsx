@@ -47,7 +47,7 @@ export default function OrdersPage() {
     api.getEmployees().then(list => setEmployees(list.filter(e => e.Role?.RoleName === 'Shipper' || !e.Role || e.Role?.RoleName === 'STAFF'))).catch(() => {});
 
     // Khởi tạo Socket.IO client kết nối đến Backend
-    const socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3001');
+    const socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'http://localhost:3001');
 
     // Join admin room
     const token = localStorage.getItem('token');

@@ -45,7 +45,7 @@ export function GlobalMarketingListener() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('phela_customer_token') : null;
     if (!token) return;
 
-    const socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3001');
+    const socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'http://localhost:3001');
     socket.emit('customer_join', { token });
 
     socket.on('marketing_broadcast', (payload: any) => {

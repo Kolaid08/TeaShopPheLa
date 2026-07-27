@@ -92,7 +92,7 @@ export default function HistoryPage() {
     const token = localStorage.getItem('phela_customer_token');
     let socket: any;
     if (token) {
-      socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3001');
+      socket = io(process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'http://localhost:3001');
       socket.emit('customer_join', { token });
       
       socket.on('order_status_updated', (updatedOrder: any) => {

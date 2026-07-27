@@ -50,7 +50,7 @@ export function ChatWidget() {
 
   useEffect(() => {
     // Initialize socket connection
-    const newSocket = io('http://localhost:3001', {
+    const newSocket = io(process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '') : 'http://localhost:3001', {
       withCredentials: true,
     });
     setSocket(newSocket);
