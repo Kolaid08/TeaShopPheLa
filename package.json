@@ -14,11 +14,9 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,css}\"",
     "start": "npm run start -w apps/api"
   },
-  "devDependencies": {
+  "dependencies": {
+    "typescript": "5.4.5",
     "concurrently": "^8.2.2",
     "prettier": "^3.2.5"
-  },
-  "dependencies": {
-    "typescript": "5.4.5"
   }
 }
