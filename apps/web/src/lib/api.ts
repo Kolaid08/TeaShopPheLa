@@ -569,7 +569,7 @@ export const api = {
       ...options.headers,
     };
 
-    const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+    const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers, cache: 'no-store' });
     const payload = await res.json();
     if (!res.ok) {
       const err: any = new Error(payload.message || 'Lỗi từ hệ thống (Backend).');

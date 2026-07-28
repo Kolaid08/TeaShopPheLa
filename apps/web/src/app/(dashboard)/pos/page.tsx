@@ -120,9 +120,17 @@ export default function PosTerminal() {
   }, []);
 
   // Filter drinks
-  const filteredDrinks = drinks.filter((d) => {
+  const filteredDrinks = (drinks || []).filter((d) => {
+    if (!d || !d.DrinkName) return false;
     const matchesSearch = d.DrinkName.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch && d.DrinkStatus === 'ACTIVE';
+    const matchesCat = 
+      selectedCategory === 'ALL' || 
+      (selectedCategory === 'Oolong' && d.DrinkName.toLowerCase().includes('long')) ||
+      (selectedCategory === 'Sữa' && d.DrinkName.toLowerCase().includes('sữa')) ||
+      (selectedCategory === 'Cà phê' && d.DrinkName.toLowerCase().includes('cà phê'));
+      
+    const isActive = d.DrinkStatus === 'ACTIVE' || d.DrinkStatus === 'Available' || !d.DrinkStatus;
+    return matchesSearch && matchesCat && isActive;
   });
 
   const handleLookupCustomer = async () => {
