@@ -124,7 +124,7 @@ export default function CustomerHome() {
   useEffect(() => {
     api.getToppings().then((data) => {
       if (data && data.length > 0) {
-        setToppingsList(data.map((t: any) => ({ id: t.ToppingID, name: t.Name, price: Number(t.Price) })));
+        setToppingsList(data.map((t: any) => ({ id: t.ToppingID, name: t.ToppingName, price: Number(t.Price) })));
       }
     });
   }, []);

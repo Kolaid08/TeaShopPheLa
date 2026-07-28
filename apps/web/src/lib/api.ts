@@ -1553,7 +1553,13 @@ export const api = {
   },
 
   // PROMOTIONS
-  getPromotions: async () => await api.request('/promotions'),
+  getPromotions: async () => {
+    try {
+      return await api.request('/promotions');
+    } catch {
+      return [];
+    }
+  },
   createPromotion: async (data: any) => await api.request('/promotions', { method: 'POST', body: JSON.stringify(data) }),
   updatePromotion: async (id: number, data: any) => await api.request(`/promotions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePromotion: async (id: number) => await api.request(`/promotions/${id}`, { method: 'DELETE' }),
