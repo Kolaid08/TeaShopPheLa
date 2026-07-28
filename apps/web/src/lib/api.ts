@@ -519,7 +519,7 @@ export const api = {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ PINCode, password: password || 'password123' }),
+        body: JSON.stringify({ PINCode, password: password || '123456' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Login failed');

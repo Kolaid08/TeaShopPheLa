@@ -28,6 +28,7 @@ import shippingRouter from '../modules/shipping/shipping.router';
 import analyticsRouter from '../modules/analytics/analytics.router';
 import notificationsRouter from '../modules/notifications/notifications.router';
 import marketingRouter from '../modules/marketing/marketing.router';
+import toppingsRouter from '../modules/toppings/toppings.router';
 
 const router = Router();
 
@@ -40,6 +41,7 @@ router.get('/health', (_req, res) => {
 router.use('/auth', authRouter);
 router.use('/drinks', drinksRouter);
 router.use('/sizes', sizesRouter);
+router.use('/toppings', toppingsRouter);
 router.use('/drink-sizes', drinkSizesRouter);
 router.use('/recipes', recipesRouter);
 router.use('/ingredients', ingredientsRouter);
