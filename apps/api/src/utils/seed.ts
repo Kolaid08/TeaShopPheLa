@@ -1,9 +1,36 @@
 import { prisma } from './prisma';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
 
 export async function seedDatabaseIfEmpty() {
   try {
-    console.log('Checking database seed state...');
+    const seedSqlPath = path.join(__dirname, '../../prisma/seed_data.sql');
+    if (fs.existsSync(seedSqlPath)) {
+      console.log('Detected seed_data.sql! Executing custom SQL seed...');
+      const sqlContent = fs.readFileSync(seedSqlPath, 'utf8');
+      const statements = sqlContent.split(/\r?\nGO\r?\n|\r?\nGO$/i)
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && !s.toLowerCase().startsWith('use '));
+
+      for (let i = 0; i < statements.length; i++) {
+        const stmt = statements[i];
+        if (!stmt) continue;
+        try {
+          await prisma.$executeRawUnsafe(stmt);
+        } catch (e: any) {
+          console.warn(`[Warning] Failed to execute batch ${i + 1}: ${e.message}`);
+        }
+      }
+      console.log(`Executed ${statements.length} SQL batches successfully.`);
+      
+      // Rename file so it doesn't run again on next restart
+      fs.renameSync(seedSqlPath, `${seedSqlPath}.done`);
+      console.log('Renamed seed_data.sql to seed_data.sql.done');
+      return;
+    }
+
+    console.log('Checking database seed state (Default)...');
 
     // 1. Employee Roles
     const roleCount = await prisma.employeeRole.count();

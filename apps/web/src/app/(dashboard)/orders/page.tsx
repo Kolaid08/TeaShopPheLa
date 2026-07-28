@@ -454,7 +454,7 @@ export default function OrdersPage() {
                             {item.Ice && <span className="border border-border rounded px-1">Đá {item.Ice}</span>}
                             {item.Toppings && item.Toppings.length > 0 && (
                               <span className="border border-border rounded px-1">
-                                + {item.Toppings.map((t: any) => t.Topping.Name).join(', ')}
+                                + {item.Toppings.map((t: any) => t.Topping.ToppingName).join(', ')}
                               </span>
                             )}
                           </>
