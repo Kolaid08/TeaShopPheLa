@@ -1458,7 +1458,41 @@ router.patch('/:id/status', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF',
             if (cust) {
                const newTotal = Math.max(0, Number(cust.TotalMoneySpending) - Number(order.TotalPrice));
                await tx.customer.update({ where: { CustomerID: order.CustomerID }, data: { TotalMoneySpending: newTotal }});
-               await upgradeCustomerLevel(order.CustomerID, tx);
+              await upgradeCustomerLevel(order.CustomerID, tx);
+            }
+          }
+        }
+
+        // Refund voucher logic & Compensation
+        if (order.VoucherID) {
+          const voucher = await tx.voucher.findUnique({ where: { VoucherID: order.VoucherID } });
+          if (voucher) {
+            await tx.voucher.update({
+              where: { VoucherID: order.VoucherID },
+              data: { UsedCount: { decrement: 1 } },
+            });
+
+            // If expired, create a compensation voucher for the customer (if order has CustomerID)
+            const now = new Date();
+            if (voucher.ValidUntil && voucher.ValidUntil < now && order.CustomerID) {
+              const compCode = `COMPENSATE-${order.OrderID}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+              const newValidUntil = new Date();
+              newValidUntil.setDate(newValidUntil.getDate() + 7); // Valid for next 7 days
+              
+              await tx.voucher.create({
+                data: {
+                  Code: compCode,
+                  DiscountType: voucher.DiscountType,
+                  DiscountValue: voucher.DiscountValue,
+                  TargetProductID: voucher.TargetProductID,
+                  OwnerID: order.CustomerID,
+                  Creator: 'SYSTEM_COMPENSATION',
+                  MaxUsage: 1,
+                  UsedCount: 0,
+                  ValidUntil: newValidUntil,
+                  Status: 'ACTIVE'
+                }
+              });
             }
           }
         }
