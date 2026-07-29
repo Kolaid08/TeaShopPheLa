@@ -704,9 +704,13 @@ export const api = {
 
   submitReview: async (data: { CustomerID: number; DrinkID: number; OrderID: number; Rating: number; Comment: string }): Promise<any> => {
     try {
+      const token = localStorage.getItem('phela_customer_token');
       const res = await fetch(`${API_BASE}/reviews`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(data),
       });
       const payload = await res.json();
