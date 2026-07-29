@@ -1351,7 +1351,7 @@ router.post('/:id/refund', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF'])
         updateData.RefundStatus = 'PENDING';
         if (RefundReason) updateData.RefundReason = RefundReason;
         
-        if (order.PaymentMethod === 'PAYOS') {
+        if (order.PaymentMethod && order.PaymentMethod !== 'CASH') {
           if (!RefundBankCode || !RefundAccountNumber || !RefundAccountName) {
             throw new AppError(400, 'Vui lòng điền đủ thông tin tài khoản ngân hàng của khách để hoàn tiền.');
           }

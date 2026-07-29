@@ -620,7 +620,7 @@ export default function OrdersPage() {
             />
           </div>
 
-          {selectedOrder?.PaymentMethod === 'PAYOS' && (
+          {selectedOrder?.PaymentMethod && selectedOrder.PaymentMethod !== 'CASH' && (
             <div className="space-y-3 mt-4 border-t border-border pt-4">
               <div className="flex gap-2">
                 <div className="flex-1 space-y-2">
