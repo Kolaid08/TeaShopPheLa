@@ -784,7 +784,7 @@ export const api = {
       const headers: HeadersInit = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`${API_BASE}/vouchers/customer/${customerId}`, { headers });
+      const res = await fetch(`${API_BASE}/vouchers/customer/${customerId}`, { headers, cache: 'no-store' });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Lỗi khi lấy danh sách voucher');
