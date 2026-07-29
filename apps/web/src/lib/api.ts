@@ -1236,11 +1236,15 @@ export const api = {
     }
   },
 
-  refundOrder: async (id: number, amount: number, reason: string): Promise<Order> => {
+  refundOrder: async (id: number, amount: number, reason: string, bankDetails?: { RefundBankCode: string, RefundAccountNumber: string, RefundAccountName: string }): Promise<Order> => {
     try {
       return await api.request(`/orders/${id}/refund`, {
         method: 'POST',
-        body: JSON.stringify({ RefundAmount: amount, RefundReason: reason }),
+        body: JSON.stringify({ 
+          RefundAmount: amount, 
+          RefundReason: reason,
+          ...(bankDetails || {})
+        }),
       });
     } catch (err: any) {
       throw new Error(err.message || 'Lỗi hệ thống khi hoàn tiền.');

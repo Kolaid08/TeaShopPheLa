@@ -1335,7 +1335,7 @@ router.post('/:id/refund', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF'])
     const orderId = parseInt(req.params.id || '');
     if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
 
-    const { RefundAmount, RefundReason } = req.body;
+    const { RefundAmount, RefundReason, RefundBankCode, RefundAccountNumber, RefundAccountName } = req.body;
 
     const order = await prisma.orders.findUnique({ where: { OrderID: orderId } });
     if (!order) throw new AppError(404, 'Order not found.');
@@ -1350,7 +1350,15 @@ router.post('/:id/refund', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF'])
       if (order.PaymentStatus === 'PAID') {
         updateData.RefundStatus = 'PENDING';
         if (RefundReason) updateData.RefundReason = RefundReason;
-        // If DB schema requires RefundAmount, it can be saved. For now, stringify into reason or ignore if not in schema.
+        
+        if (order.PaymentMethod === 'PAYOS') {
+          if (!RefundBankCode || !RefundAccountNumber || !RefundAccountName) {
+            throw new AppError(400, 'Vui lòng điền đủ thông tin tài khoản ngân hàng của khách để hoàn tiền.');
+          }
+          updateData.RefundBankCode = RefundBankCode;
+          updateData.RefundAccountNumber = RefundAccountNumber;
+          updateData.RefundAccountName = RefundAccountName;
+        }
       }
 
       const updated = await tx.orders.update({

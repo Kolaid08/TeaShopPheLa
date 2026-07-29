@@ -33,6 +33,9 @@ export default function OrdersPage() {
   const [isRefundOpen, setIsRefundOpen] = useState(false);
   const [refundAmount, setRefundAmount] = useState(0);
   const [refundReason, setRefundReason] = useState('');
+  const [refundBankCode, setRefundBankCode] = useState('MB');
+  const [refundAccountNumber, setRefundAccountNumber] = useState('');
+  const [refundAccountName, setRefundAccountName] = useState('');
 
   const loadOrders = async () => {
     try {
@@ -201,7 +204,11 @@ export default function OrdersPage() {
   const handleRefundSubmit = async () => {
     if (!selectedOrder) return;
     try {
-      await api.refundOrder(selectedOrder.OrderID, refundAmount, refundReason);
+      await api.refundOrder(selectedOrder.OrderID, refundAmount, refundReason, {
+        RefundBankCode: refundBankCode,
+        RefundAccountNumber: refundAccountNumber,
+        RefundAccountName: refundAccountName,
+      });
       toast.success(`Đã hoàn tiền ${refundAmount.toLocaleString('vi-VN')} đ cho đơn hàng #${selectedOrder.OrderID}`);
       setIsRefundOpen(false);
       loadOrders();
@@ -612,6 +619,40 @@ export default function OrdersPage() {
               placeholder="Khách đổi ý, hết nguyên liệu..."
             />
           </div>
+
+          {selectedOrder?.PaymentMethod === 'PAYOS' && (
+            <div className="space-y-3 mt-4 border-t border-border pt-4">
+              <div className="flex gap-2">
+                <div className="flex-1 space-y-2">
+                  <label className="text-xs font-bold text-muted-foreground">Ngân hàng (Mã)</label>
+                  <Input
+                    value={refundBankCode}
+                    onChange={(e) => setRefundBankCode(e.target.value.toUpperCase())}
+                    placeholder="VD: MB, VCB, TCB"
+                  />
+                </div>
+                <div className="flex-[2] space-y-2">
+                  <label className="text-xs font-bold text-muted-foreground">Số tài khoản</label>
+                  <Input
+                    value={refundAccountNumber}
+                    onChange={(e) => setRefundAccountNumber(e.target.value)}
+                    placeholder="Số tài khoản ngân hàng khách"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-muted-foreground">Tên chủ tài khoản</label>
+                <Input
+                  value={refundAccountName}
+                  onChange={(e) => setRefundAccountName(e.target.value.toUpperCase())}
+                  placeholder="TÊN IN HOA KHÔNG DẤU"
+                />
+              </div>
+              <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
+                * Đơn hàng thanh toán qua QR. Thu ngân hãy xin thông tin thẻ của khách. Quản lý sẽ đối soát và chuyển khoản trả sau.
+              </p>
+            </div>
+          )}
 
           <div className="pt-4 border-t border-border flex justify-end gap-3">
             <Button variant="outline" onClick={() => setIsRefundOpen(false)}>Hủy bỏ</Button>
