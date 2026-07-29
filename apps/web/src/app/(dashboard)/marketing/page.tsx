@@ -117,7 +117,7 @@ export default function MarketingBroadcastPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-1.5 block flex items-center gap-2">
+              <label className="text-sm font-medium mb-1.5 flex items-center gap-2">
                 <Filter className="w-4 h-4 text-muted-foreground" />
                 Đối tượng khách hàng
               </label>
@@ -154,7 +154,7 @@ export default function MarketingBroadcastPage() {
 
             {type === 'VOUCHER_DROP' && (
               <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                <label className="text-sm font-medium mb-1.5 block text-amber-600 flex items-center gap-2">
+                <label className="text-sm font-medium mb-1.5 text-amber-600 flex items-center gap-2">
                   Mã Voucher đính kèm
                 </label>
                 <Input 

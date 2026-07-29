@@ -132,7 +132,7 @@ const orderItemSchema = z.object({
   Sugar: z.string().optional(),
   Ice: z.string().optional(),
   Toppings: z.union([z.string(), z.array(z.number())]).optional(),
-  UnitPrice: z.number().positive(),
+  UnitPrice: z.number().nonnegative(),
 });
 
 const createOrderSchema = z.object({
@@ -142,7 +142,7 @@ const createOrderSchema = z.object({
   ShopTableID: z.number().int().optional().nullable(),
   OrderNote: z.string().max(500).optional().nullable(),
   Items: z.array(orderItemSchema).min(1),
-  TotalPrice: z.number().positive().optional(),
+  TotalPrice: z.number().nonnegative().optional(),
   OrderType: z.enum(['DINE_IN', 'TAKEAWAY', 'DELIVERY']).optional(),
   ShippingAddress: z.string().optional().nullable(),
   ProvinceID: z.number().int().optional().nullable(),
