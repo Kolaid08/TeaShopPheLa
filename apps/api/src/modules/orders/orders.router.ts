@@ -728,14 +728,6 @@ router.post('/customer-place', optionalAuth, async (req, res, next) => {
           }
         }
 
-        if (usedVoucherId) {
-          // @ts-ignore
-          await tx.voucher.update({
-            where: { VoucherID: usedVoucherId },
-            data: { UsedCount: { increment: 1 } }
-          });
-        }
-
         return tx.orders.findUnique({
           where: { OrderID: order.OrderID },
           include: {
