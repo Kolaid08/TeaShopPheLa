@@ -1329,6 +1329,62 @@ router.get('/refunds', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF']), as
   }
 });
 
+// POST /:id/refund - Employee requests a refund
+router.post('/:id/refund', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF']), async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id || '');
+    if (isNaN(orderId)) throw new AppError(400, 'Invalid ID format.');
+
+    const { RefundAmount, RefundReason } = req.body;
+
+    const order = await prisma.orders.findUnique({ where: { OrderID: orderId } });
+    if (!order) throw new AppError(404, 'Order not found.');
+
+    if (order.OrderStatus === 'CANCELLED') {
+      throw new AppError(400, 'Đơn hàng đã bị hủy trước đó.');
+    }
+
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      const updateData: any = { OrderStatus: 'CANCELLED' };
+      
+      if (order.PaymentStatus === 'PAID') {
+        updateData.RefundStatus = 'PENDING';
+        if (RefundReason) updateData.RefundReason = RefundReason;
+        // If DB schema requires RefundAmount, it can be saved. For now, stringify into reason or ignore if not in schema.
+      }
+
+      const updated = await tx.orders.update({
+        where: { OrderID: orderId },
+        data: updateData
+      });
+
+      // Refund voucher if cancelled
+      if (order.VoucherID) {
+        await tx.voucher.update({
+          where: { VoucherID: order.VoucherID },
+          data: { UsedCount: { decrement: 1 } },
+        });
+      }
+
+      // Reverse spend if it was COMPLETED
+      if (order.OrderStatus === 'COMPLETED' && order.CustomerID) {
+        const cust = await tx.customer.findUnique({ where: { CustomerID: order.CustomerID } });
+        if (cust) {
+           const newTotal = Math.max(0, Number(cust.TotalMoneySpending) - Number(order.TotalPrice));
+           await tx.customer.update({ where: { CustomerID: order.CustomerID }, data: { TotalMoneySpending: newTotal }});
+           await upgradeCustomerLevel(order.CustomerID, tx);
+        }
+      }
+
+      return updated;
+    });
+
+    return sendResponse(res, 200, true, 'Yêu cầu hoàn tiền đã được ghi nhận.', updatedOrder);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PUT /:id/refund - Admin mark refund as completed
 router.put('/:id/refund', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
@@ -1370,10 +1426,12 @@ router.patch('/:id/status', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF',
 
     const updatedOrder = await prisma.$transaction(async (tx) => {
       // Logic dedu trừ nguyên liệu / hoàn lại
-      if (order.OrderStatus !== 'COMPLETED' && validatedData.OrderStatus === 'COMPLETED') {
-        // Hoàn tất đơn -> trừ nguyên liệu
+      if (order.OrderStatus === 'PENDING' && ['PREPARING', 'SHIPPING', 'COMPLETED'].includes(validatedData.OrderStatus)) {
+        // Bắt đầu pha chế -> trừ nguyên liệu
         await processOrderIngredients(tx, order.OrderDetails, 'deduct');
-
+      }
+      
+      if (order.OrderStatus !== 'COMPLETED' && validatedData.OrderStatus === 'COMPLETED') {
         // Check level upgrade
         if (order.CustomerID) {
           const cust = await tx.customer.findUnique({ where: { CustomerID: order.CustomerID } });
@@ -1384,9 +1442,8 @@ router.patch('/:id/status', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF',
           }
         }
       } else if (order.OrderStatus !== 'CANCELLED' && validatedData.OrderStatus === 'CANCELLED') {
-        // Hủy đơn -> hoàn nguyên liệu
+        // Hủy đơn -> Không hoàn nguyên liệu (Hao phí)
         if (order.OrderStatus === 'COMPLETED') {
-          await processOrderIngredients(tx, order.OrderDetails, 'refund');
           // Reverse spend
           if (order.CustomerID) {
             const cust = await tx.customer.findUnique({ where: { CustomerID: order.CustomerID } });
