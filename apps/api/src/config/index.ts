@@ -13,7 +13,7 @@ export const config = {
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET || 'fallback_access_secret_key_123',
     refreshSecret: process.env.JWT_REFRESH_SECRET || 'fallback_refresh_secret_key_123',
-    accessExpiry: process.env.JWT_ACCESS_EXPIRY || '15m',
+    accessExpiry: process.env.JWT_ACCESS_EXPIRY || '7d',
     refreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d',
   },
   databaseUrl: process.env.DATABASE_URL || '',
