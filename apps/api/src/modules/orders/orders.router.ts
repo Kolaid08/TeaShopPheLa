@@ -1458,13 +1458,84 @@ router.patch('/:id/status', verifyJWT, requireRole(['ADMIN', 'MANAGER', 'STAFF',
       }
       
       if (order.OrderStatus !== 'COMPLETED' && validatedData.OrderStatus === 'COMPLETED') {
-        // Check level upgrade
+         // Check level upgrade & Referral logic
         if (order.CustomerID) {
           const cust = await tx.customer.findUnique({ where: { CustomerID: order.CustomerID } });
           if (cust) {
              const newTotal = Number(cust.TotalMoneySpending) + Number(order.TotalPrice);
              await tx.customer.update({ where: { CustomerID: order.CustomerID }, data: { TotalMoneySpending: newTotal }});
              await upgradeCustomerLevel(order.CustomerID, tx);
+
+             // REFERRAL LOGIC: Reward for first completed order
+             if (cust.ReferredBy) {
+               const completedOrdersCount = await tx.orders.count({
+                 where: { CustomerID: order.CustomerID, OrderStatus: 'COMPLETED' }
+               });
+               
+               // Since current order is not yet saved as COMPLETED in DB, count will be 0 if this is the first one
+               if (completedOrdersCount === 0) {
+                 const refCust = await tx.customer.findUnique({ where: { CustomerID: cust.ReferredBy } });
+                 if (refCust) {
+                   const now = new Date();
+                   const validUntil = new Date(now);
+                   validUntil.setDate(validUntil.getDate() + 30); // 30 days expiry
+
+                   // Generate 10% voucher for new user
+                   const newCustomerVoucherCode = `REF-NEW-${order.CustomerID}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+                   await tx.voucher.create({
+                     data: {
+                       Code: newCustomerVoucherCode,
+                       DiscountType: 'PERCENT',
+                       DiscountValue: 10,
+                       OwnerID: order.CustomerID,
+                       Creator: 'SYSTEM_REFERRAL',
+                       MaxUsage: 1,
+                       UsedCount: 0,
+                       ValidUntil: validUntil,
+                       Status: 'ACTIVE',
+                     }
+                   });
+
+                   // Notify new user
+                   await tx.userNotification.create({
+                     data: {
+                       CustomerID: order.CustomerID,
+                       Title: 'Quà tặng hoàn thành đơn hàng đầu tiên!',
+                       Body: 'Chúc mừng bạn đã hoàn thành đơn hàng đầu tiên! Phêla tặng bạn 1 Voucher giảm 10% (Hạn dùng 30 ngày) cho lần đặt hàng kế tiếp. Kiểm tra Ví Voucher ngay nhé!',
+                       Type: 'PROMOTION',
+                       ActionLink: '/vouchers'
+                     }
+                   });
+
+                   // Generate 10% voucher for referrer
+                   const referrerVoucherCode = `REF-THX-${cust.ReferredBy}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+                   await tx.voucher.create({
+                     data: {
+                       Code: referrerVoucherCode,
+                       DiscountType: 'PERCENT',
+                       DiscountValue: 10,
+                       OwnerID: cust.ReferredBy,
+                       Creator: 'SYSTEM_REFERRAL',
+                       MaxUsage: 1,
+                       UsedCount: 0,
+                       ValidUntil: validUntil,
+                       Status: 'ACTIVE',
+                     }
+                   });
+
+                   // Notify referrer
+                   await tx.userNotification.create({
+                     data: {
+                       CustomerID: cust.ReferredBy,
+                       Title: 'Bạn bè đã đặt hàng thành công!',
+                       Body: `Người bạn mà bạn giới thiệu (SĐT: ...${cust.PhoneNumber.slice(-4)}) vừa hoàn thành đơn hàng đầu tiên. Phêla tặng bạn 1 Voucher giảm 10% (Hạn dùng 30 ngày) như một lời cảm ơn. Kiểm tra Ví Voucher ngay nhé!`,
+                       Type: 'PROMOTION',
+                       ActionLink: '/vouchers'
+                     }
+                   });
+                 }
+               }
+             }
           }
         }
       } else if (order.OrderStatus !== 'CANCELLED' && validatedData.OrderStatus === 'CANCELLED') {
