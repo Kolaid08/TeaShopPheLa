@@ -25,7 +25,7 @@ initFirebase();
 // Start Background Jobs
 startCronJobs();
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, async () => {
   initSocketIo(server);
   console.log(`==================================================`);
   console.log(`  Phêla Shop Management API System Running...`);
@@ -33,6 +33,14 @@ const server = app.listen(config.port, () => {
   console.log(`  Environment: ${config.nodeEnv}`);
   console.log(`  Base Endpoint: http://localhost:${config.port}/api/${config.apiVersion}`);
   console.log(`  Health Endpoint: http://localhost:${config.port}/health`);
+  
+  try {
+    const ipRes = await fetch('https://api.ipify.org?format=json');
+    const ipData = await ipRes.json();
+    console.log(`  🔥 PUBLIC IP (GHN Whitelist): ${ipData.ip} 🔥`);
+  } catch (err) {
+    console.log(`  Could not fetch Public IP.`);
+  }
   console.log(`==================================================`);
 });
 
