@@ -216,7 +216,7 @@ export interface Salary {
   Deduction: number;
   RealSalary: number;
   PaidDate?: string;
-  Employee?: { FullName: string; Role?: { RoleName: string } };
+  Employee?: { FullName: string; Role?: { RoleName: string; SalaryType?: string } };
 }
 
 export interface Shift {
@@ -234,7 +234,7 @@ export interface ShiftLog {
   WorkDate: string;
   CheckInTime?: string;
   CheckOutTime?: string;
-  ShiftStatus: 'PRESENT' | 'ABSENT' | 'LATE';
+  ShiftStatus: 'PRESENT' | 'ABSENT' | 'LATE' | 'SCHEDULED';
   Employee?: { FullName: string };
   Shift?: { ShiftName: string; StartTime: string; EndTime: string };
 }
@@ -1371,6 +1371,25 @@ export const api = {
       }));
     }
   },
+  scheduleShift: async (data: { EmployeeID: number; ShiftID: number; WorkDate: string }): Promise<any> => {
+    try {
+      return await api.request('/shift-logs/schedule', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi xếp ca');
+    }
+  },
+  unscheduleShift: async (id: number): Promise<any> => {
+    try {
+      return await api.request(`/shift-logs/schedule/${id}`, {
+        method: 'DELETE',
+      });
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi xóa xếp ca');
+    }
+  },
   checkIn: async (shiftId: number): Promise<ShiftLog> => {
     try {
       return await api.request('/shift-logs/check-in', {
@@ -1552,7 +1571,15 @@ export const api = {
     try {
       return await api.request('/carts/admin/abandoned/mock', { method: 'POST' });
     } catch (e: any) {
-      throw new Error(e.message || 'Lỗi mock carts');
+      throw new Error(e.message || 'Lỗi');
+    }
+  },
+
+  notifyAbandonedCart: async (cartId: number): Promise<any> => {
+    try {
+      return await api.request(`/carts/admin/abandoned/${cartId}/notify`, { method: 'POST' });
+    } catch (e: any) {
+      throw new Error(e.message || 'Lỗi gửi thông báo giỏ hàng');
     }
   },
 

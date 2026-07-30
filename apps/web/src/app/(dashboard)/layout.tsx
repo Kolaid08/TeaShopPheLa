@@ -124,26 +124,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   };
 
-  const navLinks = [
-    { name: 'Hoạt động cửa hàng', path: '/analytics', icon: TrendingUp, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'POS bán hàng', path: '/pos', icon: Coffee, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
-    { name: 'Hóa đơn & Đơn hàng', path: '/orders', icon: ShoppingBag, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
-    { name: 'Yêu cầu Hoàn tiền', path: '/refunds', icon: Undo2, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Đồ uống (Menu)', path: '/menu/drinks', icon: Layers, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Topping (Menu)', path: '/menu/toppings', icon: Layers, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Kho nguyên liệu', path: '/inventory/ingredients', icon: Clock, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
-    { name: 'Hóa đơn nhập kho', path: '/inventory/receipts', icon: FileText, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Nhà cung cấp', path: '/inventory/suppliers', icon: Users, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Khách hàng (Loyalty)', path: '/customers', icon: Users, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Mã Giảm Giá (Vouchers)', path: '/vouchers', icon: DollarSign, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Combo Khuyến Mãi', path: '/promotions', icon: Gift, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Giỏ Hàng Bỏ Quên', path: '/abandoned-carts', icon: ShoppingBag, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Tài khoản Barista', path: '/employees', icon: Users, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Tính lương (Salary)', path: '/salary', icon: DollarSign, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Quản lý Rota & Công', path: '/shift-logs', icon: Calendar, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
-    { name: 'Chiến dịch Marketing', path: '/marketing', icon: BellRing, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Live Chat (CSKH)', path: '/chat', icon: MessageCircle, roles: ['ADMIN', 'MANAGER'] },
-  ];
+    const navLinks = [
+      { name: 'Hoạt động cửa hàng', path: '/analytics', icon: TrendingUp, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'POS bán hàng', path: '/pos', icon: Coffee, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
+      { name: 'Hóa đơn & Đơn hàng', path: '/orders', icon: ShoppingBag, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
+      { name: 'Yêu cầu Hoàn tiền', path: '/refunds', icon: Undo2, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Đồ uống (Menu)', path: '/menu/drinks', icon: Layers, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Topping (Menu)', path: '/menu/toppings', icon: Layers, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Kho nguyên liệu', path: '/inventory/ingredients', icon: Clock, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
+      { name: 'Hóa đơn nhập kho', path: '/inventory/receipts', icon: FileText, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Nhà cung cấp', path: '/inventory/suppliers', icon: Users, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Khách hàng (Loyalty)', path: '/customers', icon: Users, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Mã Giảm Giá (Vouchers)', path: '/vouchers', icon: DollarSign, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Combo Khuyến Mãi', path: '/promotions', icon: Gift, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Giỏ Hàng Bỏ Quên', path: '/abandoned-carts', icon: ShoppingBag, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Tài khoản Barista', path: '/employees', icon: Users, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Xếp ca (Rota)', path: '/hr/rota', icon: Calendar, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Bảng công điểm danh', path: '/shift-logs', icon: Calendar, roles: ['ADMIN', 'MANAGER', 'STAFF'] },
+      { name: 'Tính lương (Salary)', path: '/salary', icon: DollarSign, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Chiến dịch Marketing', path: '/marketing', icon: BellRing, roles: ['ADMIN', 'MANAGER'] },
+      { name: 'Live Chat (CSKH)', path: '/chat', icon: MessageCircle, roles: ['ADMIN', 'MANAGER'] },
+    ];
 
   return (
     <div className="min-h-screen flex bg-background">

@@ -248,61 +248,63 @@ export default function ToppingsMenu() {
         onClose={() => setIsFormOpen(false)}
         title={selectedTopping ? 'Cập nhật Topping' : 'Thêm Topping mới'}
       >
-        <form onSubmit={handleSave} className="space-y-4 max-h-[80vh] overflow-y-auto pr-2">
-          <div>
-            <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">Tên Topping *</label>
-            <Input required value={toppingName} onChange={(e) => setToppingName(e.target.value)} className="bg-background/40" placeholder="vd. Trân châu đen" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">Giá bán (VNĐ) *</label>
-            <Input required type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="bg-background/40" placeholder="vd. 10000" />
+        <form onSubmit={handleSave} className="flex flex-col max-h-[80vh]">
+          <div className="flex-1 overflow-y-auto pr-2 space-y-4 pb-4">
+            <div>
+              <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">Tên Topping *</label>
+              <Input required value={toppingName} onChange={(e) => setToppingName(e.target.value)} className="bg-background/40" placeholder="vd. Trân châu đen" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">Giá bán (VNĐ) *</label>
+              <Input required type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="bg-background/40" placeholder="vd. 10000" />
+            </div>
+
+            <div className="border-t border-border pt-4 mt-4">
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
+                  <Beaker className="w-4 h-4 text-primary" /> Định lượng nguyên liệu
+                </label>
+                <Button type="button" size="sm" variant="outline" onClick={addIngredientRow} className="rounded-xl text-xs h-7">
+                  <Plus className="w-3 h-3 mr-1" /> Thêm nguyên liệu
+                </Button>
+              </div>
+              
+              <div className="space-y-2 pr-1">
+                {recipeDetails.map((rd, idx) => (
+                  <div key={idx} className="flex gap-2 items-center bg-background/30 p-2 rounded-lg border border-border">
+                    <select
+                      className="flex-1 rounded-xl border border-border bg-background/50 px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                      value={rd.IngredientID}
+                      onChange={(e) => updateIngredientRow(idx, 'IngredientID', e.target.value)}
+                    >
+                      <option value={0}>-- Chọn nguyên liệu --</option>
+                      {ingredients.map((ing) => (
+                        <option key={ing.IngredientID} value={ing.IngredientID}>
+                          {ing.IngredientName} (còn: {ing.QuantityStock} {ing.Unit?.UnitName})
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="Số lượng"
+                      value={rd.Quantity}
+                      onChange={(e) => updateIngredientRow(idx, 'Quantity', e.target.value)}
+                      className="w-24 h-9 bg-background/50"
+                    />
+                    <Button type="button" variant="outline" className="w-9 h-9 p-0 text-red-500 border-red-200 shrink-0" onClick={() => removeIngredientRow(idx)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+                {recipeDetails.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic text-center py-2">Chưa thêm nguyên liệu nào. Topping này sẽ không tự trừ kho.</p>
+                )}
+              </div>
+            </div>
           </div>
 
-          <div className="border-t border-border pt-4 mt-4">
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
-                <Beaker className="w-4 h-4 text-primary" /> Định lượng nguyên liệu
-              </label>
-              <Button type="button" size="sm" variant="outline" onClick={addIngredientRow} className="rounded-xl text-xs h-7">
-                <Plus className="w-3 h-3 mr-1" /> Thêm nguyên liệu
-              </Button>
-            </div>
-            
-            <div className="space-y-2">
-              {recipeDetails.map((rd, idx) => (
-                <div key={idx} className="flex gap-2 items-center bg-background/30 p-2 rounded-lg border border-border">
-                  <select
-                    className="flex-1 rounded-xl border border-border bg-background/50 px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary/40 focus:border-primary"
-                    value={rd.IngredientID}
-                    onChange={(e) => updateIngredientRow(idx, 'IngredientID', e.target.value)}
-                  >
-                    <option value={0}>-- Chọn nguyên liệu --</option>
-                    {ingredients.map((ing) => (
-                      <option key={ing.IngredientID} value={ing.IngredientID}>
-                        {ing.IngredientName} (còn: {ing.QuantityStock} {ing.Unit?.UnitName})
-                      </option>
-                    ))}
-                  </select>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder="Số lượng"
-                    value={rd.Quantity}
-                    onChange={(e) => updateIngredientRow(idx, 'Quantity', e.target.value)}
-                    className="w-24 h-9 bg-background/50"
-                  />
-                  <Button type="button" variant="outline" className="w-9 h-9 p-0 text-red-500 border-red-200" onClick={() => removeIngredientRow(idx)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
-              {recipeDetails.length === 0 && (
-                <p className="text-xs text-muted-foreground italic text-center py-2">Chưa thêm nguyên liệu nào. Topping này sẽ không tự trừ kho.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex gap-4 pt-4 border-t border-border">
+          <div className="flex gap-4 pt-4 border-t border-border mt-auto shrink-0 bg-card">
             <Button type="button" variant="outline" className="flex-1 py-3 rounded-xl" onClick={() => setIsFormOpen(false)}>
               Hủy
             </Button>

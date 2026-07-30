@@ -67,19 +67,10 @@ export default function AbandonedCartsPage() {
 
     setIsSubmitting(true);
     try {
-      const code = `COMEBACK-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-      await api.createVoucher({
-        Code: code,
-        DiscountType: 'PERCENT',
-        DiscountValue: Number(discountValue),
-        OwnerID: selectedCart.CustomerID,
-        Creator: 'ADMIN',
-        ValidUntil: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days validity
-      });
-
-      toast.success(`Đã tạo và gửi mã ${code} cho khách hàng thành công!`);
+      await api.notifyAbandonedCart(selectedCart.CartID);
+      toast.success(`Đã tự động tạo và gửi mã giảm giá 15% cho khách hàng thành công!`);
       setIsVoucherModalOpen(false);
-      // In a real app, you would also trigger an SMS/Email to the user here
+      loadCarts();
     } catch (err: any) {
       toast.error(err.message || 'Lỗi khi tạo mã giảm giá.');
     } finally {
@@ -198,19 +189,11 @@ export default function AbandonedCartsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
-                Mức giảm giá (%)
-              </label>
-              <Input
-                type="number"
-                value={discountValue}
-                onChange={(e) => setDiscountValue(Number(e.target.value))}
-                min={1}
-                max={100}
-                required
-              />
+              <p className="text-sm font-medium text-foreground">
+                Hệ thống sẽ tự động tạo một mã giảm giá 15% (COMEBACK-XXXX) và gửi trực tiếp vào ví voucher của khách hàng.
+              </p>
               <p className="text-[10px] text-muted-foreground">
-                Mã sẽ có hiệu lực trong 3 ngày và được lưu trực tiếp vào tài khoản của khách.
+                Mã sẽ có hiệu lực trong 7 ngày.
               </p>
             </div>
 
