@@ -147,14 +147,20 @@ export default function SalaryPayroll() {
             <TableBody>
               {salaries.map((sal) => (
                 <TableRow key={sal.SalaryID}>
-                  <TableCell className="font-serif font-bold text-base text-foreground tracking-tight">
-                    {sal.Employee?.FullName}
+                  <TableCell>
+                    <div className="font-serif font-bold text-base text-foreground tracking-tight">
+                      {sal.Employee?.FullName}
+                    </div>
+                    <div className="text-[10px] uppercase font-bold text-muted-foreground mt-0.5">
+                      {sal.Employee?.Role?.RoleName}
+                    </div>
                   </TableCell>
                   <TableCell className="font-mono text-xs font-bold text-muted-foreground">
                     Tháng {sal.Month} / {sal.Year}
                   </TableCell>
                   <TableCell className="font-mono text-xs text-foreground">
                     {sal.BaseSalary.toLocaleString('vi-VN')} đ
+                    <span className="text-[10px] text-muted-foreground ml-1">/{sal.Employee?.Role?.SalaryType === 'HOURLY' ? 'giờ' : 'tháng'}</span>
                   </TableCell>
                   <TableCell className="font-mono text-xs font-bold text-foreground">
                     {sal.TotalHours} giờ
@@ -179,7 +185,7 @@ export default function SalaryPayroll() {
                     {!sal.PaidDate ? (
                       <Button
                         size="sm"
-                        className="rounded-xl flex items-center gap-1 inline-flex text-xs"
+                        className="rounded-xl inline-flex items-center gap-1 text-xs"
                         onClick={() => handleMarkPaid(sal.SalaryID)}
                       >
                         <Check className="w-3.5 h-3.5" /> Chi Trả Lương

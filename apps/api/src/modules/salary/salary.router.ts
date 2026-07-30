@@ -172,7 +172,7 @@ router.post('/generate', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (re
 
         if (exists) continue; // skip duplicates silently
 
-        // Compute total hours from present shiftlogs
+        // Compute total hours and penalties
         const startOfMonth = new Date(Year, Month - 1, 1);
         const endOfMonth = new Date(Year, Month, 0, 23, 59, 59);
 
@@ -183,31 +183,58 @@ router.post('/generate', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (re
               gte: startOfMonth,
               lte: endOfMonth,
             },
-            ShiftStatus: { in: ['PRESENT', 'LATE'] },
-            CheckOutTime: { not: null },
           },
           include: { Shift: true },
         });
 
         let totalHours = 0;
         let lateCount = 0;
+        let absentCount = 0;
+
+        const now = new Date();
+
         logs.forEach((log) => {
-          if (log.CheckInTime && log.CheckOutTime) {
-            totalHours += calculateActualHours(log.CheckInTime, log.CheckOutTime);
-          } else {
-            totalHours += calculateShiftHours(log.Shift.StartTime, log.Shift.EndTime);
+          let status = log.ShiftStatus;
+          // Mark past scheduled shifts without check-in as absent
+          if (status === 'SCHEDULED' && log.WorkDate < now) {
+            status = 'ABSENT';
           }
-          if (log.ShiftStatus === 'LATE') {
+
+          if (status === 'PRESENT' || status === 'LATE') {
+            if (log.CheckInTime && log.CheckOutTime) {
+              totalHours += calculateActualHours(log.CheckInTime, log.CheckOutTime);
+            } else {
+              totalHours += calculateShiftHours(log.Shift.StartTime, log.Shift.EndTime);
+            }
+          }
+
+          if (status === 'LATE') {
             lateCount++;
+          }
+          if (status === 'ABSENT') {
+            absentCount++;
           }
         });
 
-        const hourlyWage = employee.Role.DefaultBaseSalary.toNumber(); // Lương theo giờ
-        const totalWage = totalHours * hourlyWage;
-        const latePenalty = lateCount * latePenaltyDefault; // Phạt cấu hình động (mặc định 50k)
+        const salaryType = (employee.Role as any).SalaryType || 'HOURLY';
+        const baseSalary = employee.Role.DefaultBaseSalary.toNumber();
+        const roleLatePenalty = (employee.Role as any).LatePenalty ? (employee.Role as any).LatePenalty.toNumber() : latePenaltyDefault;
         
-        // Gộp phạt đi muộn vào deduction
-        const finalDeduction = deductionDefault + latePenalty;
+        let totalWage = 0;
+        let absentPenalty = 0;
+
+        if (salaryType === 'HOURLY') {
+          totalWage = totalHours * baseSalary;
+        } else {
+          // MONTHLY: Fixed base salary, penalty for absent days. 
+          // Assume 1 shift = 1 day, standard is 26 days/month.
+          totalWage = baseSalary;
+          const dailyWage = baseSalary / 26;
+          absentPenalty = absentCount * dailyWage;
+        }
+
+        const latePenalty = lateCount * roleLatePenalty;
+        const finalDeduction = deductionDefault + latePenalty + absentPenalty;
         const realSalary = totalWage + bonusDefault - finalDeduction;
 
         const sal = await tx.salary.create({
@@ -215,7 +242,7 @@ router.post('/generate', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (re
             EmployeeID: employee.EmployeeID,
             Month,
             Year,
-            BaseSalary: hourlyWage,
+            BaseSalary: baseSalary,
             TotalHours: totalHours,
             Bonus: bonusDefault,
             Deduction: finalDeduction,

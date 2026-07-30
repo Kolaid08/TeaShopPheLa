@@ -349,7 +349,9 @@ model EmployeeRole {
   RoleID            Int        @id @default(autoincrement())
   RoleName          String     @db.NVarChar(100)
   Description       String?    @db.NVarChar(255)
+  SalaryType        String     @default("HOURLY") @db.VarChar(20)
   DefaultBaseSalary Decimal    @db.Decimal(15, 2)
+  LatePenalty       Decimal    @default(50000) @db.Decimal(15, 2)
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   Employees         Employee[]

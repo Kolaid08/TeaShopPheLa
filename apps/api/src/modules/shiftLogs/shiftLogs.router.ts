@@ -7,10 +7,14 @@ import { AppError } from '../../middleware/errorHandler';
 
 const router = Router();
 
-const activeShiftLocks = new Set<number>();
-
 const checkInSchema = z.object({
   ShiftID: z.number().int(),
+});
+
+const scheduleSchema = z.object({
+  EmployeeID: z.number().int(),
+  ShiftID: z.number().int(),
+  WorkDate: z.string(), // ISO string date
 });
 
 // Protect routes
@@ -70,6 +74,55 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// POST /schedule - Manager assigns a shift (Rota)
+router.post('/schedule', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+  try {
+    const validatedData = scheduleSchema.parse(req.body);
+    const workDate = new Date(validatedData.WorkDate);
+    workDate.setHours(0, 0, 0, 0);
+
+    const existing = await prisma.shiftLog.findFirst({
+      where: {
+        EmployeeID: validatedData.EmployeeID,
+        ShiftID: validatedData.ShiftID,
+        WorkDate: workDate
+      }
+    });
+
+    if (existing) {
+      throw new AppError(400, 'Nhân viên này đã được xếp ca vào thời gian này.');
+    }
+
+    const log = await prisma.shiftLog.create({
+      data: {
+        EmployeeID: validatedData.EmployeeID,
+        ShiftID: validatedData.ShiftID,
+        WorkDate: workDate,
+        ShiftStatus: 'SCHEDULED'
+      }
+    });
+
+    return sendResponse(res, 201, true, 'Xếp ca thành công', log);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /schedule/:id - Manager unassigns a shift
+router.delete('/schedule/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    const log = await prisma.shiftLog.findUnique({ where: { ShiftLogID: id } });
+    if (!log) throw new AppError(404, 'Không tìm thấy ca được xếp.');
+    if (log.ShiftStatus !== 'SCHEDULED') throw new AppError(400, 'Chỉ có thể xóa ca chưa điểm danh.');
+
+    await prisma.shiftLog.delete({ where: { ShiftLogID: id } });
+    return sendResponse(res, 200, true, 'Xóa xếp ca thành công');
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /check-in - Employee Check-in for a Shift
 router.post('/check-in', async (req, res, next) => {
   try {
@@ -103,15 +156,11 @@ router.post('/check-in', async (req, res, next) => {
     });
 
     if (activeCheckIn) {
-      if (activeCheckIn.ShiftID === validatedData.ShiftID) {
-        throw new AppError(400, 'You have already checked-in for this shift and have not checked out.');
-      } else {
-        throw new AppError(400, 'You have an active shift that has not been checked out yet. Please check out first.');
-      }
+      throw new AppError(400, 'Bạn đang có một ca làm việc chưa check-out. Vui lòng check-out trước.');
     }
 
-    // Prevent checking in twice for the same shift on the same day
-    const alreadyCheckedInToday = await prisma.shiftLog.findFirst({
+    // Must be scheduled
+    const scheduledLog = await prisma.shiftLog.findFirst({
       where: {
         EmployeeID: employeeId,
         ShiftID: validatedData.ShiftID,
@@ -122,12 +171,15 @@ router.post('/check-in', async (req, res, next) => {
       },
     });
 
-    if (alreadyCheckedInToday) {
-      throw new AppError(400, 'You have already completed this shift today.');
+    if (!scheduledLog) {
+      throw new AppError(400, 'Bạn không có lịch làm việc (Rota) cho ca này hôm nay.');
+    }
+
+    if (scheduledLog.ShiftStatus === 'PRESENT' || scheduledLog.ShiftStatus === 'LATE') {
+      throw new AppError(400, 'Bạn đã điểm danh cho ca này hôm nay rồi.');
     }
 
     // Evaluate dynamic late-status check
-    // e.g. Shift start time is "08:00", current check-in is "08:15"
     const [shiftH, shiftM] = shift.StartTime.split(':').map(Number);
     const currentH = today.getHours();
     const currentM = today.getMinutes();
@@ -137,19 +189,15 @@ router.post('/check-in', async (req, res, next) => {
       const shiftMinutes = shiftH * 60 + shiftM;
       const currentMinutes = currentH * 60 + currentM;
 
-      // Allow a 10-minute grace period before marking late
       if (currentMinutes > shiftMinutes + 10) {
         status = 'LATE';
       }
     }
 
-    const log = await prisma.shiftLog.create({
+    const log = await prisma.shiftLog.update({
+      where: { ShiftLogID: scheduledLog.ShiftLogID },
       data: {
-        EmployeeID: employeeId,
-        ShiftID: validatedData.ShiftID,
-        WorkDate: todayStart,
         CheckInTime: today,
-        CheckOutTime: null,
         ShiftStatus: status,
       },
     });
@@ -172,7 +220,6 @@ router.post('/check-out', async (req, res, next) => {
     const today = new Date();
     const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
 
-    // Find the active shift log in the last 24 hours that doesn't have checkOutTime yet
     const activeLog = await prisma.shiftLog.findFirst({
       where: {
         EmployeeID: employeeId,
