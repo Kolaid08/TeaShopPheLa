@@ -206,8 +206,8 @@ export const Dialog = ({ isOpen, onClose, title, children }: DialogProps) => {
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-lg p-6 rounded-2xl border border-border bg-card shadow-2xl cafe-panel mx-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4 sm:p-6">
+      <div className="relative w-full max-w-lg p-5 sm:p-6 rounded-2xl border border-border bg-card shadow-2xl cafe-panel">
         <div className="flex items-center justify-between mb-4 pb-2 border-b border-border">
           <h3 className="font-serif font-bold text-lg text-foreground tracking-tight">{title}</h3>
           <button

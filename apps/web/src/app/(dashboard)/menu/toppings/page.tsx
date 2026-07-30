@@ -248,8 +248,8 @@ export default function ToppingsMenu() {
         onClose={() => setIsFormOpen(false)}
         title={selectedTopping ? 'Cập nhật Topping' : 'Thêm Topping mới'}
       >
-        <form onSubmit={handleSave} className="flex flex-col max-h-[80vh]">
-          <div className="flex-1 overflow-y-auto pr-2 space-y-4 pb-4">
+        <form onSubmit={handleSave} className="flex flex-col">
+          <div className="space-y-4 pb-4">
             <div>
               <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">Tên Topping *</label>
               <Input required value={toppingName} onChange={(e) => setToppingName(e.target.value)} className="bg-background/40" placeholder="vd. Trân châu đen" />
@@ -269,7 +269,7 @@ export default function ToppingsMenu() {
                 </Button>
               </div>
               
-              <div className="space-y-2 pr-1">
+              <div className="space-y-2">
                 {recipeDetails.map((rd, idx) => (
                   <div key={idx} className="flex gap-2 items-center bg-background/30 p-2 rounded-lg border border-border">
                     <select
