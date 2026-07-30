@@ -279,43 +279,42 @@ export const mockAbandonedCarts = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
-e x p o r t   c o n s t   n o t i f y A b a n d o n e d C a r t   =   a s y n c   ( r e q :   R e q u e s t ,   r e s :   R e s p o n s e )   = >   { 
-     t r y   { 
-         c o n s t   {   i d   }   =   r e q . p a r a m s ; 
-         c o n s t   c a r t   =   a w a i t   p r i s m a . c a r t . f i n d U n i q u e ( { 
-             w h e r e :   {   C a r t I D :   N u m b e r ( i d )   } 
-         } ) ; 
- 
-         i f   ( ! c a r t   | |   c a r t . S t a t u s   ! = =   ' A B A N D O N E D ' )   { 
-             r e t u r n   r e s . s t a t u s ( 4 0 0 ) . j s o n ( {   s u c c e s s :   f a l s e ,   m e s s a g e :   ' C a r t   i s   n o t   i n   A B A N D O N E D   s t a t u s '   } ) ; 
-         } 
- 
-         c o n s t   c o d e   =   ' C O M E B A C K - '   +   M a t h . r a n d o m ( ) . t o S t r i n g ( 3 6 ) . s u b s t r i n g ( 2 ,   8 ) . t o U p p e r C a s e ( ) ; 
-         
-         a w a i t   p r i s m a . ( a s y n c   ( t x )   = >   { 
-             a w a i t   t x . v o u c h e r . c r e a t e ( { 
-                 d a t a :   { 
-                     C o d e :   c o d e , 
-                     D i s c o u n t T y p e :   ' P E R C E N T ' , 
-                     D i s c o u n t V a l u e :   1 5 , 
-                     M a x U s a g e :   1 , 
-                     V a l i d U n t i l :   n e w   D a t e ( D a t e . n o w ( )   +   7   *   2 4   *   6 0   *   6 0   *   1 0 0 0 ) ,   / /   7   d a y s 
-                     S t a t u s :   ' A C T I V E ' , 
-                     O w n e r I D :   c a r t . C u s t o m e r I D , 
-                     C r e a t o r :   ' S Y S T E M _ A B A N D O N E D _ C A R T ' 
-                 } 
-             } ) ; 
- 
-             a w a i t   t x . c a r t . u p d a t e ( { 
-                 w h e r e :   {   C a r t I D :   N u m b e r ( i d )   } , 
-                 d a t a :   {   S t a t u s :   ' A B A N D O N E D _ N O T I F I E D '   } 
-             } ) ; 
-         } ) ; 
- 
-         r e s . s t a t u s ( 2 0 0 ) . j s o n ( {   s u c c e s s :   t r u e ,   m e s s a g e :   ' N o t i f i e d   a n d   v o u c h e r   c r e a t e d   s u c c e s s f u l l y '   } ) ; 
-     }   c a t c h   ( e r r o r )   { 
-         c o n s o l e . e r r o r ( e r r o r ) ; 
-         r e s . s t a t u s ( 5 0 0 ) . j s o n ( {   s u c c e s s :   f a l s e ,   m e s s a g e :   ' S e r v e r   e r r o r '   } ) ; 
-     } 
- } ;  
- 
+export const notifyAbandonedCart = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const cart = await prisma.cart.findUnique({
+      where: { CartID: Number(id) }
+    });
+
+    if (!cart || cart.Status !== 'ABANDONED') {
+      return res.status(400).json({ success: false, message: 'Cart is not in ABANDONED status' });
+    }
+
+    const code = 'COMEBACK-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+    
+    await prisma.$transaction(async (tx) => {
+      await tx.voucher.create({
+        data: {
+          Code: code,
+          DiscountType: 'PERCENT',
+          DiscountValue: 15,
+          MaxUsage: 1,
+          ValidUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+          Status: 'ACTIVE',
+          OwnerID: cart.CustomerID,
+          Creator: 'SYSTEM_ABANDONED_CART'
+        }
+      });
+
+      await tx.cart.update({
+        where: { CartID: Number(id) },
+        data: { Status: 'ABANDONED_NOTIFIED' }
+      });
+    });
+
+    res.status(200).json({ success: true, message: 'Notified and voucher created successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};

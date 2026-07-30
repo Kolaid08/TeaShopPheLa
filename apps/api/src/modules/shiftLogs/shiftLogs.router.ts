@@ -111,7 +111,7 @@ router.post('/schedule', requireRole(['ADMIN', 'MANAGER']), async (req, res, nex
 // DELETE /schedule/:id - Manager unassigns a shift
 router.delete('/schedule/:id', requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     const log = await prisma.shiftLog.findUnique({ where: { ShiftLogID: id } });
     if (!log) throw new AppError(404, 'Không tìm thấy ca được xếp.');
     if (log.ShiftStatus !== 'SCHEDULED') throw new AppError(400, 'Chỉ có thể xóa ca chưa điểm danh.');
