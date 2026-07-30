@@ -350,7 +350,7 @@ export default function PosTerminal() {
         Items: cart.map((item) => ({
           DrinkSizeID: item.DrinkSizeID,
           Quantity: item.Quantity,
-          UnitPrice: item.UnitPrice,
+          UnitPrice: Number(item.UnitPrice),
         })),
         TotalPrice: grandTotal,
         OrderNote: cart
