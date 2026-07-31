@@ -27,12 +27,12 @@ Dự án áp dụng mô hình Client-Server hiện đại, tách biệt hoàn to
 
 ```mermaid
 graph TD
-    subgraph Client [Client Tier (Frontend)]
+    subgraph Client ["Client Tier (Frontend)"]
         C[Customer Web App<br>Next.js 14]
         A[Admin POS Portal<br>Next.js 14]
     end
 
-    subgraph Core [Logic Tier (Backend)]
+    subgraph Core ["Logic Tier (Backend)"]
         API[API Gateway & Server<br>Node.js + Express]
         Socket[Realtime Engine<br>Socket.io]
         Job[Background Workers<br>Node-cron]
@@ -41,11 +41,11 @@ graph TD
         API --- Job
     end
 
-    subgraph Data [Data Tier]
+    subgraph Data ["Data Tier"]
         DB[(Primary Database<br>SQL Server)]
     end
 
-    subgraph External [Third-party Services]
+    subgraph External ["Third-party Services"]
         PayOS[PayOS<br>VietQR Payment]
         GHN[Giao Hàng Nhanh<br>Logistics]
         Gemini[Google AI Studio<br>AI LLM]
