@@ -130,7 +130,7 @@ Không giống như các dự án học thuật, khi đưa lên Production, các
 Không bao giờ tin tưởng mù quáng vào data đẩy về từ Webhook. Kẻ gian có thể giả mạo request POST vào `/webhook` để báo thành công.
 
 - **Quy tắc:** Bắt buộc sử dụng hàm `verifyPaymentWebhookData` của thư viện `@payos/node`. Hàm này sẽ dùng `CHECKSUM_KEY` sinh ra chữ ký HMAC để đối chiếu. Nếu chữ ký không khớp, lập tức Reject request.
-- **Local Test:** Developer sử dụng `ngrok` (vd: `ngrok http 3001`) để tạo Public URL, sau đó dán vào trang quản trị PayOS để test Webhook tại máy cá nhân.
+- **Webhook Configuration:** Thay vì sử dụng ngrok để test local, hệ thống đã được public, do đó chỉ cần cấu hình trực tiếp Public Webhook URL trỏ về API Backend trên Render.
 
 ### 5.2. Quản trị Bộ nhớ AI Chatbot (Gemini)
 
@@ -150,21 +150,20 @@ LLM (Large Language Model) thường xuyên bị quên ngữ cảnh nếu đoạ
 
 Để hệ thống chịu tải tốt và dễ dàng mở rộng (Scale), đề xuất mô hình triển khai như sau:
 
-### 5.1. Cơ sở dữ liệu (Database Layer)
+### 6.1. Cơ sở dữ liệu (Database Layer)
 
-- Sử dụng **Azure SQL Database** (Hoặc AWS RDS for SQL Server) thay vì tự cài SQL Server lên VPS.
+- Sử dụng **SQL Server** được triển khai trên máy chủ quản lý dữ liệu riêng.
 - Thiết lập tự động Backup hàng ngày.
 
-### 5.2. Backend API Server (Node.js)
+### 6.2. Backend API Server (Node.js)
 
-- Đóng gói bằng **Docker**. Triển khai lên các nền tảng tự động Scale như **Render, Railway** hoặc AWS ECS.
-- Môi trường Production phải thiết lập `NODE_ENV=production` để bỏ qua các log thừa và tăng hiệu suất Express.
+- Triển khai Backend Web Services trực tiếp lên nền tảng **Render** (render.com).
+- Môi trường Production phải thiết lập `NODE_ENV=production` trên Render để bỏ qua các log thừa và tăng hiệu suất Express.
 
-### 5.3. Frontend Web & Customer App
+### 6.3. Frontend Web & Customer App
 
 - Triển khai trực tiếp lên **Vercel** bằng Github Integration.
 - Vercel tự động hỗ trợ Next.js Caching và CDN, giúp hình ảnh đồ uống tải siêu tốc.
-- Lưu ý: Chỉnh cấu hình `Root Directory` của Vercel trỏ vào `apps/web` hoặc `apps/customer`.
 
 ---
 
@@ -182,7 +181,7 @@ LLM (Large Language Model) thường xuyên bị quên ngữ cảnh nếu đoạ
 
 Dành cho thành viên mới gia nhập team:
 
-1. Đảm bảo máy có Node.js >= v18, Git, và công cụ quản lý DB (như Azure Data Studio hoặc DBeaver).
+1. Đảm bảo máy có Node.js >= v18, Git, và công cụ quản lý DB (như SQL Server Management Studio hoặc DBeaver).
 2. Clone dự án và cài thư viện tổng:
    ```bash
    git clone https://github.com/Kolaid08/TeaShopPheLa.git
@@ -223,7 +222,7 @@ PayOS giúp hệ thống tự động nhận biết khách đã chuyển khoản
   - `PAYOS_CLIENT_ID="..."`
   - `PAYOS_API_KEY="..."`
   - `PAYOS_CHECKSUM_KEY="..."`
-- **Bước 4: Cấu hình Webhook (Rất quan trọng).** Chuyển sang tab Webhook. Nhập URL Server của bạn (ví dụ: `https://api.phela.com/api/v1/payment/payos/webhook`). Nếu bạn đang code ở máy ảo Local, hãy dùng phần mềm ngrok (`ngrok http 3001`) để lấy link public tạm thời, sau đó dán vào đây. Bấm "Xác nhận Webhook".
+- **Bước 4: Cấu hình Webhook (Rất quan trọng).** Chuyển sang tab Webhook. Nhập URL Server Backend đã được deploy trên Render của bạn (ví dụ: `https://api.phela.com/api/v1/payment/payos/webhook`). Do dự án đã được Public trên Render, chúng ta không cần dùng ngrok. Bấm "Xác nhận Webhook".
 
 ### 9.2. Tích hợp Giao Hàng Nhanh (GHN) - Tính phí Ship
 
