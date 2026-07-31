@@ -48,8 +48,9 @@ graph TD
     subgraph External [Third-party Services]
         PayOS[PayOS<br>VietQR Payment]
         GHN[Giao Hàng Nhanh<br>Logistics]
-        Gemini[Google Gemini<br>AI LLM]
+        Gemini[Google AI Studio<br>AI LLM]
         Firebase[Firebase Cloud Messaging<br>Push Notifications]
+        Cloudinary[Cloudinary<br>Image Storage & CDN]
     end
 
     %% Connections
@@ -64,6 +65,7 @@ graph TD
     API <-->|Calculate Fee / Push Order| GHN
     API <-->|Prompt & Tool Calling| Gemini
     API -->|Trigger Alert| Firebase
+    API -->|Upload Images| Cloudinary
     Firebase -.->|Push| C
 ```
 
@@ -152,18 +154,23 @@ LLM (Large Language Model) thường xuyên bị quên ngữ cảnh nếu đoạ
 
 ### 6.1. Cơ sở dữ liệu (Database Layer)
 
-- Sử dụng **SQL Server** được triển khai trên máy chủ quản lý dữ liệu riêng.
-- Thiết lập tự động Backup hàng ngày.
+- Sử dụng **SQL Server** được triển khai hoàn toàn miễn phí trên nền tảng **Somee.com**.
+- Backup tự động được cấu hình theo chính sách của Somee.
 
 ### 6.2. Backend API Server (Node.js)
 
 - Triển khai Backend Web Services trực tiếp lên nền tảng **Render** (render.com).
-- Môi trường Production phải thiết lập `NODE_ENV=production` trên Render để bỏ qua các log thừa và tăng hiệu suất Express.
+- Môi trường Production thiết lập `NODE_ENV=production` trên Render để tối ưu hiệu suất Express.
 
 ### 6.3. Frontend Web & Customer App
 
-- Triển khai trực tiếp lên **Vercel** bằng Github Integration.
-- Vercel tự động hỗ trợ Next.js Caching và CDN, giúp hình ảnh đồ uống tải siêu tốc.
+- Mã nguồn (Code) được lưu trữ và quản lý tập trung trên **GitHub**.
+- CI/CD tự động triển khai trực tiếp lên **Vercel** thông qua GitHub Integration.
+- Vercel đảm nhiệm Next.js Caching và Serverless Functions.
+
+### 6.4. Lưu trữ Hình ảnh (Object Storage)
+
+- Tất cả hình ảnh (đồ uống, avatar) được upload và tự động tối ưu hóa qua **Cloudinary**. Tích hợp trực tiếp vào Backend qua Multer.
 
 ---
 
@@ -241,4 +248,11 @@ PayOS giúp hệ thống tự động nhận biết khách đã chuyển khoản
 - **Bước 3:** Bấm nút **Create API Key in new project**. Copy đoạn mã đó.
 - **Bước 4:** Dán vào file `.env` của thư mục `apps/api`:
   - `GEMINI_API_KEY="AIzaSyB..."`
-- **Sử dụng trong Code:** Đảm bảo thư viện `@google/generative-ai` đã được cài (`npm install @google/generative-ai`). Thư viện này đã được cấu hình sẵn trong `apps/api/src/modules/chat/ai.service.ts`, nó sẽ tự động lấy key từ `.env` để chat và gọi hàm (Function Calling).
+### 8.4. Tích hợp Cloudinary (Lưu trữ ảnh)
+
+- **Bước 1:** Đăng ký tài khoản tại [cloudinary.com](https://cloudinary.com).
+- **Bước 2:** Tại giao diện Dashboard chính (Programmable Media), copy các thông tin trong phần **Product Environment Credentials**.
+- **Bước 3:** Cập nhật file `.env` ở `apps/api`:
+  - `CLOUDINARY_CLOUD_NAME="..."`
+  - `CLOUDINARY_API_KEY="..."`
+  - `CLOUDINARY_API_SECRET="..."`
