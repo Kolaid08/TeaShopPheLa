@@ -27,7 +27,7 @@ router.get('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, n
 // Admin manually creates a voucher
 router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, next) => {
   try {
-    const { Code, DiscountType, DiscountValue, TargetProductID, OwnerID, ValidUntil } = req.body;
+    const { Code, DiscountType, DiscountValue, TargetProductID, OwnerID, ValidUntil, MaxUsage } = req.body;
     
     // Check if code exists
     const existing = await prisma.voucher.findUnique({ where: { Code } });
@@ -53,6 +53,7 @@ router.post('/', verifyJWT, requireRole(['ADMIN', 'MANAGER']), async (req, res, 
         DiscountValue,
         TargetProductID: TargetProductID || null,
         OwnerID: OwnerID || null,
+        MaxUsage: MaxUsage ? Number(MaxUsage) : 1,
         Creator: 'ADMIN',
         ValidUntil: ValidUntil ? new Date(ValidUntil) : null,
         Status: 'ACTIVE'
