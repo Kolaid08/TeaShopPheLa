@@ -1396,7 +1396,8 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ ShiftID: shiftId }),
       });
-    } catch {
+    } catch (err: any) {
+      if (err.isBackendError) throw err;
       const user = getSessionUser();
       const today = new Date().toISOString().split('T')[0]!;
       const newLog: ShiftLog = {
@@ -1414,7 +1415,8 @@ export const api = {
   checkOut: async (): Promise<ShiftLog> => {
     try {
       return await api.request('/shift-logs/check-out', { method: 'POST' });
-    } catch {
+    } catch (err: any) {
+      if (err.isBackendError) throw err;
       const user = getSessionUser();
       const log = db.shiftLogs.find((l) => l.EmployeeID === user.EmployeeID && !l.CheckOutTime);
       if (!log) throw new Error('Bạn chưa Check-in ngày hôm nay.');
