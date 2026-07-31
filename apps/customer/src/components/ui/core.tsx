@@ -26,7 +26,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           'inline-flex items-center justify-center rounded-xl font-medium tracking-wide transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none',
           {
             // Primary warm brand amber
-            'bg-primary text-white hover:bg-orange-700 shadow-md shadow-orange-700/10': variant === 'primary',
+            'bg-primary text-white hover:bg-orange-700': variant === 'primary',
             // Near black secondary
             'bg-accent text-white hover:bg-neutral-800': variant === 'secondary',
             // Refined thin outline

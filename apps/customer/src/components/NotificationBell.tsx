@@ -116,7 +116,7 @@ export function NotificationBell({ customerId }: { customerId: number }) {
         <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto pr-2">
           <div className="flex justify-between items-center sticky top-0 bg-white z-10 pb-2 border-b border-border">
             <span className="text-sm font-semibold text-muted-foreground">
-              {unreadCount} chưa đọc
+              {unreadCount > 0 ? `${unreadCount} chưa đọc` : 'Tất cả đã đọc'}
             </span>
             {unreadCount > 0 && (
               <Button
@@ -145,7 +145,7 @@ export function NotificationBell({ customerId }: { customerId: number }) {
                   className={`relative p-4 rounded-xl border transition-all cursor-pointer ${
                     notif.IsRead
                       ? 'bg-muted/30 border-transparent text-muted-foreground'
-                      : 'bg-primary/5 border-primary/20 text-foreground'
+                      : 'bg-primary/5 border-primary/20 text-foreground border-l-4 border-l-primary shadow-sm'
                   }`}
                 >
                   {!notif.IsRead && (

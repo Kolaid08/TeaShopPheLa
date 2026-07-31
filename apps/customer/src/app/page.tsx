@@ -928,7 +928,7 @@ export default function CustomerHome() {
             </h3>
 
             {/* Cart Items List */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-4 my-2 divide-y divide-border/40 max-h-[45vh]">
+            <div className="flex-1 overflow-y-auto py-4 space-y-4 my-2 divide-y divide-border/40 max-h-[45vh] min-h-0">
               {cart.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground flex flex-col items-center justify-center gap-2">
                   <ShoppingBag className="w-9 h-9 text-muted-foreground/30" />
