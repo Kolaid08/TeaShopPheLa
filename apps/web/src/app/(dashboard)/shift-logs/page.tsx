@@ -45,9 +45,11 @@ export default function ShiftLogsAttendance() {
       setShifts(shiftList);
 
       if (active) {
-        const hasActive = logList.find(
-          (l) => l.EmployeeID === active.EmployeeID && l.CheckInTime && !l.CheckOutTime,
-        );
+        const hasActive = logList.find((l) => {
+          if (l.EmployeeID !== active.EmployeeID || !l.CheckInTime || l.CheckOutTime) return false;
+          const diffHours = (new Date().getTime() - new Date(l.CheckInTime).getTime()) / (1000 * 60 * 60);
+          return diffHours <= 24;
+        });
         setIsCheckedIn(!!hasActive);
       }
     } catch {}
