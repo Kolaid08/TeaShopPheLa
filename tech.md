@@ -100,32 +100,53 @@ erDiagram
 
 ---
 
-## 🔐 4. Tiêu Chuẩn Tích Hợp Bảo Mật Dành Cho Developer
+## 🧠 4. Core Business Logic & Algorithms
+
+Hệ thống triển khai một số luồng nghiệp vụ cốt lõi sau để đảm bảo quy trình vận hành chuỗi F&B tự động hóa hoàn toàn:
+
+### 4.1. Hệ Thống Chấm Công Thông Minh (24h Window Shift Logs)
+- **Vấn đề:** Nhân viên pha chế thường xuyên làm các ca kéo dài qua đêm (Ví dụ: từ 22h hôm trước đến 06h sáng hôm sau). Nếu dùng hàm `Date()` thuần túy, thao tác Check-out vào ngày hôm sau sẽ bị tách thành một bản ghi chấm công mới độc lập, gây sai lệch bảng lương.
+- **Giải pháp (24h Window Logic):** Thuật toán Check-out sẽ quét lùi thời gian (look-back) trong vòng 24 giờ. Nếu phát hiện một bản ghi Check-in có trạng thái "Đang làm việc" của chính nhân viên đó, hệ thống sẽ tự động ghép nối thời gian Check-out hiện tại vào bản ghi Check-in của ngày hôm qua. Đảm bảo dữ liệu ca làm xuyên đêm được tính toán thời lượng làm việc (Duration) chính xác tuyệt đối.
+
+### 4.2. Khôi Phục & Đền Bù Voucher (Compensation System)
+- **Vấn đề:** Khách hàng áp dụng mã giảm giá giới hạn (Voucher) để đặt hàng. Tuy nhiên, nếu cửa hàng hết nguyên liệu và Admin buộc phải "Từ chối/Hủy" đơn hàng đó, khách sẽ bị mất oan mã giảm giá.
+- **Giải pháp (Voucher Refund & Compensation Engine):**
+  - Khi Admin thao tác Hủy đơn (Trạng thái `CANCELLED`), hệ thống Backend tự động kiểm tra xem đơn hàng có dùng Voucher không.
+  - Nếu có, Backend lập tức giảm biến đếm `UsedCount` của Voucher đó để hoàn trả lượt sử dụng.
+  - Nếu Voucher đó đã hết hạn (`ValidUntil` < Now), Backend tự động sinh ra một mã Voucher đền bù (Compensation Voucher) mới với cùng tỷ lệ giảm giá, thời hạn mới, và cấp phát trực tiếp vào Ví Voucher (CustomerVoucher) của khách hàng đó, đồng thời bắn Push Notification thông báo xin lỗi & đền bù qua Firebase.
+
+### 4.3. Marketing Tự Động: Abandoned Carts & Referral Rewards
+- **Giỏ Hàng Bỏ Quên (Abandoned Carts):** Mọi phiên thêm sản phẩm vào giỏ hàng chưa thanh toán đều được lưu lại và hiển thị trên Dashboard Quản trị. Quản lý có thể lọc các giỏ hàng bỏ quên này để gửi SMS SMS hoặc Voucher kích cầu mua sắm.
+- **Tặng Thưởng Giới Thiệu (Referral Rewards):** Bất cứ khi nào một khách hàng mới hoàn tất đơn hàng thành công đầu tiên, hệ thống sẽ kích hoạt Hook tạo tự động các mã giảm giá đặc biệt (Referral Vouchers) dành tặng cho khách hàng đó nhằm mục đích giữ chân (Retention).
+
+---
+
+## 🔐 5. Tiêu Chuẩn Tích Hợp Bảo Mật Dành Cho Developer
 
 Không giống như các dự án học thuật, khi đưa lên Production, các đoạn code tích hợp cần phải có cơ chế bảo vệ nghiêm ngặt. Dưới đây là các tiêu chuẩn bắt buộc:
 
-### 4.1. Bảo mật Webhook PayOS (Chống gian lận nạp tiền)
+### 5.1. Bảo mật Webhook PayOS (Chống gian lận nạp tiền)
 
 Không bao giờ tin tưởng mù quáng vào data đẩy về từ Webhook. Kẻ gian có thể giả mạo request POST vào `/webhook` để báo thành công.
 
 - **Quy tắc:** Bắt buộc sử dụng hàm `verifyPaymentWebhookData` của thư viện `@payos/node`. Hàm này sẽ dùng `CHECKSUM_KEY` sinh ra chữ ký HMAC để đối chiếu. Nếu chữ ký không khớp, lập tức Reject request.
 - **Local Test:** Developer sử dụng `ngrok` (vd: `ngrok http 3001`) để tạo Public URL, sau đó dán vào trang quản trị PayOS để test Webhook tại máy cá nhân.
 
-### 4.2. Quản trị Bộ nhớ AI Chatbot (Gemini)
+### 5.2. Quản trị Bộ nhớ AI Chatbot (Gemini)
 
 LLM (Large Language Model) thường xuyên bị quên ngữ cảnh nếu đoạn chat quá dài (vượt quá Context Window) hoặc sinh lỗi trả về text thay vì JSON.
 
 - **Quy tắc Function Calling:** Khi AI gọi Tool (ví dụ: `check_order_status`), luôn bọc trong `try-catch` và quy định rõ `Schema` (Zod) cho dữ liệu AI sinh ra.
 - **Bảo mật:** Không tiêm (Inject) toàn bộ thông tin Database vào System Instruction. Chỉ tiêm danh sách Menu hiện hành. Mọi dữ liệu nhạy cảm (Doanh thu, Lịch sử khách khác) BẮT BUỘC phải dùng Function Calling để kiểm soát quyền (Authorization).
 
-### 4.3. Xác thực Realtime (Socket.io Auth)
+### 5.3. Xác thực Realtime (Socket.io Auth)
 
 - **Rủi ro:** Client bất kỳ có thể mở F12, tự kết nối Socket vào server và nghe lén dữ liệu đơn hàng (`NEW_ORDER`).
 - **Quy tắc:** Socket Connection phải mang theo JWT Token. Backend sử dụng Middleware của Socket.io để decode Token. Nếu không phải nhân viên hợp lệ, lập tức ngắt kết nối (`socket.disconnect()`).
 
 ---
 
-## 🚀 5. Chiến Lược Triển Khai (Deployment & DevOps)
+## 🚀 6. Chiến Lược Triển Khai (Deployment & DevOps)
 
 Để hệ thống chịu tải tốt và dễ dàng mở rộng (Scale), đề xuất mô hình triển khai như sau:
 
@@ -147,7 +168,7 @@ LLM (Large Language Model) thường xuyên bị quên ngữ cảnh nếu đoạ
 
 ---
 
-## 🧪 6. Chiến Lược Kiểm Thử (Testing & CI/CD)
+## 🧪 7. Chiến Lược Kiểm Thử (Testing & CI/CD)
 
 Để tránh tình trạng "sửa lỗi chỗ này, vỡ chức năng chỗ kia", mọi Pull Request (PR) đều phải thỏa mãn:
 
@@ -157,7 +178,7 @@ LLM (Large Language Model) thường xuyên bị quên ngữ cảnh nếu đoạ
 
 ---
 
-## 💻 7. Hướng Dẫn Setup Môi Trường Local (Onboarding)
+## 💻 8. Hướng Dẫn Setup Môi Trường Local (Onboarding)
 
 Dành cho thành viên mới gia nhập team:
 
@@ -188,11 +209,11 @@ Dành cho thành viên mới gia nhập team:
 
 ---
 
-## 🛠️ 8. Hướng Dẫn Tích Hợp Dịch Vụ Bên Thứ 3 (Dành Cho Người Mới)
+## 🛠️ 9. Hướng Dẫn Tích Hợp Dịch Vụ Bên Thứ 3 (Dành Cho Người Mới)
 
 Dưới đây là hướng dẫn "cầm tay chỉ việc" để bạn có thể tự thiết lập các dịch vụ (PayOS, Giao Hàng Nhanh, Gemini AI) từ con số 0 và đưa vào dự án.
 
-### 8.1. Tích hợp Cổng Thanh Toán PayOS (Chuyển khoản QR Code)
+### 9.1. Tích hợp Cổng Thanh Toán PayOS (Chuyển khoản QR Code)
 
 PayOS giúp hệ thống tự động nhận biết khách đã chuyển khoản thành công.
 
@@ -204,7 +225,7 @@ PayOS giúp hệ thống tự động nhận biết khách đã chuyển khoản
   - `PAYOS_CHECKSUM_KEY="..."`
 - **Bước 4: Cấu hình Webhook (Rất quan trọng).** Chuyển sang tab Webhook. Nhập URL Server của bạn (ví dụ: `https://api.phela.com/api/v1/payment/payos/webhook`). Nếu bạn đang code ở máy ảo Local, hãy dùng phần mềm ngrok (`ngrok http 3001`) để lấy link public tạm thời, sau đó dán vào đây. Bấm "Xác nhận Webhook".
 
-### 8.2. Tích hợp Giao Hàng Nhanh (GHN) - Tính phí Ship
+### 9.2. Tích hợp Giao Hàng Nhanh (GHN) - Tính phí Ship
 
 - **Bước 1:** Đăng ký tài khoản tại [khachhang.ghn.vn](https://khachhang.ghn.vn).
 - **Bước 2:** Vào mục **Cửa hàng (Shop)**, điền địa chỉ kho hàng của bạn (ví dụ: Quận 1, TP.HCM). Hệ thống sẽ cấp cho bạn một `SHOP_ID`.
@@ -214,7 +235,7 @@ PayOS giúp hệ thống tự động nhận biết khách đã chuyển khoản
   - `GHN_SHOP_ID="ID_Cửa_Hàng_Của_Bạn"`
 - **Lưu ý:** API của GHN có môi trường Test và Production khác nhau. Hãy dùng URL Test (https://dev-online-gateway.ghn.vn) trong lúc dev.
 
-### 8.3. Tích hợp Google Gemini AI (Phê La AI Chatbot)
+### 9.3. Tích hợp Google Gemini AI (Phê La AI Chatbot)
 
 - **Bước 1:** Truy cập [Google AI Studio](https://aistudio.google.com).
 - **Bước 2:** Đăng nhập bằng tài khoản Google, chọn **Get API Key** ở menu bên trái.
