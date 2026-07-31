@@ -90,6 +90,10 @@ export default function ShiftLogsAttendance() {
     currentMonthDays.push(d);
   }
 
+  // Calculate offset for the 1st day of the month
+  const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).getDay();
+  const offsetDays = Array.from({ length: firstDayOfMonth }).fill(null);
+
   return (
     <div className="space-y-6 animate-fade-in font-sans">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
@@ -215,9 +219,11 @@ export default function ShiftLogsAttendance() {
             <div>T7</div>
           </div>
 
-          <div className="grid grid-cols-7 gap-3 h-52">
-            {/* offset days to match weekday starts (mocking current month start on Tuesday) */}
-            <div className="bg-transparent" />
+          <div className="grid grid-cols-7 gap-3">
+            {/* offset days to match weekday starts */}
+            {offsetDays.map((_, i) => (
+              <div key={`offset-${i}`} className="bg-transparent" />
+            ))}
 
             {currentMonthDays.map((day) => {
               // check if there is an active log for this date day
