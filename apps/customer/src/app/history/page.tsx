@@ -355,7 +355,7 @@ export default function HistoryPage() {
     }
   };
 
-  const getStatusStepIndex = (status: Order['OrderStatus'], orderType: string) => {
+  const getStatusStepIndex = (status: Order['OrderStatus'], orderType?: string) => {
     switch (status) {
       case 'PENDING':
         return 1;
