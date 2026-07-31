@@ -653,7 +653,7 @@ export default function PosTerminal() {
       </div>
 
       {/* 2. CENTER PANEL: Point-of-sale Cart list */}
-      <div className="w-full lg:w-[380px] flex flex-col border border-border rounded-3xl bg-card/60 backdrop-blur-md overflow-hidden cafe-panel">
+      <div className="w-full lg:w-[300px] xl:w-[380px] flex flex-col border border-border rounded-3xl bg-card/60 backdrop-blur-md overflow-hidden cafe-panel">
         <div className="h-16 border-b border-border/80 bg-muted/30 px-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ShoppingBag className="w-5 h-5 text-primary" />
@@ -665,7 +665,7 @@ export default function PosTerminal() {
         </div>
 
         {/* Cart Item rows list */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-6">
               <Coffee className="w-12 h-12 text-muted-foreground/30 mb-3" />
@@ -740,7 +740,7 @@ export default function PosTerminal() {
       </div>
 
       {/* 3. RIGHT PANEL: Customer, Table and Payouts */}
-      <div className="w-full lg:w-[350px] flex flex-col border border-border rounded-3xl bg-card/60 backdrop-blur-md p-6 justify-between cafe-panel">
+      <div className="w-full lg:w-[280px] xl:w-[350px] flex flex-col border border-border rounded-3xl bg-card/60 backdrop-blur-md p-6 justify-between cafe-panel">
         {/* Customer Loyalty Search */}
         <div className="space-y-4">
           <div className="pb-4 border-b border-border/60">
