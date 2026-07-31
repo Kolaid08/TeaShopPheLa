@@ -80,7 +80,7 @@ export interface Order {
   ShopTableID?: number;
   EmployeeID?: number;
   CreatedTime: string;
-  OrderStatus: 'PENDING' | 'PREPARING' | 'COMPLETED' | 'CANCELLED';
+  OrderStatus: 'PENDING' | 'PREPARING' | 'SHIPPING' | 'COMPLETED' | 'CANCELLED';
   OrderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
   ShippingAddress?: string;
   ProvinceID?: number;
