@@ -355,14 +355,16 @@ export default function HistoryPage() {
     }
   };
 
-  const getStatusStepIndex = (status: Order['OrderStatus']) => {
+  const getStatusStepIndex = (status: Order['OrderStatus'], orderType: string) => {
     switch (status) {
       case 'PENDING':
         return 1;
       case 'PREPARING':
         return 2;
-      case 'COMPLETED':
+      case 'SHIPPING':
         return 3;
+      case 'COMPLETED':
+        return orderType === 'DELIVERY' ? 4 : 3;
       case 'CANCELLED':
         return -1; // cancelled state
       default:
@@ -448,7 +450,20 @@ export default function HistoryPage() {
         ) : (
           <div className="space-y-6">
             {orders.map((order) => {
-              const stepIndex = getStatusStepIndex(order.OrderStatus);
+              const stepIndex = getStatusStepIndex(order.OrderStatus, order.OrderType);
+              const isDelivery = order.OrderType === 'DELIVERY';
+              const steps = isDelivery
+                ? [
+                    { id: 1, label: 'Đã nhận đơn' },
+                    { id: 2, label: 'Đang pha chế' },
+                    { id: 3, label: 'Đang giao hàng' },
+                    { id: 4, label: 'Đã hoàn thành' },
+                  ]
+                : [
+                    { id: 1, label: 'Đã nhận đơn' },
+                    { id: 2, label: 'Đang pha chế' },
+                    { id: 3, label: 'Đã phục vụ' },
+                  ];
 
               return (
                 <Card
@@ -567,69 +582,40 @@ export default function HistoryPage() {
                         Tiến trình đơn hàng:
                       </span>
 
-                      <div className="relative flex items-center justify-between w-full max-w-md mx-auto">
-                        {/* Connecting Line background */}
-                        <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 bg-muted rounded" />
+                      <div className="relative flex justify-between w-full max-w-md mx-auto pt-1">
+                        {steps.map((step, i) => {
+                          const isActive = stepIndex >= step.id;
+                          const isPast = stepIndex > step.id;
+                          
+                          return (
+                            <div key={step.id} className="relative z-10 flex flex-col items-center flex-1 gap-1.5">
+                               {/* Background Line to next step */}
+                               {i < steps.length - 1 && (
+                                  <div className="absolute top-4 left-[50%] w-full h-1 bg-muted -z-10 rounded" />
+                               )}
+                               {/* Active Line to next step */}
+                               {i < steps.length - 1 && (
+                                  <div 
+                                    className="absolute top-4 left-[50%] h-1 bg-primary -z-10 transition-all duration-500 rounded" 
+                                    style={{ width: isPast ? '100%' : '0%' }}
+                                  />
+                               )}
 
-                        {/* Active line fill */}
-                        <div
-                          className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-primary rounded transition-all duration-500"
-                          style={{ width: `${(stepIndex - 1) * 50}%` }}
-                        />
-
-                        {/* Step 1: Pending */}
-                        <div className="relative z-10 flex flex-col items-center gap-1.5">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all border ${
-                              stepIndex >= 1
-                                ? 'bg-primary border-primary text-white shadow-md shadow-primary/20'
-                                : 'bg-background border-border text-muted-foreground'
-                            }`}
-                          >
-                            1
-                          </div>
-                          <span
-                            className={`text-[10px] font-bold ${stepIndex >= 1 ? 'text-primary' : 'text-muted-foreground'}`}
-                          >
-                            Đã nhận đơn
-                          </span>
-                        </div>
-
-                        {/* Step 2: Preparing */}
-                        <div className="relative z-10 flex flex-col items-center gap-1.5">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all border ${
-                              stepIndex >= 2
-                                ? 'bg-primary border-primary text-white shadow-md shadow-primary/20'
-                                : 'bg-background border-border text-muted-foreground'
-                            }`}
-                          >
-                            2
-                          </div>
-                          <span
-                            className={`text-[10px] font-bold ${stepIndex >= 2 ? 'text-primary' : 'text-muted-foreground'}`}
-                          >
-                            Đang pha chế
-                          </span>
-                        </div>
-
-                        {/* Step 3: Completed */}
-                        <div className="relative z-10 flex flex-col items-center gap-1.5">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all border ${
-                              stepIndex >= 3
-                                ? 'bg-primary border-primary text-white shadow-md shadow-primary/20'
-                                : 'bg-background border-border text-muted-foreground'
-                            }`}
-                          >
-                            3
-                          </div>
-                          <span
-                            className={`text-[10px] font-bold ${stepIndex >= 3 ? 'text-primary' : 'text-muted-foreground'}`}
-                          >
-                            Đã phục vụ
-                          </span>
-                        </div>
+                               <div
+                                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all border ${
+                                    isActive
+                                      ? 'bg-primary border-primary text-white shadow-md shadow-primary/20'
+                                      : 'bg-background border-border text-muted-foreground'
+                                  }`}
+                                >
+                                  {step.id}
+                                </div>
+                                <span className={`text-[10px] text-center font-bold px-1 whitespace-nowrap ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
+                                  {step.label}
+                                </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ) : (
