@@ -46,7 +46,7 @@ export default function ShiftLogsAttendance() {
 
       if (active) {
         const hasActive = logList.find(
-          (l) => l.EmployeeID === active.EmployeeID && !l.CheckOutTime,
+          (l) => l.EmployeeID === active.EmployeeID && l.CheckInTime && !l.CheckOutTime,
         );
         setIsCheckedIn(!!hasActive);
       }
