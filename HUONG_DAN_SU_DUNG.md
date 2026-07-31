@@ -24,15 +24,15 @@ Khi nhân viên đăng nhập bằng mã PIN **`4444`**, hệ thống sẽ tự 
 
 ### ⏱️ Bước A: Check-in Ca Trực (Điểm Danh Vân Tay)
 1. Ở góc trên cùng bên trái thanh menu, nhấp vào nút xanh **"Check-in ca trực"**.
-2. Hệ thống sẽ tự động ghi nhận giờ vào ca, đối chiếu với lịch để ghi nhận bạn đi làm đúng giờ hay đi muộn (`LATE`).
-3. Khi tan làm, chỉ cần nhấp lại nút đỏ **"Check-out kết thúc ca"** để kết thúc chấm công ca làm việc.
+2. Hệ thống sẽ tự động ghi nhận giờ vào ca, đối chiếu với lịch để phân loại đi đúng giờ hay đi muộn (`LATE`). Đặc biệt, hệ thống sử dụng thuật toán chấm công thông minh theo **khung giờ 24h** để tự động liên kết giờ Check-in/Check-out ngay cả khi ca làm việc kéo dài qua đêm.
+3. Khi tan làm, chỉ cần nhấp lại nút đỏ **"Check-out kết thúc ca"** để kết thúc chấm công.
 
 ### 💰 Bước B: Tạo Đơn Hàng POS & Bán Trà Sữa (POS Register)
 1. Truy cập mục **"POS bán hàng"** từ thanh menu trái.
-2. **Chọn món:** Nhấp vào sản phẩm trà sữa/cà phê trên màn hình (Ví dụ: *Ô Long Nhài Sữa*).
-3. **Chọn Size & Thêm Ghi chú:** Chọn kích cỡ cốc (M/L), thêm ghi chú yêu cầu của khách hàng (Ví dụ: *Ít đường, nhiều đá*) rồi nhấn **"Thêm vào giỏ"**.
-4. **Tìm hội viên (Loyalty):** Nhập số điện thoại khách hàng vào ô *"Tìm kiếm hội viên"* (Ví dụ: `0987654321` - Nguyễn Văn A) để hệ thống tự động áp dụng chiết khấu giảm giá thành viên.
-5. **Thanh toán:** Kiểm tra lại tổng tiền (đã tự động áp dụng giảm giá), chọn bàn khách ngồi nếu có, rồi nhấn **"Xác nhận thanh toán"**. Đơn hàng sẽ được lập tức in ra và lưu lịch sử.
+2. **Chọn món:** Nhấp vào sản phẩm trà sữa/cà phê trên màn hình (Ví dụ: *Ô Long Nhài Sữa*). Các món hết nguyên liệu sẽ tự động bị mờ đi.
+3. **Chọn Size & Thêm Ghi chú:** Chọn kích cỡ cốc (M/L), thêm ghi chú yêu cầu của khách hàng rồi nhấn **"Thêm vào giỏ"**. (Giao diện POS đã được nâng cấp tự động co giãn 3 cột chống tràn).
+4. **Tìm hội viên (Loyalty):** Nhập số điện thoại khách hàng vào ô *"Tìm kiếm hội viên"* để hệ thống tự động áp dụng chiết khấu giảm giá thành viên.
+5. **Thanh toán:** Kiểm tra tổng tiền, chọn bàn, rồi nhấn **"Xác nhận thanh toán"**.
 
 ---
 
@@ -40,77 +40,47 @@ Khi nhân viên đăng nhập bằng mã PIN **`4444`**, hệ thống sẽ tự 
 
 Đăng nhập bằng mã PIN **`1234`** (Admin) hoặc **`2222`** (Manager) để mở khóa các trang cấu hình nâng cao.
 
-### ➕ Cách A: Thêm Đồ Uống Mới Vào Menu
-1. Vào mục **"Đồ uống (Menu)"** trên menu trái $\rightarrow$ Chọn nút **"+ Thêm đồ uống mới"** ở góc phải.
-2. Nhập các thông tin cần thiết:
-   * **Tên đồ uống:** (Ví dụ: *Trà Sữa Matcha Ô Long*)
-   * **Mô tả món:** (Ví dụ: *Matcha Nhật Bản thơm béo kết hợp trà ô long*)
-   * **Trạng thái:** Để hoạt động (`ACTIVE`).
-3. Nhấn **"Lưu đồ uống"**. 
+### ➕ Cách A: Thêm Đồ Uống Mới & Thiết Lập Bảng Giá
+1. Vào mục **"Đồ uống (Menu)"** $\rightarrow$ Chọn nút **"+ Thêm đồ uống mới"**. Nhập tên, mô tả và lưu lại.
+2. Chuyển sang mục **"Bảng giá (Drink Size)"** $\rightarrow$ Chọn đồ uống vừa thêm, đặt giá tương ứng cho các Size (M/L) (VD: 55000).
 
-### 🏷️ Cách B: Cấu Hình Giá Bán Cho Từng Size (Drink Sizes)
-*Sau khi thêm đồ uống mới, bạn phải đặt giá cho các Size (M/L) để POS có thể tính tiền:*
-1. Vào mục **"Bảng giá (Drink Size)"** $\rightarrow$ Chọn **"+ Thiết lập giá mới"**.
-2. Chọn loại đồ uống bạn vừa thêm ở bước trước.
-3. Chọn kích cỡ cốc (M hoặc L) và điền số tiền bán lẻ tương ứng (Ví dụ: `55000` - hệ thống sẽ tự hiểu là 55,000 đ).
-4. Nhấn **"Lưu bảng giá"**. Món nước mới sẽ lập tức xuất hiện trên màn hình POS của Barista kèm theo các size và giá bán tương ứng!
+### 📅 Cách B: Xếp Ca Chấm Công & Bản Đồ Ca Làm Việc (Rota / Shift Logs)
+1. Truy cập **"Bản đồ điểm danh" (Shift Logs)**. Tại đây có lưới Lịch thông minh (Calendar Grid) tự động tính toán tháng/ngày chính xác để hiển thị trực quan toàn bộ các ca làm việc của mọi nhân viên.
+2. Quản lý có thể theo dõi thời gian thực nhân viên nào đang làm việc, ai đi muộn, và can thiệp ghi nhận lại giờ (nếu cần).
 
 ### 📦 Cách C: Tạo Phiếu Nhập Kho Nguyên Liệu (Restocking)
-1. Vào mục **"Hóa đơn nhập kho"** $\rightarrow$ Nhấn **"Lập phiếu nhập kho"**.
-2. Chọn Nhà cung cấp và ngày nhập hàng thực tế.
-3. **Chọn nguyên liệu:** Chọn loại nguyên liệu thô (Ví dụ: *Trà Ô Long thô*), điền số lượng nhập (Ví dụ: `100` gram), nhập giá vốn nhập hàng rồi nhấn nút **"Đưa vào danh sách phiếu"**. Bạn có thể thêm nhiều nguyên liệu khác nhau vào cùng một phiếu.
-4. Nhấn **"Lập Phiếu"**. Phiếu lúc này sẽ ở trạng thái chờ duyệt (`PENDING`).
-5. Khi hàng thực tế về đến kho và đã được kiểm đếm, nhấn nút xanh **"Duyệt Nhập Kho"**. Hệ thống sẽ tự động cộng dồn số lượng nguyên liệu này vào tổng số lượng tồn kho trong mục **"Kho nguyên liệu"** thực tế.
+1. Vào **"Hóa đơn nhập kho"** $\rightarrow$ **"Lập phiếu nhập kho"**.
+2. Chọn loại nguyên liệu, số lượng và giá vốn, nhấn **"Lập Phiếu"** (Trạng thái `PENDING`).
+3. Khi hàng về kho, nhấn **"Duyệt Nhập Kho"**. Hệ thống tự động cộng dồn số lượng nguyên liệu tồn kho.
 
-### 💵 Cách D: Tính Lương Barista Hàng Tháng (Payroll)
-1. Vào mục **"Tính lương (Salary)"** $\rightarrow$ Nhấn nút **"Kết toán bảng lương"**.
-2. Nhập tháng và năm cần tính lương.
-3. Phần mềm sẽ tự động quét qua toàn bộ lịch sử chấm công quét vân tay của baristas trong tháng đó, tính tổng số giờ làm việc thực tế, cộng thưởng và trừ phạt đi muộn tự động để xuất ra bảng lương chi tiết.
-4. Khi đã chuyển khoản lương thực tế cho nhân viên, hãy nhấn nút **"Thanh toán lương"** trên dòng tương ứng để lưu lịch sử đánh dấu *"Đã thanh toán"*.
+### 💵 Cách D: Tính Lương Nhân Sự Hàng Tháng (Payroll)
+1. Vào mục **"Tính lương (Salary)"** $\rightarrow$ **"Kết toán bảng lương"**.
+2. Phần mềm tự động quét qua toàn bộ lịch sử chấm công, tính tổng số giờ làm việc thực tế, cộng thưởng, trừ phạt để xuất ra bảng lương chi tiết. 
 
 ---
 
 ## 📱 4. Cổng Mua Sắm Dành Cho Khách Hàng (Customer Portal)
 
-Ứng dụng đặt đồ uống trực tuyến cho khách hàng chạy tại cổng **[http://localhost:3002](http://localhost:3002)**:
+Khách hàng mua online tại cổng **[http://localhost:3002](http://localhost:3002)**:
 
-### 🔑 Đăng Nhập & Đăng Ký Hội Viên Tự Động
-1. Khách hàng chỉ cần nhập **Số điện thoại** của mình để bắt đầu mua sắm.
-2. **Hội viên mới:** Hệ thống tự động tạo mới tài khoản hạng mặc định (Member) và lưu vào cơ sở dữ liệu.
-3. **Hội viên cũ:** Đăng nhập bằng số điện thoại cũ (Ví dụ: `0912345678` - Trần Thị B) sẽ hiển thị đúng tên và tự động áp dụng ưu đãi thẻ thành viên vào tổng tiền thanh toán trong giỏ hàng.
+### 🔑 Khách Hàng, Giới Thiệu (Referral) & Khôi Phục Voucher
+1. **Đăng nhập:** Chỉ cần nhập Số điện thoại.
+2. **Tặng Voucher Giới Thiệu (Referral):** Khi khách hàng hoàn tất thành công đơn hàng đầu tiên, hệ thống sẽ tự động tạo phần thưởng Voucher giới thiệu (Referral Vouchers) để tri ân.
+3. **Bồi thường Voucher Tự Động:** Đừng lo nếu khách dùng Voucher nhưng đơn hàng bị Admin từ chối/hủy do hết món. Hệ thống sẽ tự động hoàn trả/tạo ra Voucher mới đền bù (Compensation) lập tức vào Ví Voucher của khách!
 
-### 🧋 Chọn Món & Tùy Biến Đồ Uống
-1. Chọn đồ uống mong muốn trên giao diện chính.
-2. Trong hộp thoại tùy chọn, khách hàng có thể chọn cỡ cốc (M/L), độ ngọt (0% - 100%), độ đá, và thêm toppings.
-3. Nhấn **"Thêm Vào Giỏ Hàng"**.
+### 🧋 Đặt Hàng, Thanh Toán & Trạng Thái Giao Hàng
+1. Khách hàng lựa chọn món, cấu hình Size, Đường, Đá, Toppings.
+2. Giỏ hàng đã được thiết kế lại thanh cuộn linh hoạt (`min-h-0`) để tránh tràn đồ uống. Khách có thể nhập **Mã Voucher**, chọn thanh toán tiền mặt (COD) hoặc QR Code (PayOS).
+3. **Tiến độ Giao Hàng:** Thanh trạng thái trực quan (Progression bar) theo dõi: **Đã nhận đơn** $\rightarrow$ **Đang pha chế** $\rightarrow$ **Đang giao hàng (Delivery)** $\rightarrow$ **Hoàn tất**.
 
-### 💳 Chọn Bàn & Thanh Toán 
-1. Trong giỏ hàng, khách hàng có thể chọn **Số bàn** (nếu đang ngồi tại quầy Phêla) hoặc nhập **Địa chỉ giao hàng** mang đi.
-2. Khách có thể áp dụng mã giảm giá (Voucher) (Ví dụ: mã `WELCOME`).
-3. Nhấp **"Tiến hành thanh toán"** $\rightarrow$ Chọn **Thanh toán COD (Tiền mặt)** hoặc thanh toán qua cổng quét mã **QR PayOS**.
-4. Nhấn **"Xác nhận Đơn hàng"**. Đơn hàng sẽ được chuyển sang trạng thái chờ duyệt (`PENDING`).
-
-### ⏳ Theo Dõi Trạng Thái Đơn Hàng & Chatbox AI
-1. Hệ thống tự động chuyển hướng khách hàng sang trang **"Lịch sử đơn"**.
-2. Khách hàng có thể theo dõi tiến trình qua thanh trạng thái trực quan: **Đã nhận đơn** $\rightarrow$ **Đang pha chế** $\rightarrow$ **Đã phục vụ / Đang giao**.
-3. Khách hàng có thể chat trực tiếp với AI Chatbox (Gemini) để nhờ tư vấn món uống phù hợp hoặc giải đáp các thắc mắc nhanh chóng.
-4. **Mua lại đơn cũ:** Khách hàng có thể nhấp vào nút **"Mua lại đơn này"** ở bất kỳ đơn hàng lịch sử nào để tự động thêm nhanh toàn bộ các món đó vào giỏ hàng mới.
+### 🤖 Chatbox AI & Giỏ Hàng Bỏ Quên (Abandoned Carts)
+1. Tích hợp AI Chatbox (Gemini) hỗ trợ khách giải đáp thắc mắc và gợi ý nước uống.
+2. **Giỏ hàng bỏ quên:** Nếu khách thêm món vào giỏ nhưng không thanh toán, hệ thống ghi nhận vào trang **"Giỏ Hàng Bỏ Quên"** phía Quản lý để phục vụ chiến dịch Marketing (gửi SMS hoặc Voucher nhắc nhở).
 
 ---
 
-## ⚡ 5. Chế Độ Tự Động Thông Minh (Dual-Mode Offline Fallback)
+## ⚡ 5. Các Chế Độ Tự Động Thông Minh Trong Hệ Thống
 
-* **Điều gì xảy ra nếu cơ sở dữ liệu SQL Server bị mất kết nối mạng?**
-  Bạn hoàn toàn không cần lo lắng! Phần mềm Phêla được trang bị cơ chế tự động chuyển đổi thông minh:
-  * Khi phát hiện database offline, hệ thống sẽ chuyển sang chế độ **giả lập LocalStorage nội bộ** ngay trên trình duyệt web.
-  * Cả nhân viên tại quầy POS và khách hàng đặt đồ uống trực tuyến đều có thể bán hàng, đặt đơn, chấm công bình thường mà không bị gián đoạn hoạt động kinh doanh của quán!
-
----
-
-## 🥤 6. Tự Động Khấu Trừ Tồn Kho Nguyên Liệu Pha Chế
-Nhằm giảm thiểu thao tác thủ công cho người quản lý, hệ thống tích hợp sẵn cơ chế trừ kho tự động:
-* **Quy trình kích hoạt**: Khi một đơn hàng (được tạo ở quầy POS hoặc khách hàng tự đặt trực tuyến) được chuyển trạng thái sang **"COMPLETED"** (Hoàn thành đơn).
-* **Cách hoạt động**:
-  1. Hệ thống tự động phân tích các món nước trong đơn và đối chiếu với công thức pha chế (`Recipe`) đã được lưu.
-  2. Tính toán tổng lượng nguyên liệu tiêu thụ thực tế (ví dụ: 2 cốc Trà Ô Long Nhài Sữa sẽ trừ đi lượng Trà Ô Long Nhài, Sữa Đặc, Đường tương ứng trong kho).
-  3. Tự động cập nhật giảm trừ số lượng tồn kho trong mục **"Kho nguyên liệu"**.
+* **Offline Fallback (Không lo rớt mạng):** Khi Database lỗi, hệ thống tự động chạy giả lập LocalStorage, giữ cho cửa hàng kinh doanh liên tục.
+* **Tự Động Khấu Trừ Tồn Kho:** Mỗi khi Đơn hàng (POS hoặc Online) báo HOÀN THÀNH, hệ thống tự đối chiếu "Công thức pha chế" (Recipe) để tự trừ hao hụt nguyên liệu thô trong kho.
+* **Xử Lý Quá Hạn & Kích Hoạt Voucher Mượt Mà:** Mọi tham số cấu hình như *Số lượt tối đa (MaxUsage)*, thời hạn, sẽ được API tự động xử lý chặt chẽ.
