@@ -528,10 +528,14 @@ export const api = {
         localStorage.setItem('phela_user', JSON.stringify(data.data.employee));
       }
       return data.data;
-    } catch {
-      // Offline fallback login check
+    } catch (err: any) {
+      if (err.message && typeof err.message === 'string' && err.message !== 'Failed to fetch') {
+        throw err;
+      }
+      
+      // Offline fallback login check (Chỉ dùng khi mất mạng thật sự - Failed to fetch)
       const emp = db.employees.find((e) => e.PINCode === PINCode);
-      if (!emp) throw new Error('Mã PIN không đúng hoặc Barista chưa đăng ký.');
+      if (!emp) throw new Error('Lỗi kết nối máy chủ và không tìm thấy dữ liệu Offline.');
       const data = {
         accessToken: 'mock_token_' + Date.now(),
         employee: {
