@@ -29,7 +29,7 @@ router.get('/', async (req, res, next) => {
     const year = req.query.year ? parseInt(req.query.year as string) : undefined;
 
     const where: any = {};
-    const userRole = (req.user as any)?.Role?.RoleName;
+    const userRole = (req.user as any)?.RoleName;
     if (userRole !== 'ADMIN' && userRole !== 'MANAGER') {
       where.EmployeeID = (req.user as any)?.EmployeeID;
     } else if (employeeId) {
